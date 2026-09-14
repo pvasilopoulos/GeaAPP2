@@ -34,7 +34,9 @@ const router = createBrowserRouter([
       { path: 'documents', element: <Placeholder title="Έγγραφα" icon="file" /> },
     ],
   },
-]);
+], {
+  future: { v7_startTransition: true, v7_relativeSplatPath: true },
+});
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
