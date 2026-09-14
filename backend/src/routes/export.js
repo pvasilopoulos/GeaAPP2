@@ -5,6 +5,8 @@ import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
 import { query } from '../db.js';
 import { buildFilters, resolveSort } from '../lib/customerFilters.js';
+import { authorize } from '../middleware/auth.js';
+import { PERMISSIONS } from '../lib/permissions.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FONT = path.resolve(__dirname, '../../assets/fonts/DejaVuSans.ttf');
@@ -24,7 +26,7 @@ function fmtDate(d) {
 export const exportRouter = Router();
 
 // GET /api/customers/export?format=csv|xlsx|pdf&<same filters as search>
-exportRouter.get('/export', async (req, res, next) => {
+exportRouter.get('/export', authorize(PERMISSIONS.CUSTOMERS_EXPORT), async (req, res, next) => {
   try {
     const format = ['csv', 'xlsx', 'pdf'].includes(req.query.format) ? req.query.format : 'csv';
     const { params, where } = buildFilters(req);

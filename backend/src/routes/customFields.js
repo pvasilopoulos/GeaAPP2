@@ -1,7 +1,10 @@
 import { Router } from 'express';
 import { query } from '../db.js';
+import { authorize } from '../middleware/auth.js';
+import { PERMISSIONS } from '../lib/permissions.js';
 
 export const customFieldsRouter = Router();
+customFieldsRouter.use(authorize(PERMISSIONS.SETTINGS_MANAGE));
 
 // GET /api/custom-fields?entity=customer|branch|space — admin listing.
 customFieldsRouter.get('/', async (req, res, next) => {

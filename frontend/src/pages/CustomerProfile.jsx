@@ -1,6 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link, useParams } from 'react-router-dom';
 import { api } from '../api.js';
 import Icon from '../components/Icon.jsx';
 import { Avatar, VipBadge, Tag, Skeleton } from '../components/ui.jsx';
@@ -8,6 +7,7 @@ import { STATUS_LABELS, TYPE_LABELS, formatDate } from '../lib/format.js';
 import Overview from '../components/customer/Overview.jsx';
 import BranchesSpaces from '../components/customer/BranchesSpaces.jsx';
 import HistoryList from '../components/customer/HistoryList.jsx';
+import { useTabs } from '../store/tabs.js';
 
 const TABS = [
   { key: 'overview', label: 'Σύνοψη', icon: 'home' },
@@ -20,14 +20,20 @@ const TABS = [
   { key: 'activity', label: 'Δραστηριότητα', icon: 'activity' },
 ];
 
-export default function CustomerProfile() {
-  const { id } = useParams();
+export default function CustomerProfile({ customerId, tabId, onBack }) {
+  const id = customerId;
   const [tab, setTab] = useState('overview');
+  const renameTab = useTabs((s) => s.renameTab);
 
   const { data, isLoading } = useQuery({
     queryKey: ['customer', id],
     queryFn: ({ signal }) => api.customer(id, { signal }),
   });
+
+  // Keep the tab title in sync with the loaded customer name.
+  useEffect(() => {
+    if (data?.customer && tabId) renameTab(tabId, data.customer.full_name);
+  }, [data, tabId, renameTab]);
 
   if (isLoading) return <ProfileSkeleton />;
   if (!data) return null;
@@ -36,9 +42,9 @@ export default function CustomerProfile() {
 
   return (
     <div>
-      <Link to="/customers" className="btn btn-ghost btn-sm" style={{ marginBottom: 14 }}>
+      <button onClick={onBack} className="btn btn-ghost btn-sm" style={{ marginBottom: 14 }}>
         <Icon name="arrowLeft" size={16} /> Πελάτες
-      </Link>
+      </button>
 
       <div className="profile-header">
         <div className="ph-top">

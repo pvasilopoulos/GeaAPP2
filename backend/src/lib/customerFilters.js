@@ -15,6 +15,9 @@ export function buildFilters(req) {
   const where = [];
   const push = (v) => { params.push(v); return '?'; };
 
+  // Tenant scoping — every customer query is bound to the caller's tenant.
+  where.push(`c.tenant_id = ${push(req.user.tenantId)}`);
+
   const q = req.query.q ? String(req.query.q).trim() : '';
   const qnorm = q ? normalize(q) : '';
   if (qnorm) {
@@ -31,13 +34,14 @@ export function buildFilters(req) {
     where.push(`EXISTS (SELECT 1 FROM customer_tags ct JOIN tags t ON t.id = ct.tag_id
       WHERE ct.customer_id = c.id AND t.slug = ${push(req.query.tag)})`);
   }
-  if (req.query.branchId) {
-    where.push(`EXISTS (SELECT 1 FROM customer_branches cb
-      WHERE cb.customer_id = c.id AND cb.branch_id = ${push(Number(req.query.branchId))})`);
+  // Relationship filters over the customer's OWN branches/spaces.
+  if (req.query.branchCity) {
+    where.push(`EXISTS (SELECT 1 FROM branches b
+      WHERE b.customer_id = c.id AND b.city = ${push(req.query.branchCity)})`);
   }
-  if (req.query.spaceId) {
-    where.push(`EXISTS (SELECT 1 FROM customer_spaces cs
-      WHERE cs.customer_id = c.id AND cs.space_id = ${push(Number(req.query.spaceId))})`);
+  if (req.query.spaceType) {
+    where.push(`EXISTS (SELECT 1 FROM spaces s
+      WHERE s.customer_id = c.id AND s.space_type = ${push(req.query.spaceType)})`);
   }
   return { params, where, qnorm };
 }

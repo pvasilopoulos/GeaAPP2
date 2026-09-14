@@ -14,6 +14,9 @@ import { spacesRouter } from './routes/spaces.js';
 import { customFieldsRouter } from './routes/customFields.js';
 import { statsRouter } from './routes/stats.js';
 import { exportRouter } from './routes/export.js';
+import { authRouter } from './routes/auth.js';
+import { usersRouter } from './routes/users.js';
+import { authenticate } from './middleware/auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -33,6 +36,12 @@ app.get('/api/health', async (_req, res) => {
   }
 });
 
+// Public authentication endpoints (login/register); /me authenticates itself.
+app.use('/api/auth', authRouter);
+
+// Everything below requires a valid token.
+app.use('/api', authenticate);
+
 app.use('/api/meta', metaRouter);
 app.use('/api/search', searchRouter);
 // Export is registered before the customers router so `/export` is not matched
@@ -43,6 +52,7 @@ app.use('/api/branches', branchesRouter);
 app.use('/api/spaces', spacesRouter);
 app.use('/api/custom-fields', customFieldsRouter);
 app.use('/api/stats', statsRouter);
+app.use('/api', usersRouter);
 
 // Unknown API routes return JSON 404 (never the SPA shell).
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));

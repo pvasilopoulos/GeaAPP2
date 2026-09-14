@@ -6,16 +6,33 @@ The UI is in Greek; code, APIs and database identifiers are in English (per spec
 
 ## Stack
 
-- **MariaDB / MySQL** — normalized schema; typed-value custom fields; B-tree indexes for exact match, sort and **keyset pagination**; **InnoDB FULLTEXT** indexes for fast search. Accent/case/script-insensitive search is achieved with a precomputed ASCII `search_norm` column (Greek→Latin transliteration in the app layer) — **no DB extensions required**.
-- **Node.js + Express** — raw parameterized SQL (`mysql2`); server-side search; keyset cursor pagination; slow-query logging; serves the built SPA in production (single-app deployment).
-- **React + Vite** — virtualized directory (`react-window`), debounced + cancellable search, query caching (`@tanstack/react-query`). Greek UI labels.
+- **MariaDB / MySQL** — multi-tenant schema with the ownership hierarchy **TENANT → CUSTOMER → BRANCH → SPACE**; typed-value custom fields; B-tree indexes for exact match, sort and **keyset pagination** (tenant-prefixed); **InnoDB FULLTEXT** indexes for fast search. Accent/case/script-insensitive search uses a precomputed ASCII `search_norm` column (Greek→Latin transliteration in the app layer) — **no DB extensions required**.
+- **Node.js + Express** — raw parameterized SQL (`mysql2`); JWT auth (`bcryptjs` + `jsonwebtoken`); server-side search; keyset + page pagination; CSV/Excel/PDF export; slow-query logging; serves the built SPA in production (single-app deployment).
+- **React + Vite** — auth flow, **in-app multi-tab workspace** (`zustand`), page-based directory, debounced + cancellable search, query caching (`@tanstack/react-query`). Greek UI labels.
 
 ## Architecture highlights
 
-- **Never loads all customers.** The directory uses server-side search/filter/sort with keyset cursor pagination (deep pages stay as fast as the first) and frontend virtualization.
-- **Smart search** across customers, branches and spaces: FULLTEXT boolean prefix search over a transliterated `search_norm` column, so typing the start of a name / phone / email / code matches instantly, accent- and case-insensitively. A LIKE fallback covers very short (1–2 char) queries. Global command-style search groups results by entity.
-- **Dynamic Custom Fields** engine (Customers / Branches / Spaces) using a typed-value architecture (not unindexed EAV/JSON), with searchable/filterable fields backed by indexes.
-- **Denormalized aggregates** on `customers` (branch/space/booking/visit counts, total value, last visit, next booking) keep the directory listing index-fast, while relationships stay fully normalized.
+- **Multi-tenancy.** Every customer/branch/space/booking/activity is scoped by `tenant_id`; all queries are bound to the authenticated user's tenant (tenant isolation enforced server-side).
+- **Auth + RBAC.** JWT login/register (register creates a tenant + owner). Built-in roles (owner / admin / manager / agent / viewer) map to a permission catalog (`customers.*`, `branches.read`, `settings.manage`, `users.manage`, …) enforced on the server and used to gate the UI.
+- **Ownership hierarchy.** Each customer owns its branches (`branches.customer_id`); each branch owns its spaces (`spaces.branch_id`).
+- **Never loads all customers.** Server-side search/filter/sort with keyset + page pagination and denormalized aggregates keep the directory index-fast.
+- **Smart search** across customers, branches and spaces via FULLTEXT boolean prefix search over a transliterated `search_norm` column. Global command-style search groups results by entity.
+- **Dynamic Custom Fields** engine using a typed-value architecture; **CSV / Excel / PDF export** respecting active filters (Greek PDF via an embedded font).
+- **In-app multi-tab workspace**: open multiple customers in tabs, switch without losing state.
+
+## Demo accounts (after seeding)
+
+Tenant «Demo Α.Ε.» — password `password123`:
+
+| Role | Email |
+| --- | --- |
+| Ιδιοκτήτης (owner) | `owner@demo.gr` |
+| Διαχειριστής (admin) | `admin@demo.gr` |
+| Manager | `manager@demo.gr` |
+| Σύμβουλος (agent) | `agent@demo.gr` |
+| Θεατής (viewer) | `viewer@demo.gr` |
+
+A second tenant «Acme Ε.Π.Ε.» (`owner@acme.gr`) demonstrates tenant isolation.
 
 ### Measured performance (350k customers, ~9M related rows, MariaDB 10.11)
 

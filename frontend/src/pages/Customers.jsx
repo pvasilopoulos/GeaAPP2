@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import Icon from '../components/Icon.jsx';
-import AsyncSelect from '../components/AsyncSelect.jsx';
 import { Avatar, StatusBadge, EmptyState, Skeleton } from '../components/ui.jsx';
 import { formatCurrency, formatNumber, formatDate, TYPE_LABELS } from '../lib/format.js';
+import { useAuth } from '../store/auth.js';
+import { PERMS } from '../lib/perms.js';
 
 const COLUMNS = [
   { key: 'name', label: 'Πελάτης', sort: 'name' },
@@ -29,15 +29,22 @@ function useDebounced(value, delay = 250) {
   return v;
 }
 
-function ExportMenu({ params }) {
+function ExportMenu({ params, canExport }) {
   const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState('');
   const ref = useRef(null);
   useEffect(() => {
     const onClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
   }, []);
-  const download = (format) => { setOpen(false); window.location.href = api.exportUrl(format, params); };
+  if (!canExport) return null;
+  const download = async (format) => {
+    setBusy(format);
+    try { await api.exportCustomers(format, params); setOpen(false); }
+    catch (e) { alert(e.message); }
+    finally { setBusy(''); }
+  };
   const items = [
     { format: 'csv', label: 'CSV (.csv)', icon: 'file' },
     { format: 'xlsx', label: 'Excel (.xlsx)', icon: 'grid' },
@@ -54,7 +61,7 @@ function ExportMenu({ params }) {
           {items.map((it) => (
             <div key={it.format} className="search-row" onClick={() => download(it.format)}>
               <div className="avatar sq" style={{ width: 30, height: 30, background: 'var(--accent-soft)', color: 'var(--accent)' }}>
-                <Icon name={it.icon} size={15} />
+                {busy === it.format ? <span className="spinner" /> : <Icon name={it.icon} size={15} />}
               </div>
               <div style={{ fontWeight: 600 }}>{it.label}</div>
             </div>
@@ -67,18 +74,12 @@ function ExportMenu({ params }) {
 
 function Pager({ page, totalPages, onGo }) {
   if (totalPages <= 1) return null;
-  const nums = [];
-  const push = (n) => nums.push(n);
-  const around = 1;
-  push(1);
-  for (let n = page - around; n <= page + around; n++) if (n > 1 && n < totalPages) push(n);
-  if (totalPages > 1) push(totalPages);
+  const nums = [1];
+  for (let n = page - 1; n <= page + 1; n++) if (n > 1 && n < totalPages) nums.push(n);
+  if (totalPages > 1) nums.push(totalPages);
   const uniq = [...new Set(nums)].sort((a, b) => a - b);
   const withGaps = [];
-  uniq.forEach((n, i) => {
-    if (i > 0 && n - uniq[i - 1] > 1) withGaps.push('…');
-    withGaps.push(n);
-  });
+  uniq.forEach((n, i) => { if (i > 0 && n - uniq[i - 1] > 1) withGaps.push('…'); withGaps.push(n); });
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
       <button className="btn btn-sm" disabled={page <= 1} onClick={() => onGo(page - 1)}>
@@ -86,12 +87,7 @@ function Pager({ page, totalPages, onGo }) {
       </button>
       {withGaps.map((n, i) => n === '…'
         ? <span key={`g${i}`} style={{ color: 'var(--text-3)', padding: '0 4px' }}>…</span>
-        : (
-          <button key={n} className={`btn btn-sm${n === page ? ' btn-accent' : ''}`}
-            style={{ minWidth: 34, justifyContent: 'center' }} onClick={() => onGo(n)}>
-            {n}
-          </button>
-        ))}
+        : <button key={n} className={`btn btn-sm${n === page ? ' btn-accent' : ''}`} style={{ minWidth: 34, justifyContent: 'center' }} onClick={() => onGo(n)}>{n}</button>)}
       <button className="btn btn-sm" disabled={page >= totalPages} onClick={() => onGo(page + 1)}>
         Επόμ. <Icon name="chevronRight" size={15} />
       </button>
@@ -99,35 +95,33 @@ function Pager({ page, totalPages, onGo }) {
   );
 }
 
-export default function Customers() {
-  const navigate = useNavigate();
+export default function Customers({ onOpenCustomer }) {
   const [input, setInput] = useState('');
   const q = useDebounced(input, 250);
   const [status, setStatus] = useState('');
   const [customerType, setCustomerType] = useState('');
   const [isVip, setIsVip] = useState(false);
   const [tag, setTag] = useState('');
-  const [branch, setBranch] = useState(null);
-  const [space, setSpace] = useState(null);
+  const [branchCity, setBranchCity] = useState('');
+  const [spaceType, setSpaceType] = useState('');
   const [sort, setSort] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
 
   const { data: meta } = useQuery({ queryKey: ['meta'], queryFn: ({ signal }) => api.meta({ signal }) });
+  const canExport = useAuthCanExport();
 
-  // Filters that affect the query result (used for search, export, and reset).
   const filterParams = useMemo(() => ({
     q: q.trim() || undefined,
     status: status || undefined,
     customerType: customerType || undefined,
     isVip: isVip ? 'true' : undefined,
     tag: tag || undefined,
-    branchId: branch?.value || undefined,
-    spaceId: space?.value || undefined,
+    branchCity: branchCity || undefined,
+    spaceType: spaceType || undefined,
     sort: sort || undefined,
-  }), [q, status, customerType, isVip, tag, branch, space, sort]);
+  }), [q, status, customerType, isVip, tag, branchCity, spaceType, sort]);
 
-  // Any filter change returns to the first page.
   useEffect(() => { setPage(1); }, [filterParams, pageSize]);
 
   const { data, isLoading, isFetching } = useQuery({
@@ -142,7 +136,6 @@ export default function Customers() {
   const tookMs = data?.tookMs;
   const activeSort = sort || 'last_visit';
   const toggleSort = (key) => setSort((cur) => (cur === key ? '' : key));
-
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);
 
@@ -154,7 +147,7 @@ export default function Customers() {
           <div className="sub">{meta ? `${formatNumber(meta.estimatedCustomers)} πελάτες συνολικά` : '—'}</div>
         </div>
         <div style={{ display: 'flex', gap: 9 }}>
-          <ExportMenu params={filterParams} />
+          <ExportMenu params={filterParams} canExport={canExport} />
           <button className="btn btn-primary"><Icon name="plus" size={16} /> Νέος πελάτης</button>
         </div>
       </div>
@@ -162,11 +155,7 @@ export default function Customers() {
       <div className="toolbar">
         <div className="search-input">
           <Icon name="search" size={17} />
-          <input
-            value={input}
-            placeholder="Αναζήτηση με όνομα, κωδικό, τηλέφωνο, email, εταιρεία, ΑΦΜ…"
-            onChange={(e) => setInput(e.target.value)}
-          />
+          <input value={input} placeholder="Αναζήτηση με όνομα, κωδικό, τηλέφωνο, email, εταιρεία, ΑΦΜ…" onChange={(e) => setInput(e.target.value)} />
           {isFetching && <span className="spinner" />}
         </div>
 
@@ -191,19 +180,20 @@ export default function Customers() {
             {meta?.tags.map((t) => <option key={t.slug} value={t.slug}>{t.name}</option>)}
           </select>
         </div>
-
-        <AsyncSelect
-          icon="building" label="Υποκατάστημα" placeholder="Αναζήτηση υποκαταστήματος…"
-          value={branch} onChange={setBranch}
-          loader={(term, signal) => api.branches({ q: term, limit: 20 }, { signal })
-            .then((r) => r.results.map((b) => ({ value: b.id, label: b.name, sub: b.city })))}
-        />
-        <AsyncSelect
-          icon="grid" label="Χώρος" placeholder="Αναζήτηση χώρου…"
-          value={space} onChange={setSpace}
-          loader={(term, signal) => api.spaces({ q: term, branchId: branch?.value, limit: 20 }, { signal })
-            .then((r) => r.results.map((s) => ({ value: s.id, label: s.name, sub: `${s.space_type} · ${s.branch_name}` })))}
-        />
+        <div className="filter-chip">
+          <Icon name="building" size={15} />
+          <select value={branchCity} onChange={(e) => setBranchCity(e.target.value)}>
+            <option value="">Πόλη υποκαταστήματος</option>
+            {(meta?.branchCities || []).map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div className="filter-chip">
+          <Icon name="grid" size={15} />
+          <select value={spaceType} onChange={(e) => setSpaceType(e.target.value)}>
+            <option value="">Τύπος χώρου</option>
+            {(meta?.spaceTypes || []).map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
         <button className={`filter-chip${isVip ? ' active' : ''}`} onClick={() => setIsVip((v) => !v)}>
           <Icon name="star" size={15} /> VIP
         </button>
@@ -240,7 +230,7 @@ export default function Customers() {
           <EmptyState icon="users" title="Δεν βρέθηκαν πελάτες" hint="Δοκιμάστε διαφορετικά κριτήρια αναζήτησης ή φίλτρα." />
         ) : (
           rows.map((c) => (
-            <div className="trow" key={c.id} onClick={() => navigate(`/customers/${c.id}`)}>
+            <div className="trow" key={c.id} onClick={() => onOpenCustomer(c)}>
               <div className="cust-cell">
                 <Avatar name={c.full_name} size={38} />
                 <div style={{ minWidth: 0 }}>
@@ -278,4 +268,9 @@ export default function Customers() {
 
 function sortLabel(key) {
   return { last_visit: 'Τελ. επίσκεψη', name: 'Όνομα', value: 'Αξία', created: 'Ημ. εγγραφής' }[key] || key;
+}
+
+// Gate the export button by permission.
+function useAuthCanExport() {
+  return useAuth((s) => s.hasPerm(PERMS.CUSTOMERS_EXPORT));
 }

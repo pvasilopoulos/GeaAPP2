@@ -1,42 +1,48 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
-import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, Navigate, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App.jsx';
-import Dashboard from './pages/Dashboard.jsx';
-import Customers from './pages/Customers.jsx';
-import CustomerProfile from './pages/CustomerProfile.jsx';
-import Settings from './pages/Settings.jsx';
-import Placeholder from './pages/Placeholder.jsx';
+import Login from './pages/Login.jsx';
+import Register from './pages/Register.jsx';
+import { useAuth } from './store/auth.js';
 import './styles.css';
 
 const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: { staleTime: 30000, refetchOnWindowFocus: false, retry: 1 },
-  },
+  defaultOptions: { queries: { staleTime: 30000, refetchOnWindowFocus: false, retry: 1 } },
 });
 
+function Splash() {
+  return <div className="auth-wrap"><span className="spinner" style={{ width: 28, height: 28 }} /></div>;
+}
+
+// Loads the session once, then gates the app.
+function RequireAuth({ children }) {
+  const status = useAuth((s) => s.status);
+  const bootstrap = useAuth((s) => s.bootstrap);
+  const navigate = useNavigate();
+  useEffect(() => { if (status === 'loading') bootstrap(); }, [status, bootstrap]);
+  useEffect(() => {
+    const onUnauth = () => navigate('/login');
+    window.addEventListener('spacehub:unauthorized', onUnauth);
+    return () => window.removeEventListener('spacehub:unauthorized', onUnauth);
+  }, [navigate]);
+  if (status === 'loading') return <Splash />;
+  if (status === 'anon') return <Navigate to="/login" replace />;
+  return children;
+}
+
+function Public({ children }) {
+  const status = useAuth((s) => s.status);
+  if (status === 'authed') return <Navigate to="/" replace />;
+  return children;
+}
+
 const router = createBrowserRouter([
-  {
-    path: '/',
-    element: <App />,
-    children: [
-      { index: true, element: <Dashboard /> },
-      { path: 'customers', element: <Customers /> },
-      { path: 'customers/:id', element: <CustomerProfile /> },
-      { path: 'settings', element: <Settings /> },
-      { path: 'bookings', element: <Placeholder title="Κρατήσεις" icon="calendar" /> },
-      { path: 'branches', element: <Placeholder title="Υποκαταστήματα" icon="building" /> },
-      { path: 'spaces', element: <Placeholder title="Χώροι" icon="grid" /> },
-      { path: 'calendar', element: <Placeholder title="Ημερολόγιο" icon="calendar" /> },
-      { path: 'reports', element: <Placeholder title="Αναφορές" icon="chart" /> },
-      { path: 'communications', element: <Placeholder title="Επικοινωνίες" icon="message" /> },
-      { path: 'documents', element: <Placeholder title="Έγγραφα" icon="file" /> },
-    ],
-  },
-], {
-  future: { v7_startTransition: true, v7_relativeSplatPath: true },
-});
+  { path: '/login', element: <Public><Login /></Public> },
+  { path: '/register', element: <Public><Register /></Public> },
+  { path: '*', element: <RequireAuth><App /></RequireAuth> },
+], { future: { v7_startTransition: true, v7_relativeSplatPath: true } });
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

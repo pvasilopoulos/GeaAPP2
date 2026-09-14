@@ -1,28 +1,29 @@
 import { Router } from 'express';
 import { query } from '../db.js';
+import { authorize } from '../middleware/auth.js';
+import { PERMISSIONS } from '../lib/permissions.js';
 
 export const statsRouter = Router();
+statsRouter.use(authorize(PERMISSIONS.CUSTOMERS_READ, PERMISSIONS.REPORTS_READ));
 
-// GET /api/stats/overview — dashboard KPIs (Αρχική).
-statsRouter.get('/overview', async (_req, res, next) => {
+// GET /api/stats/overview — dashboard KPIs (tenant-scoped).
+statsRouter.get('/overview', async (req, res, next) => {
   try {
-    const [totals, vip, upcoming, topBranches, recent] = await Promise.all([
+    const t = req.user.tenantId;
+    const [totals, vip, upcoming, topCities, recent] = await Promise.all([
       query(`SELECT COUNT(*) AS total_customers,
                     SUM(status = 'active') AS active_customers,
                     COALESCE(SUM(total_value), 0) AS total_value
-             FROM customers`),
-      query('SELECT COUNT(*) AS vip FROM customers WHERE is_vip = 1'),
-      query('SELECT COUNT(*) AS upcoming FROM bookings WHERE starts_at >= NOW()'),
-      query(`SELECT b.id, b.name, b.city, COUNT(*) AS customers
-             FROM customer_branches cb JOIN branches b ON b.id = cb.branch_id
-             GROUP BY b.id, b.name, b.city ORDER BY customers DESC LIMIT 6`),
-      // Read the newest activities via the created_at index first, then join
-      // customers (avoids a filesort over the whole activities table).
+             FROM customers WHERE tenant_id = ?`, [t]),
+      query('SELECT COUNT(*) AS vip FROM customers WHERE tenant_id = ? AND is_vip = 1', [t]),
+      query('SELECT COUNT(*) AS upcoming FROM bookings WHERE tenant_id = ? AND starts_at >= NOW()', [t]),
+      query(`SELECT city, COUNT(DISTINCT customer_id) AS customers
+             FROM branches WHERE tenant_id = ? AND city IS NOT NULL
+             GROUP BY city ORDER BY customers DESC LIMIT 6`, [t]),
       query(`SELECT a.type, a.description, a.created_at, c.full_name, c.code
-             FROM (SELECT type, description, created_at, customer_id
-                   FROM activities ORDER BY created_at DESC LIMIT 8) a
-             JOIN customers c ON c.id = a.customer_id
-             ORDER BY a.created_at DESC`),
+             FROM activities a JOIN customers c ON c.id = a.customer_id
+             WHERE a.tenant_id = ?
+             ORDER BY a.created_at DESC LIMIT 8`, [t]),
     ]);
     res.json({
       totalCustomers: Number(totals.rows[0].total_customers),
@@ -30,7 +31,7 @@ statsRouter.get('/overview', async (_req, res, next) => {
       totalValue: Number(totals.rows[0].total_value),
       vipCustomers: Number(vip.rows[0].vip),
       upcomingBookings: Number(upcoming.rows[0].upcoming),
-      topBranches: topBranches.rows.map((r) => ({ ...r, customers: Number(r.customers) })),
+      topCities: topCities.rows.map((r) => ({ ...r, customers: Number(r.customers) })),
       recentActivity: recent.rows,
     });
   } catch (err) {

@@ -74,6 +74,8 @@ input, select { font-family: inherit; font-size: 14px; }
   padding: 9px 11px; border-radius: var(--radius-sm);
   color: var(--text-2); font-weight: 500; font-size: 13.5px;
   transition: background .12s, color .12s;
+  border: none; background: transparent; width: 100%; text-align: left;
+  font-family: inherit; cursor: pointer;
 }
 .nav-item:hover { background: var(--surface-2); color: var(--text); }
 .nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
@@ -305,6 +307,47 @@ input, select { font-family: inherit; font-size: 14px; }
 
 .results-meta { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 12.5px; color: var(--text-3); }
 .took { font-variant-numeric: tabular-nums; background: var(--green-soft); color: var(--green); padding: 2px 8px; border-radius: 6px; font-weight: 600; }
+
+/* ---------- Auth ---------- */
+.auth-wrap { min-height: 100vh; display: grid; place-items: center; background: radial-gradient(1200px 600px at 50% -10%, #eef0fe, var(--bg)); padding: 24px; }
+.auth-card { width: 100%; max-width: 400px; background: #fff; border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow-lg); padding: 30px 28px; }
+.auth-brand { display: flex; align-items: center; gap: 11px; font-weight: 700; font-size: 20px; letter-spacing: -.02em; margin-bottom: 6px; }
+.auth-brand .logo { width: 34px; height: 34px; border-radius: 10px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); display: grid; place-items: center; color: #fff; }
+.auth-sub { color: var(--text-3); font-size: 13.5px; margin-bottom: 22px; }
+.field-group { margin-bottom: 14px; }
+.field-group label { display: block; font-size: 12.5px; font-weight: 600; color: var(--text-2); margin-bottom: 6px; }
+.field-group input { width: 100%; height: 40px; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: 9px; outline: none; }
+.field-group input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.auth-error { background: var(--red-soft); color: var(--red); padding: 9px 12px; border-radius: 9px; font-size: 13px; margin-bottom: 14px; }
+.auth-hint { margin-top: 16px; font-size: 12.5px; color: var(--text-3); text-align: center; }
+.auth-hint code { background: var(--surface-2); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; }
+.btn-block { width: 100%; justify-content: center; height: 42px; }
+.demo-box { margin-top: 18px; border: 1px dashed var(--border-strong); border-radius: 10px; padding: 12px; font-size: 12px; color: var(--text-2); }
+.demo-box b { color: var(--text); }
+.demo-row { display: flex; justify-content: space-between; padding: 3px 0; }
+
+/* ---------- Tab bar ---------- */
+.tabbar { display: flex; align-items: center; gap: 4px; background: var(--surface-2); border-bottom: 1px solid var(--border); padding: 6px 10px 0; overflow-x: auto; flex: none; }
+.tab-chip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 9px 9px 0 0; font-size: 13px; font-weight: 500; color: var(--text-2); border: 1px solid transparent; border-bottom: none; white-space: nowrap; max-width: 220px; }
+.tab-chip:hover { background: #fff; color: var(--text); }
+.tab-chip.active { background: #fff; color: var(--accent); border-color: var(--border); font-weight: 600; }
+.tab-chip .ttl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab-chip .x { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 5px; color: var(--text-3); }
+.tab-chip .x:hover { background: var(--surface-2); color: var(--text); }
+.tab-chip svg { width: 15px; height: 15px; flex: none; }
+
+/* ---------- User menu ---------- */
+.user-menu { position: relative; }
+.user-btn { display: flex; align-items: center; gap: 9px; padding: 5px 8px 5px 5px; border-radius: 999px; border: 1px solid var(--border); background: #fff; }
+.user-btn:hover { background: var(--surface-2); }
+.user-btn .who { text-align: left; line-height: 1.15; }
+.user-btn .who b { font-size: 12.5px; font-weight: 600; }
+.user-btn .who span { font-size: 11px; color: var(--text-3); }
+.user-pop { position: absolute; right: 0; top: 48px; width: 240px; background: #fff; border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-lg); padding: 8px; z-index: 50; }
+.user-pop .hd { padding: 10px 10px 8px; border-bottom: 1px solid var(--border); margin-bottom: 6px; }
+.user-pop .item { display: flex; align-items: center; gap: 9px; padding: 9px 10px; border-radius: 8px; font-size: 13.5px; cursor: pointer; }
+.user-pop .item:hover { background: var(--surface-2); }
+.role-pill { display: inline-flex; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
 
 @media (max-width: 1100px) {
   .grid-3 { grid-template-columns: 1fr; }

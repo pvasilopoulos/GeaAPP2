@@ -2,8 +2,24 @@ import { Router } from 'express';
 import { query } from '../db.js';
 import { encodeCursor, decodeCursor, clampLimit } from '../lib/cursor.js';
 import { SORTS, buildFilters } from '../lib/customerFilters.js';
+import { authorize } from '../middleware/auth.js';
+import { PERMISSIONS } from '../lib/permissions.js';
 
 export const customersRouter = Router();
+
+// All customer reads require the customers.read permission.
+customersRouter.use(authorize(PERMISSIONS.CUSTOMERS_READ));
+
+// Verify any :id customer belongs to the caller's tenant (tenant isolation).
+customersRouter.param('id', async (req, res, next, id) => {
+  try {
+    const cid = Number(id);
+    if (!Number.isInteger(cid)) return res.status(400).json({ error: 'Μη έγκυρο id' });
+    const { rows } = await query('SELECT id FROM customers WHERE id = ? AND tenant_id = ?', [cid, req.user.tenantId]);
+    if (!rows.length) return res.status(404).json({ error: 'Customer not found' });
+    next();
+  } catch (err) { next(err); }
+});
 
 // GET /api/customers/search — high-performance server-side directory search.
 customersRouter.get('/search', async (req, res, next) => {
@@ -119,24 +135,21 @@ customersRouter.get('/:id', async (req, res, next) => {
   }
 });
 
-// GET /api/customers/:id/branches — branches + spaces for this customer.
+// GET /api/customers/:id/branches — the customer's own branches, each with its spaces.
 customersRouter.get('/:id/branches', async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     const branches = await query(
-      `SELECT cb.branch_id AS id, cb.is_primary, cb.visits_count, cb.spaces_count,
-              cb.total_value, cb.last_visit_at,
-              b.name, b.address_line, b.city, b.area, b.phone, b.email, b.image_url, b.lat, b.lng
-       FROM customer_branches cb JOIN branches b ON b.id = cb.branch_id
-       WHERE cb.customer_id = ?
-       ORDER BY cb.is_primary DESC, cb.visits_count DESC`, [id]);
+      `SELECT id, is_primary, visits_count, spaces_count, total_value, last_visit_at,
+              name, address_line, city, area, phone, email, image_url, lat, lng
+       FROM branches WHERE customer_id = ?
+       ORDER BY is_primary DESC, visits_count DESC`, [id]);
 
     const spaces = await query(
-      `SELECT cs.space_id AS id, cs.branch_id, cs.visits_count, cs.bookings_count, cs.last_visit_at,
-              s.name, s.space_type, s.image_url, s.capacity, s.floor
-       FROM customer_spaces cs JOIN spaces s ON s.id = cs.space_id
-       WHERE cs.customer_id = ?
-       ORDER BY cs.visits_count DESC`, [id]);
+      `SELECT id, branch_id, visits_count, bookings_count, last_visit_at,
+              name, space_type, image_url, capacity, floor
+       FROM spaces WHERE customer_id = ?
+       ORDER BY visits_count DESC`, [id]);
 
     const byBranch = {};
     for (const s of spaces.rows) (byBranch[s.branch_id] ||= []).push(s);
@@ -153,12 +166,10 @@ customersRouter.get('/:id/spaces/:spaceId/usage', async (req, res, next) => {
     const spaceId = Number(req.params.spaceId);
     const space = await query(
       `SELECT s.*, b.name AS branch_name, b.city FROM spaces s
-       JOIN branches b ON b.id = s.branch_id WHERE s.id = ?`, [spaceId]);
+       JOIN branches b ON b.id = s.branch_id
+       WHERE s.id = ? AND s.customer_id = ?`, [spaceId, id]);
     if (!space.rows.length) return res.status(404).json({ error: 'Space not found' });
 
-    const usage = await query(
-      `SELECT visits_count, bookings_count, last_visit_at FROM customer_spaces
-       WHERE customer_id = ? AND space_id = ?`, [id, spaceId]);
     const bookings = await query(
       `SELECT id, starts_at, ends_at, status, amount FROM bookings
        WHERE customer_id = ? AND space_id = ? ORDER BY starts_at DESC LIMIT 10`, [id, spaceId]);
@@ -166,9 +177,10 @@ customersRouter.get('/:id/spaces/:spaceId/usage', async (req, res, next) => {
       `SELECT id, visited_at, duration_minutes, visit_type, status FROM visits
        WHERE customer_id = ? AND space_id = ? ORDER BY visited_at DESC LIMIT 10`, [id, spaceId]);
 
+    const s = space.rows[0];
     res.json({
-      space: space.rows[0],
-      usage: usage.rows[0] || { visits_count: 0, bookings_count: 0, last_visit_at: null },
+      space: s,
+      usage: { visits_count: s.visits_count, bookings_count: s.bookings_count, last_visit_at: s.last_visit_at },
       bookings: bookings.rows,
       visits: visits.rows,
     });

@@ -1,21 +1,27 @@
 import { Router } from 'express';
 import { query } from '../db.js';
+import { authorize } from '../middleware/auth.js';
+import { PERMISSIONS } from '../lib/permissions.js';
 
 export const metaRouter = Router();
+metaRouter.use(authorize(PERMISSIONS.CUSTOMERS_READ));
 
-// GET /api/meta — data needed to render filters and selectors.
-metaRouter.get('/', async (_req, res, next) => {
+// GET /api/meta — data needed to render filters and selectors (tenant-scoped).
+metaRouter.get('/', async (req, res, next) => {
   try {
-    const [tags, employees, branches, total] = await Promise.all([
+    const tenantId = req.user.tenantId;
+    const [tags, employees, cities, spaceTypes, total] = await Promise.all([
       query('SELECT id, name, slug, color FROM tags ORDER BY name'),
-      query('SELECT id, full_name FROM employees ORDER BY full_name'),
-      query('SELECT id, name, city FROM branches ORDER BY city, name'),
-      query('SELECT COUNT(*) AS total FROM customers'),
+      query('SELECT id, full_name FROM employees WHERE tenant_id = ? ORDER BY full_name', [tenantId]),
+      query(`SELECT DISTINCT city FROM branches WHERE tenant_id = ? AND city IS NOT NULL ORDER BY city`, [tenantId]),
+      query(`SELECT DISTINCT space_type FROM spaces WHERE tenant_id = ? AND space_type IS NOT NULL ORDER BY space_type`, [tenantId]),
+      query('SELECT COUNT(*) AS total FROM customers WHERE tenant_id = ?', [tenantId]),
     ]);
     res.json({
       tags: tags.rows,
       employees: employees.rows,
-      branches: branches.rows,
+      branchCities: cities.rows.map((r) => r.city),
+      spaceTypes: spaceTypes.rows.map((r) => r.space_type),
       statuses: [
         { value: 'active', label: 'Ενεργός' },
         { value: 'inactive', label: 'Ανενεργός' },

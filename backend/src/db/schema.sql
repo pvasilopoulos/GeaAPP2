@@ -1,12 +1,13 @@
 -- ============================================================================
 -- SpaceHub schema — MariaDB / MySQL
--- Customers · Branches · Spaces · Custom Fields, for 350k+ customers.
 --
--- Smart search: a precomputed ASCII `search_norm` column (lowercased +
--- transliterated Greek→Latin in the application layer) enables fast,
--- accent/case/script-insensitive substring search with plain LIKE, without
--- relying on DB extensions. B-tree indexes cover exact match, sort and keyset
--- pagination.
+-- Multi-tenant (tenants/users/roles) with an ownership hierarchy:
+--     TENANT → CUSTOMER → BRANCH → SPACE
+-- Each branch belongs to exactly one customer; each space belongs to exactly
+-- one branch. History (bookings/visits/…) is customer-scoped.
+--
+-- Smart search uses a precomputed ASCII `search_norm` column (Greek→Latin
+-- transliteration in the app layer) with InnoDB FULLTEXT — no DB extensions.
 -- ============================================================================
 
 SET FOREIGN_KEY_CHECKS = 0;
@@ -29,63 +30,67 @@ DROP TABLE IF EXISTS spaces;
 DROP TABLE IF EXISTS branches;
 DROP TABLE IF EXISTS customers;
 DROP TABLE IF EXISTS employees;
+DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS roles;
+DROP TABLE IF EXISTS tenants;
 SET FOREIGN_KEY_CHECKS = 1;
+
+-- ---------------------------------------------------------------------------
+-- Multi-tenancy + authentication
+-- ---------------------------------------------------------------------------
+CREATE TABLE tenants (
+  id         BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  name       VARCHAR(160) NOT NULL,
+  slug       VARCHAR(160) NOT NULL UNIQUE,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE roles (
+  id          BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `key`       VARCHAR(40) NOT NULL UNIQUE,   -- owner | admin | manager | agent | viewer
+  name        VARCHAR(80) NOT NULL,
+  permissions JSON NOT NULL,                 -- array of permission codes
+  is_system   TINYINT(1) NOT NULL DEFAULT 1,
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE users (
+  id            BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  tenant_id     BIGINT NOT NULL,
+  role_id       BIGINT NOT NULL,
+  email         VARCHAR(255) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL,
+  first_name    VARCHAR(120) NOT NULL,
+  last_name     VARCHAR(120) NOT NULL,
+  full_name     VARCHAR(255) GENERATED ALWAYS AS (CONCAT(first_name, ' ', last_name)) STORED,
+  is_active     TINYINT(1) NOT NULL DEFAULT 1,
+  last_login_at DATETIME NULL,
+  created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_users_tenant (tenant_id),
+  CONSTRAINT fk_users_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+  CONSTRAINT fk_users_role FOREIGN KEY (role_id) REFERENCES roles(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------------
 CREATE TABLE employees (
   id         BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  tenant_id  BIGINT NOT NULL,
   first_name VARCHAR(120) NOT NULL,
   last_name  VARCHAR(120) NOT NULL,
   full_name  VARCHAR(255) GENERATED ALWAYS AS (CONCAT(first_name, ' ', last_name)) STORED,
   email      VARCHAR(255),
   role       VARCHAR(120),
-  avatar_url VARCHAR(512)
+  avatar_url VARCHAR(512),
+  KEY idx_employees_tenant (tenant_id),
+  CONSTRAINT fk_employees_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------------
-CREATE TABLE branches (
-  id           BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  code         VARCHAR(40) NOT NULL UNIQUE,
-  name         VARCHAR(200) NOT NULL,
-  address_line VARCHAR(255),
-  city         VARCHAR(120),
-  area         VARCHAR(120),
-  postal_code  VARCHAR(20),
-  phone        VARCHAR(40),
-  email        VARCHAR(255),
-  image_url    VARCHAR(512),
-  lat          DOUBLE,
-  lng          DOUBLE,
-  spaces_count INT NOT NULL DEFAULT 0,
-  created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  search_norm  VARCHAR(768) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',
-  KEY idx_branches_city (city),
-  FULLTEXT KEY ft_branches_search (search_norm)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- ---------------------------------------------------------------------------
-CREATE TABLE spaces (
-  id           BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  branch_id    BIGINT NOT NULL,
-  code         VARCHAR(40) NOT NULL UNIQUE,
-  name         VARCHAR(200) NOT NULL,
-  space_type   VARCHAR(120),
-  capacity     INT,
-  floor        VARCHAR(40),
-  hourly_price DECIMAL(10,2),
-  image_url    VARCHAR(512),
-  description  TEXT,
-  created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  search_norm  VARCHAR(768) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',
-  KEY idx_spaces_branch (branch_id),
-  KEY idx_spaces_type (space_type),
-  FULLTEXT KEY ft_spaces_search (search_norm),
-  CONSTRAINT fk_spaces_branch FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
+-- Customers (primary entity, tenant-scoped)
 -- ---------------------------------------------------------------------------
 CREATE TABLE customers (
   id               BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  tenant_id        BIGINT NOT NULL,
   code             VARCHAR(40) NOT NULL UNIQUE,
   first_name       VARCHAR(120) NOT NULL,
   last_name        VARCHAR(120) NOT NULL,
@@ -116,59 +121,85 @@ CREATE TABLE customers (
   total_value      DECIMAL(12,2) NOT NULL DEFAULT 0,
   last_visit_at    DATETIME NULL,
   next_booking_at  DATETIME NULL,
-  -- Sort helper for keyset pagination (NULL last-visits collate last).
   last_visit_sort  DATETIME NOT NULL DEFAULT '1000-01-01 00:00:00',
   search_norm      VARCHAR(768) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',
-  KEY idx_customers_status (status),
-  KEY idx_customers_type (customer_type),
-  KEY idx_customers_vip (is_vip),
-  KEY idx_customers_email (email),
-  KEY idx_customers_phone (phone),
-  KEY idx_customers_mobile (mobile),
-  KEY idx_customers_tax (tax_id),
-  KEY idx_customers_city (city),
-  KEY idx_customers_lastvisit_keyset (last_visit_sort, id),
-  KEY idx_customers_value_keyset (total_value, id),
-  KEY idx_customers_created_keyset (created_at, id),
-  KEY idx_customers_name_keyset (full_name, id),
+  KEY idx_customers_status (tenant_id, status),
+  KEY idx_customers_type (tenant_id, customer_type),
+  KEY idx_customers_vip (tenant_id, is_vip),
+  KEY idx_customers_lastvisit_keyset (tenant_id, last_visit_sort, id),
+  KEY idx_customers_value_keyset (tenant_id, total_value, id),
+  KEY idx_customers_created_keyset (tenant_id, created_at, id),
+  KEY idx_customers_name_keyset (tenant_id, full_name, id),
   KEY idx_customers_employee (assigned_employee_id),
   FULLTEXT KEY ft_customers_search (search_norm),
+  CONSTRAINT fk_customers_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
   CONSTRAINT fk_customers_employee FOREIGN KEY (assigned_employee_id) REFERENCES employees(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------------
-CREATE TABLE customer_branches (
+-- Branches — owned by a customer
+-- ---------------------------------------------------------------------------
+CREATE TABLE branches (
   id            BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  tenant_id     BIGINT NOT NULL,
   customer_id   BIGINT NOT NULL,
-  branch_id     BIGINT NOT NULL,
+  code          VARCHAR(40) NOT NULL UNIQUE,
+  name          VARCHAR(200) NOT NULL,
+  address_line  VARCHAR(255),
+  city          VARCHAR(120),
+  area          VARCHAR(120),
+  postal_code   VARCHAR(20),
+  phone         VARCHAR(40),
+  email         VARCHAR(255),
+  image_url     VARCHAR(512),
+  lat           DOUBLE,
+  lng           DOUBLE,
   is_primary    TINYINT(1) NOT NULL DEFAULT 0,
-  visits_count  INT NOT NULL DEFAULT 0,
   spaces_count  INT NOT NULL DEFAULT 0,
+  visits_count  INT NOT NULL DEFAULT 0,
   total_value   DECIMAL(12,2) NOT NULL DEFAULT 0,
-  first_visit_at DATETIME NULL,
   last_visit_at DATETIME NULL,
-  UNIQUE KEY uq_cb (customer_id, branch_id),
-  KEY idx_cb_branch (branch_id),
-  CONSTRAINT fk_cb_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
-  CONSTRAINT fk_cb_branch FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE
+  created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  search_norm   VARCHAR(768) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',
+  KEY idx_branches_customer (customer_id),
+  KEY idx_branches_tenant_city (tenant_id, city),
+  FULLTEXT KEY ft_branches_search (search_norm),
+  CONSTRAINT fk_branches_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+  CONSTRAINT fk_branches_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE customer_spaces (
+-- ---------------------------------------------------------------------------
+-- Spaces — owned by a branch (customer_id denormalized for scoping/queries)
+-- ---------------------------------------------------------------------------
+CREATE TABLE spaces (
   id             BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  tenant_id      BIGINT NOT NULL,
   customer_id    BIGINT NOT NULL,
-  space_id       BIGINT NOT NULL,
   branch_id      BIGINT NOT NULL,
+  code           VARCHAR(40) NOT NULL UNIQUE,
+  name           VARCHAR(200) NOT NULL,
+  space_type     VARCHAR(120),
+  capacity       INT,
+  floor          VARCHAR(40),
+  hourly_price   DECIMAL(10,2),
+  image_url      VARCHAR(512),
+  description    TEXT,
   visits_count   INT NOT NULL DEFAULT 0,
   bookings_count INT NOT NULL DEFAULT 0,
   last_visit_at  DATETIME NULL,
-  UNIQUE KEY uq_cs (customer_id, space_id),
-  KEY idx_cs_space (space_id),
-  KEY idx_cs_branch (branch_id),
-  CONSTRAINT fk_cs_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
-  CONSTRAINT fk_cs_space FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE,
-  CONSTRAINT fk_cs_branch FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE
+  created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  search_norm    VARCHAR(768) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',
+  KEY idx_spaces_branch (branch_id),
+  KEY idx_spaces_customer (customer_id),
+  KEY idx_spaces_tenant_type (tenant_id, space_type),
+  FULLTEXT KEY ft_spaces_search (search_norm),
+  CONSTRAINT fk_spaces_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+  CONSTRAINT fk_spaces_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+  CONSTRAINT fk_spaces_branch FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ---------------------------------------------------------------------------
+-- Tags (shared vocabulary)
 -- ---------------------------------------------------------------------------
 CREATE TABLE tags (
   id    BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -187,8 +218,11 @@ CREATE TABLE customer_tags (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------------
+-- History tables (customer-scoped)
+-- ---------------------------------------------------------------------------
 CREATE TABLE bookings (
   id          BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  tenant_id   BIGINT NOT NULL,
   customer_id BIGINT NOT NULL,
   branch_id   BIGINT NULL,
   space_id    BIGINT NULL,
@@ -199,7 +233,7 @@ CREATE TABLE bookings (
   amount      DECIMAL(10,2) NOT NULL DEFAULT 0,
   created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY idx_bookings_customer_time (customer_id, starts_at),
-  KEY idx_bookings_starts (starts_at),
+  KEY idx_bookings_tenant_starts (tenant_id, starts_at),
   KEY idx_bookings_space (space_id),
   CONSTRAINT fk_bookings_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -267,6 +301,7 @@ CREATE TABLE notes (
 
 CREATE TABLE activities (
   id          BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  tenant_id   BIGINT NOT NULL,
   customer_id BIGINT NOT NULL,
   type        VARCHAR(40) NOT NULL,
   description VARCHAR(400),
@@ -274,7 +309,7 @@ CREATE TABLE activities (
   space_id    BIGINT NULL,
   created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY idx_act_customer_time (customer_id, created_at),
-  KEY idx_act_created (created_at),
+  KEY idx_act_tenant_created (tenant_id, created_at),
   CONSTRAINT fk_act_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

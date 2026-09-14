@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import Icon from '../components/Icon.jsx';
 import { Avatar, Skeleton } from '../components/ui.jsx';
 import { formatCurrency, formatNumber, relativeDate } from '../lib/format.js';
+import { useTabs } from '../store/tabs.js';
+import { useAuth } from '../store/auth.js';
 
 const ACTIVITY_ICONS = {
   booking_created: { icon: 'calendar', bg: 'var(--accent-soft)', fg: 'var(--accent)' },
@@ -28,21 +29,24 @@ function Kpi({ label, value, icon }) {
 }
 
 export default function Dashboard() {
+  const openTab = useTabs((s) => s.openTab);
+  const user = useAuth((s) => s.user);
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['stats'],
     queryFn: ({ signal }) => api.statsOverview({ signal }),
   });
 
   const loading = isLoading || (!data && !isError);
+  const goCustomers = () => openTab({ id: 'customers', type: 'customers', title: 'Πελάτες', icon: 'users' });
 
   return (
     <div>
       <div className="page-head">
         <div>
-          <h1>Καλωσήρθες, Αναστασία</h1>
+          <h1>Καλωσήρθες, {user?.fullName?.split(' ')[0] || ''}</h1>
           <div className="sub">Επισκόπηση της δραστηριότητας των πελατών</div>
         </div>
-        <Link to="/customers" className="btn btn-accent"><Icon name="users" size={16} /> Όλοι οι πελάτες</Link>
+        <button className="btn btn-accent" onClick={goCustomers}><Icon name="users" size={16} /> Όλοι οι πελάτες</button>
       </div>
 
       {isError && (
@@ -67,16 +71,16 @@ export default function Dashboard() {
 
       <div className="grid-2">
         <div className="card">
-          <div className="card-head"><h3><Icon name="building" /> Κορυφαία υποκαταστήματα</h3></div>
+          <div className="card-head"><h3><Icon name="pin" /> Κορυφαίες πόλεις</h3></div>
           <div style={{ padding: '6px 8px' }}>
-            {loading ? <div style={{ padding: 16 }}><Skeleton /></div> : (data?.topBranches || []).map((b) => (
-              <div key={b.id} className="search-row">
-                <div className="avatar sq" style={{ width: 34, height: 34, background: 'var(--accent-soft)', color: 'var(--accent)' }}><Icon name="building" size={16} /></div>
+            {loading ? <div style={{ padding: 16 }}><Skeleton /></div> : (data?.topCities || []).map((c) => (
+              <div key={c.city} className="search-row">
+                <div className="avatar sq" style={{ width: 34, height: 34, background: 'var(--accent-soft)', color: 'var(--accent)' }}><Icon name="pin" size={16} /></div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600 }}>{b.name}</div>
-                  <div className="meta">{b.city}</div>
+                  <div style={{ fontWeight: 600 }}>{c.city}</div>
+                  <div className="meta">Υποκαταστήματα πελατών</div>
                 </div>
-                <div className="num">{formatNumber(b.customers)} <span className="muted" style={{ fontWeight: 400 }}>πελάτες</span></div>
+                <div className="num">{formatNumber(c.customers)} <span className="muted" style={{ fontWeight: 400 }}>πελάτες</span></div>
               </div>
             ))}
           </div>

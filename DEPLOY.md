@@ -42,8 +42,13 @@ MYSQL_USER=<your db user>
 MYSQL_PASSWORD=<your db password>
 MYSQL_DATABASE=geaapp
 NODE_ENV=production
+JWT_SECRET=<a long random string>
 SEED_CUSTOMERS=50000
 ```
+
+`JWT_SECRET` signs auth tokens — set a long random value in production. Seeding
+creates demo users (see README); the first real user can also self-register at
+`/register`, which creates their tenant and an owner account.
 
 `PORT` is provided automatically by Plesk/Passenger — do not set it.
 

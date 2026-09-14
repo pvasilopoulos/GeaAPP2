@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import Icon from './Icon.jsx';
 import { Avatar, StatusBadge } from './ui.jsx';
+import { useTabs } from '../store/tabs.js';
 
 export default function GlobalSearch() {
   const [q, setQ] = useState('');
@@ -11,7 +11,7 @@ export default function GlobalSearch() {
   const [loading, setLoading] = useState(false);
   const boxRef = useRef(null);
   const inputRef = useRef(null);
-  const navigate = useNavigate();
+  const openCustomer = useTabs((s) => s.openCustomer);
 
   // Debounced, cancellable global search.
   useEffect(() => {
@@ -37,7 +37,7 @@ export default function GlobalSearch() {
     return () => { document.removeEventListener('mousedown', onClick); document.removeEventListener('keydown', onKey); };
   }, []);
 
-  const go = (path) => { setOpen(false); setQ(''); navigate(path); };
+  const open2 = (customer) => { setOpen(false); setQ(''); openCustomer(customer); };
   const has = results && (results.customers.length || results.branches.length || results.spaces.length);
 
   return (
@@ -62,7 +62,7 @@ export default function GlobalSearch() {
             <>
               <div className="search-group-label">Πελάτες</div>
               {results.customers.map((c) => (
-                <div className="search-row" key={`c${c.id}`} onClick={() => go(`/customers/${c.id}`)}>
+                <div className="search-row" key={`c${c.id}`} onClick={() => open2({ id: c.id, full_name: c.full_name })}>
                   <Avatar name={c.full_name} size={32} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600 }}>{c.full_name}</div>
@@ -78,7 +78,7 @@ export default function GlobalSearch() {
             <>
               <div className="search-group-label">Υποκαταστήματα</div>
               {results.branches.map((b) => (
-                <div className="search-row" key={`b${b.id}`} onClick={() => go('/branches')}>
+                <div className="search-row" key={`b${b.id}`} onClick={() => open2({ id: b.customer_id, full_name: b.name })}>
                   <div className="avatar sq" style={{ width: 32, height: 32, fontSize: 13 }}><Icon name="building" size={16} /></div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 600 }}>{b.name}</div>
@@ -93,7 +93,7 @@ export default function GlobalSearch() {
             <>
               <div className="search-group-label">Χώροι</div>
               {results.spaces.map((s) => (
-                <div className="search-row" key={`s${s.id}`} onClick={() => go('/spaces')}>
+                <div className="search-row" key={`s${s.id}`} onClick={() => open2({ id: s.customer_id, full_name: s.name })}>
                   <div className="avatar sq" style={{ width: 32, height: 32, background: 'var(--accent-soft)', color: 'var(--accent)' }}><Icon name="grid" size={15} /></div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 600 }}>{s.name}</div>

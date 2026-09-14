@@ -1,11 +1,36 @@
-// Thin fetch wrapper. Supports AbortSignal for request cancellation.
-async function get(path, { signal } = {}) {
-  const res = await fetch(`/api${path}`, { signal });
+// API client with JWT auth. Token is persisted in localStorage and attached
+// as a Bearer header. A 401 on a protected call clears the session.
+const TOKEN_KEY = 'spacehub_token';
+
+export function getToken() { return localStorage.getItem(TOKEN_KEY); }
+export function setToken(t) { if (t) localStorage.setItem(TOKEN_KEY, t); else localStorage.removeItem(TOKEN_KEY); }
+
+function authHeaders(extra = {}) {
+  const t = getToken();
+  return t ? { ...extra, Authorization: `Bearer ${t}` } : extra;
+}
+
+async function handle(res) {
+  if (res.status === 401 && !location.pathname.startsWith('/login')) {
+    setToken(null);
+    window.dispatchEvent(new Event('spacehub:unauthorized'));
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || `Request failed: ${res.status}`);
   }
   return res.json();
+}
+
+async function get(path, { signal } = {}) {
+  return handle(await fetch(`/api${path}`, { signal, headers: authHeaders() }));
+}
+async function send(method, path, body) {
+  return handle(await fetch(`/api${path}`, {
+    method,
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: body ? JSON.stringify(body) : undefined,
+  }));
 }
 
 function qs(params) {
@@ -18,6 +43,16 @@ function qs(params) {
 }
 
 export const api = {
+  // auth
+  login: (email, password) => send('POST', '/auth/login', { email, password }),
+  register: (payload) => send('POST', '/auth/register', payload),
+  me: (opts) => get('/auth/me', opts),
+  // users / roles
+  users: (opts) => get('/users', opts),
+  roles: (opts) => get('/roles', opts),
+  createUser: (payload) => send('POST', '/users', payload),
+  updateUser: (id, payload) => send('PATCH', `/users/${id}`, payload),
+  // app
   meta: (opts) => get('/meta', opts),
   statsOverview: (opts) => get('/stats/overview', opts),
   searchCustomers: (params, opts) => get(`/customers/search${qs(params)}`, opts),
@@ -37,6 +72,17 @@ export const api = {
   branches: (params, opts) => get(`/branches${qs(params)}`, opts),
   spaces: (params, opts) => get(`/spaces${qs(params)}`, opts),
   customFields: (entity, opts) => get(`/custom-fields${qs({ entity })}`, opts),
-  // Absolute URL used to trigger a file download (CSV/Excel/PDF).
-  exportUrl: (format, params) => `/api/customers/export${qs({ ...params, format })}`,
+  // export (fetch as blob so the Authorization header is sent, then download)
+  async exportCustomers(format, params) {
+    const res = await fetch(`/api/customers/export${qs({ ...params, format })}`, { headers: authHeaders() });
+    if (!res.ok) throw new Error('Export failed');
+    const blob = await res.blob();
+    const cd = res.headers.get('Content-Disposition') || '';
+    const m = cd.match(/filename="?([^"]+)"?/);
+    const filename = m ? m[1] : `customers.${format}`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+    a.remove(); URL.revokeObjectURL(url);
+  },
 };
