@@ -1,0 +1,74 @@
+import { initials, avatarColor, STATUS_LABELS } from '../lib/format.js';
+import Icon from './Icon.jsx';
+
+export function Avatar({ name, src, size = 40, square = false }) {
+  const style = { width: size, height: size, fontSize: size * 0.38, background: avatarColor(name) };
+  return (
+    <div className={`avatar${square ? ' sq' : ''}`} style={style}>
+      {src ? <img src={src} alt={name} /> : initials(name)}
+    </div>
+  );
+}
+
+export function StatusBadge({ status }) {
+  return (
+    <span className={`badge badge-${status}`}>
+      <span className="dot" />
+      {STATUS_LABELS[status] || status}
+    </span>
+  );
+}
+
+export function VipBadge() {
+  return (
+    <span className="badge badge-vip">
+      <Icon name="star" size={12} /> VIP
+    </span>
+  );
+}
+
+export function Tag({ name, color = 'blue' }) {
+  return <span className={`tag tag-${color}`}>{name}</span>;
+}
+
+export function Skeleton({ w = '100%', h = 14, style }) {
+  return <div className="skeleton" style={{ width: w, height: h, ...style }} />;
+}
+
+export function EmptyState({ icon = 'grid', title, hint }) {
+  return (
+    <div className="empty">
+      <Icon name={icon} size={34} />
+      <div style={{ fontWeight: 600, color: 'var(--text-2)' }}>{title}</div>
+      {hint && <div style={{ marginTop: 4 }}>{hint}</div>}
+    </div>
+  );
+}
+
+export function Drawer({ title, subtitle, onClose, children }) {
+  return (
+    <>
+      <div className="drawer-backdrop" onClick={onClose} />
+      <aside className="drawer">
+        <div className="drawer-head">
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 700 }}>{title}</div>
+            {subtitle && <div style={{ color: 'var(--text-3)', fontSize: 13, marginTop: 2 }}>{subtitle}</div>}
+          </div>
+          <button className="btn btn-icon btn-ghost" onClick={onClose} aria-label="Κλείσιμο">
+            <Icon name="x" />
+          </button>
+        </div>
+        <div className="drawer-body">{children}</div>
+      </aside>
+    </>
+  );
+}
+
+export function BranchThumb({ src, name, size = 56, radius = 9 }) {
+  return src
+    ? <img className="branch-thumb" src={src} alt={name}
+        style={{ width: size, height: size, borderRadius: radius, objectFit: 'cover', flex: 'none', background: 'var(--surface-2)' }}
+        onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+    : <div style={{ width: size, height: size, borderRadius: radius, flex: 'none', background: avatarColor(name) }} />;
+}

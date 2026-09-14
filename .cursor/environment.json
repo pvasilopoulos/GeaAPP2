@@ -1,0 +1,24 @@
+{
+  "name": "SpaceHub",
+  "user": "ubuntu",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "install": "SEED_CUSTOMERS=50000 bash scripts/setup.sh",
+  "start": "bash scripts/start.sh",
+  "terminals": [
+    {
+      "name": "backend",
+      "command": "npm --workspace backend run dev"
+    },
+    {
+      "name": "frontend",
+      "command": "npm --workspace frontend run dev"
+    }
+  ],
+  "ports": [
+    { "name": "API", "port": 4000 },
+    { "name": "Web", "port": 5173 }
+  ]
+}
