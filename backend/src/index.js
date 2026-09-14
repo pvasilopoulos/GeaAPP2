@@ -1,6 +1,9 @@
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
+import path from 'node:path';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import { pool } from './db.js';
 import { customersRouter } from './routes/customers.js';
@@ -11,8 +14,12 @@ import { spacesRouter } from './routes/spaces.js';
 import { customFieldsRouter } from './routes/customFields.js';
 import { statsRouter } from './routes/stats.js';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
-app.use(cors());
+
+// CORS is only needed for the split-origin dev setup (Vite on :5173). In
+// production the same Express process serves the SPA, so it is same-origin.
+if (config.nodeEnv !== 'production') app.use(cors());
 app.use(express.json());
 app.use(morgan('tiny'));
 
@@ -33,6 +40,17 @@ app.use('/api/spaces', spacesRouter);
 app.use('/api/custom-fields', customFieldsRouter);
 app.use('/api/stats', statsRouter);
 
+// Unknown API routes return JSON 404 (never the SPA shell).
+app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
+
+// Serve the built frontend (production / single-app deployment, e.g. Plesk).
+const distDir = path.resolve(__dirname, '../../frontend/dist');
+if (existsSync(distDir)) {
+  app.use(express.static(distDir));
+  // SPA fallback so client-side routes (deep links) resolve to index.html.
+  app.get('*', (_req, res) => res.sendFile(path.join(distDir, 'index.html')));
+}
+
 // Central error handler.
 app.use((err, _req, res, _next) => {
   console.error('API error:', err);
@@ -40,7 +58,7 @@ app.use((err, _req, res, _next) => {
 });
 
 const server = app.listen(config.port, () => {
-  console.log(`SpaceHub API listening on http://127.0.0.1:${config.port}`);
+  console.log(`SpaceHub API listening on port ${config.port} (${config.nodeEnv})`);
 });
 
 process.on('SIGTERM', () => server.close(() => pool.end()));

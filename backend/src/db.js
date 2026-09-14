@@ -1,29 +1,32 @@
-import pg from 'pg';
+import mysql from 'mysql2/promise';
 import { config } from './config.js';
 
-// A single shared pool for the API process.
-export const pool = new pg.Pool(config.pg);
-
-pool.on('error', (err) => {
-  console.error('Unexpected PostgreSQL pool error:', err);
+// Shared connection pool for the API process.
+export const pool = mysql.createPool({
+  ...config.mysql,
+  waitForConnections: true,
+  queueLimit: 0,
+  namedPlaceholders: false,
+  dateStrings: false,
 });
 
-export async function query(text, params) {
+// Returns { rows } to keep a Postgres-like call shape across the codebase.
+export async function query(sql, params) {
   const start = Date.now();
-  const res = await pool.query(text, params);
+  const [rows] = await pool.query(sql, params);
   const durationMs = Date.now() - start;
   if (durationMs > 500) {
     // Lightweight slow-query monitoring (spec §22).
-    console.warn(`[slow-query ${durationMs}ms] ${text.split('\n').join(' ').slice(0, 140)}`);
+    console.warn(`[slow-query ${durationMs}ms] ${sql.split('\n').join(' ').slice(0, 140)}`);
   }
-  return res;
+  return { rows };
 }
 
-export async function withClient(fn) {
-  const client = await pool.connect();
+export async function withConnection(fn) {
+  const conn = await pool.getConnection();
   try {
-    return await fn(client);
+    return await fn(conn);
   } finally {
-    client.release();
+    conn.release();
   }
 }

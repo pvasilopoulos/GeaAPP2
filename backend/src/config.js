@@ -1,15 +1,18 @@
 import 'dotenv/config';
 
 export const config = {
-  pg: {
-    host: process.env.PGHOST || '127.0.0.1',
-    port: Number(process.env.PGPORT || 5432),
-    user: process.env.PGUSER || 'spacehub',
-    password: process.env.PGPASSWORD || 'spacehub',
-    database: process.env.PGDATABASE || 'spacehub',
-    max: Number(process.env.PG_POOL_MAX || 10),
-    idleTimeoutMillis: 30000,
+  mysql: {
+    host: process.env.MYSQL_HOST || '127.0.0.1',
+    port: Number(process.env.MYSQL_PORT || 3306),
+    user: process.env.MYSQL_USER || 'spacehub',
+    password: process.env.MYSQL_PASSWORD || 'spacehub',
+    database: process.env.MYSQL_DATABASE || 'spacehub',
+    connectionLimit: Number(process.env.MYSQL_POOL_MAX || 10),
+    // Numeric/decimal columns are returned as strings by default; the API
+    // coerces where needed, keeping precision for currency values.
+    charset: 'utf8mb4',
   },
   port: Number(process.env.PORT || 4000),
   seedCustomers: Number(process.env.SEED_CUSTOMERS || 350000),
+  nodeEnv: process.env.NODE_ENV || 'development',
 };

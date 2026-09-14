@@ -8,11 +8,14 @@ customFieldsRouter.get('/', async (req, res, next) => {
   try {
     const entity = String(req.query.entity || 'customer');
     const { rows } = await query(
-      `SELECT id, entity_type, name, key, field_type, required, searchable, filterable,
+      `SELECT id, entity_type, name, \`key\`, field_type, required, searchable, filterable,
               visible_in_list, settings, section, sort_order, active, created_at
        FROM custom_field_definitions
-       WHERE entity_type = $1
+       WHERE entity_type = ?
        ORDER BY sort_order, id`, [entity]);
+    for (const r of rows) {
+      if (typeof r.settings === 'string') { try { r.settings = JSON.parse(r.settings); } catch { r.settings = {}; } }
+    }
     res.json({ fields: rows });
   } catch (err) {
     next(err);
