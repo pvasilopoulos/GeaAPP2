@@ -37,4 +37,6 @@ export const api = {
   branches: (params, opts) => get(`/branches${qs(params)}`, opts),
   spaces: (params, opts) => get(`/spaces${qs(params)}`, opts),
   customFields: (entity, opts) => get(`/custom-fields${qs({ entity })}`, opts),
+  // Absolute URL used to trigger a file download (CSV/Excel/PDF).
+  exportUrl: (format, params) => `/api/customers/export${qs({ ...params, format })}`,
 };

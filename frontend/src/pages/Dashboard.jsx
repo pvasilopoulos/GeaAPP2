@@ -28,10 +28,12 @@ function Kpi({ label, value, icon }) {
 }
 
 export default function Dashboard() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['stats'],
     queryFn: ({ signal }) => api.statsOverview({ signal }),
   });
+
+  const loading = isLoading || (!data && !isError);
 
   return (
     <div>
@@ -43,24 +45,31 @@ export default function Dashboard() {
         <Link to="/customers" className="btn btn-accent"><Icon name="users" size={16} /> Όλοι οι πελάτες</Link>
       </div>
 
+      {isError && (
+        <div className="card card-pad" style={{ marginBottom: 18, border: '1px solid #f3c7c7', background: 'var(--red-soft)', color: 'var(--red)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Icon name="activity" size={18} />
+          <div><b>Αποτυχία φόρτωσης δεδομένων.</b> Ελέγξτε τη σύνδεση με τη βάση ή ότι έχει γίνει το seed. ({error?.message})</div>
+        </div>
+      )}
+
       <div className="kpi-grid">
-        {isLoading ? (
+        {loading ? (
           Array.from({ length: 4 }).map((_, i) => <div className="kpi" key={i}><Skeleton w="60%" /><Skeleton w="40%" h={24} style={{ marginTop: 12 }} /></div>)
-        ) : (
+        ) : data ? (
           <>
             <Kpi label="Σύνολο πελατών" value={formatNumber(data.totalCustomers)} icon="users" />
             <Kpi label="Ενεργοί πελάτες" value={formatNumber(data.activeCustomers)} icon="activity" />
             <Kpi label="VIP πελάτες" value={formatNumber(data.vipCustomers)} icon="star" />
             <Kpi label="Συνολική αξία" value={formatCurrency(data.totalValue)} icon="wallet" />
           </>
-        )}
+        ) : null}
       </div>
 
       <div className="grid-2">
         <div className="card">
           <div className="card-head"><h3><Icon name="building" /> Κορυφαία υποκαταστήματα</h3></div>
           <div style={{ padding: '6px 8px' }}>
-            {isLoading ? <div style={{ padding: 16 }}><Skeleton /></div> : data.topBranches.map((b) => (
+            {loading ? <div style={{ padding: 16 }}><Skeleton /></div> : (data?.topBranches || []).map((b) => (
               <div key={b.id} className="search-row">
                 <div className="avatar sq" style={{ width: 34, height: 34, background: 'var(--accent-soft)', color: 'var(--accent)' }}><Icon name="building" size={16} /></div>
                 <div style={{ flex: 1 }}>
@@ -76,9 +85,9 @@ export default function Dashboard() {
         <div className="card">
           <div className="card-head"><h3><Icon name="activity" /> Πρόσφατη δραστηριότητα</h3></div>
           <div style={{ padding: '4px 16px 12px' }}>
-            {isLoading ? <div style={{ padding: 16 }}><Skeleton /></div> : (
+            {loading ? <div style={{ padding: 16 }}><Skeleton /></div> : (
               <div className="timeline">
-                {data.recentActivity.map((a, i) => {
+                {(data?.recentActivity || []).map((a, i) => {
                   const cfg = ACTIVITY_ICONS[a.type] || ACTIVITY_ICONS.visit;
                   return (
                     <div className="tl-item" key={i}>

@@ -1,53 +1,9 @@
 import { Router } from 'express';
 import { query } from '../db.js';
 import { encodeCursor, decodeCursor, clampLimit } from '../lib/cursor.js';
-import { normalize } from '../lib/normalize.js';
-import { searchClause } from '../lib/search.js';
+import { SORTS, buildFilters } from '../lib/customerFilters.js';
 
 export const customersRouter = Router();
-
-// Keyset sort configurations (expr, direction, comparison op for the cursor).
-const SORTS = {
-  last_visit: { expr: 'c.last_visit_sort', dir: 'DESC', cmp: '<' },
-  value:      { expr: 'c.total_value',     dir: 'DESC', cmp: '<' },
-  created:    { expr: 'c.created_at',       dir: 'DESC', cmp: '<' },
-  name:       { expr: 'c.full_name',        dir: 'ASC',  cmp: '>' },
-};
-
-// Builds shared WHERE predicates + params from query filters.
-function buildFilters(req) {
-  const params = [];
-  const where = [];
-  const push = (v) => { params.push(v); return '?'; };
-
-  const q = req.query.q ? String(req.query.q).trim() : '';
-  const qnorm = q ? normalize(q) : '';
-  if (qnorm) {
-    const sc = searchClause(qnorm, 'c.search_norm');
-    if (sc) { where.push(sc.clause); sc.params.forEach((p) => params.push(p)); }
-  }
-  if (req.query.status) {
-    where.push(`c.status IN (${push(String(req.query.status).split(','))})`);
-  }
-  if (req.query.customerType) where.push(`c.customer_type = ${push(req.query.customerType)}`);
-  if (req.query.isVip === 'true') where.push('c.is_vip = 1');
-  if (req.query.employeeId) where.push(`c.assigned_employee_id = ${push(Number(req.query.employeeId))}`);
-  if (req.query.lastVisitFrom) where.push(`c.last_visit_at >= ${push(req.query.lastVisitFrom)}`);
-  if (req.query.lastVisitTo) where.push(`c.last_visit_at <= ${push(req.query.lastVisitTo)}`);
-  if (req.query.tag) {
-    where.push(`EXISTS (SELECT 1 FROM customer_tags ct JOIN tags t ON t.id = ct.tag_id
-      WHERE ct.customer_id = c.id AND t.slug = ${push(req.query.tag)})`);
-  }
-  if (req.query.branchId) {
-    where.push(`EXISTS (SELECT 1 FROM customer_branches cb
-      WHERE cb.customer_id = c.id AND cb.branch_id = ${push(Number(req.query.branchId))})`);
-  }
-  if (req.query.spaceId) {
-    where.push(`EXISTS (SELECT 1 FROM customer_spaces cs
-      WHERE cs.customer_id = c.id AND cs.space_id = ${push(Number(req.query.spaceId))})`);
-  }
-  return { params, where, qnorm };
-}
 
 // GET /api/customers/search — high-performance server-side directory search.
 customersRouter.get('/search', async (req, res, next) => {
@@ -56,13 +12,40 @@ customersRouter.get('/search', async (req, res, next) => {
     const limit = clampLimit(req.query.limit);
     const { params, where } = buildFilters(req);
 
-    // Unified keyset pagination. Default ordering is by most recent visit;
-    // the FULLTEXT/LIKE search predicate (if any) is applied in the WHERE.
+    // Default ordering is by most recent visit; the FULLTEXT/LIKE search
+    // predicate (if any) is applied in the WHERE by buildFilters().
     let sortKey = req.query.sort && SORTS[req.query.sort] ? req.query.sort : 'last_visit';
     const cfg = SORTS[sortKey];
     const idDir = cfg.dir === 'ASC' ? 'ASC' : 'DESC';
-    const selectCursor = `${cfg.expr} AS __cursor_val`;
 
+    const listCols = `c.id, c.code, c.full_name, c.email, c.phone, c.mobile, c.company,
+             c.customer_type, c.status, c.is_vip, c.city, c.avatar_url,
+             c.branches_count, c.spaces_count, c.bookings_count, c.visits_count,
+             c.total_value, c.last_visit_at, c.next_booking_at,
+             e.full_name AS assigned_employee`;
+
+    // Page-based pagination (numbered pages) when `page` is provided.
+    if (req.query.page !== undefined) {
+      const pageSize = clampLimit(req.query.limit, 50, 100);
+      const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+      const offset = (page - 1) * pageSize;
+      const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+      const countRes = await query(`SELECT COUNT(*) AS total FROM customers c ${whereSql}`, params);
+      const total = Number(countRes.rows[0].total);
+      const { rows } = await query(
+        `SELECT ${listCols}
+         FROM customers c LEFT JOIN employees e ON e.id = c.assigned_employee_id
+         ${whereSql}
+         ORDER BY ${cfg.expr} ${cfg.dir}, c.id ${idDir}
+         LIMIT ${pageSize} OFFSET ${offset}`, params);
+      return res.json({
+        results: rows, page, pageSize, total,
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
+        sort: sortKey, tookMs: Date.now() - t0,
+      });
+    }
+
+    const selectCursor = `${cfg.expr} AS __cursor_val`;
     const cursor = decodeCursor(req.query.cursor);
 
     if (cursor && cursor.v !== undefined) {

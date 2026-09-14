@@ -13,6 +13,7 @@ import { branchesRouter } from './routes/branches.js';
 import { spacesRouter } from './routes/spaces.js';
 import { customFieldsRouter } from './routes/customFields.js';
 import { statsRouter } from './routes/stats.js';
+import { exportRouter } from './routes/export.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -34,6 +35,9 @@ app.get('/api/health', async (_req, res) => {
 
 app.use('/api/meta', metaRouter);
 app.use('/api/search', searchRouter);
+// Export is registered before the customers router so `/export` is not matched
+// by the `/:id` route.
+app.use('/api/customers', exportRouter);
 app.use('/api/customers', customersRouter);
 app.use('/api/branches', branchesRouter);
 app.use('/api/spaces', spacesRouter);

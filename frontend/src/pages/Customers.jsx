@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { FixedSizeList } from 'react-window';
 import { api } from '../api.js';
 import Icon from '../components/Icon.jsx';
 import AsyncSelect from '../components/AsyncSelect.jsx';
-import { Avatar, StatusBadge, VipBadge, EmptyState, Skeleton } from '../components/ui.jsx';
+import { Avatar, StatusBadge, EmptyState, Skeleton } from '../components/ui.jsx';
 import { formatCurrency, formatNumber, formatDate, TYPE_LABELS } from '../lib/format.js';
 
 const COLUMNS = [
@@ -19,6 +18,8 @@ const COLUMNS = [
   { key: 'actions', label: '' },
 ];
 
+const PAGE_SIZES = [25, 50, 100];
+
 function useDebounced(value, delay = 250) {
   const [v, setV] = useState(value);
   useEffect(() => {
@@ -26,6 +27,76 @@ function useDebounced(value, delay = 250) {
     return () => clearTimeout(t);
   }, [value, delay]);
   return v;
+}
+
+function ExportMenu({ params }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    const onClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
+  const download = (format) => { setOpen(false); window.location.href = api.exportUrl(format, params); };
+  const items = [
+    { format: 'csv', label: 'CSV (.csv)', icon: 'file' },
+    { format: 'xlsx', label: 'Excel (.xlsx)', icon: 'grid' },
+    { format: 'pdf', label: 'PDF (.pdf)', icon: 'file' },
+  ];
+  return (
+    <div style={{ position: 'relative' }} ref={ref}>
+      <button className="btn" onClick={() => setOpen((o) => !o)}>
+        <Icon name="download" size={16} /> Εξαγωγή <Icon name="chevronDown" size={14} />
+      </button>
+      {open && (
+        <div className="search-results" style={{ right: 0, left: 'auto', minWidth: 200, top: 42 }}>
+          <div className="search-group-label">Μορφή εξαγωγής</div>
+          {items.map((it) => (
+            <div key={it.format} className="search-row" onClick={() => download(it.format)}>
+              <div className="avatar sq" style={{ width: 30, height: 30, background: 'var(--accent-soft)', color: 'var(--accent)' }}>
+                <Icon name={it.icon} size={15} />
+              </div>
+              <div style={{ fontWeight: 600 }}>{it.label}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Pager({ page, totalPages, onGo }) {
+  if (totalPages <= 1) return null;
+  const nums = [];
+  const push = (n) => nums.push(n);
+  const around = 1;
+  push(1);
+  for (let n = page - around; n <= page + around; n++) if (n > 1 && n < totalPages) push(n);
+  if (totalPages > 1) push(totalPages);
+  const uniq = [...new Set(nums)].sort((a, b) => a - b);
+  const withGaps = [];
+  uniq.forEach((n, i) => {
+    if (i > 0 && n - uniq[i - 1] > 1) withGaps.push('…');
+    withGaps.push(n);
+  });
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <button className="btn btn-sm" disabled={page <= 1} onClick={() => onGo(page - 1)}>
+        <Icon name="chevronRight" size={15} style={{ transform: 'rotate(180deg)' }} /> Προηγ.
+      </button>
+      {withGaps.map((n, i) => n === '…'
+        ? <span key={`g${i}`} style={{ color: 'var(--text-3)', padding: '0 4px' }}>…</span>
+        : (
+          <button key={n} className={`btn btn-sm${n === page ? ' btn-accent' : ''}`}
+            style={{ minWidth: 34, justifyContent: 'center' }} onClick={() => onGo(n)}>
+            {n}
+          </button>
+        ))}
+      <button className="btn btn-sm" disabled={page >= totalPages} onClick={() => onGo(page + 1)}>
+        Επόμ. <Icon name="chevronRight" size={15} />
+      </button>
+    </div>
+  );
 }
 
 export default function Customers() {
@@ -39,10 +110,13 @@ export default function Customers() {
   const [branch, setBranch] = useState(null);
   const [space, setSpace] = useState(null);
   const [sort, setSort] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
 
   const { data: meta } = useQuery({ queryKey: ['meta'], queryFn: ({ signal }) => api.meta({ signal }) });
 
-  const filters = useMemo(() => ({
+  // Filters that affect the query result (used for search, export, and reset).
+  const filterParams = useMemo(() => ({
     q: q.trim() || undefined,
     status: status || undefined,
     customerType: customerType || undefined,
@@ -51,80 +125,36 @@ export default function Customers() {
     branchId: branch?.value || undefined,
     spaceId: space?.value || undefined,
     sort: sort || undefined,
-    limit: 40,
   }), [q, status, customerType, isVip, tag, branch, space, sort]);
 
-  const {
-    data, isLoading, isFetching, fetchNextPage, hasNextPage, isFetchingNextPage,
-  } = useInfiniteQuery({
-    queryKey: ['customers', filters],
-    queryFn: ({ pageParam, signal }) =>
-      api.searchCustomers({ ...filters, cursor: pageParam }, { signal }),
-    initialPageParam: undefined,
-    getNextPageParam: (last) => last.nextCursor || undefined,
+  // Any filter change returns to the first page.
+  useEffect(() => { setPage(1); }, [filterParams, pageSize]);
+
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ['customers', filterParams, page, pageSize],
+    queryFn: ({ signal }) => api.searchCustomers({ ...filterParams, page, limit: pageSize }, { signal }),
+    placeholderData: keepPreviousData,
   });
 
-  const { data: countData } = useQuery({
-    queryKey: ['customers-count', filters],
-    queryFn: ({ signal }) => api.countCustomers(filters, { signal }),
-  });
-
-  const rows = useMemo(() => data?.pages.flatMap((p) => p.results) || [], [data]);
-  const tookMs = data?.pages?.[data.pages.length - 1]?.tookMs;
-
-  const activeSort = sort || (q.trim() ? 'relevance' : 'last_visit');
+  const rows = data?.results || [];
+  const total = data?.total ?? 0;
+  const totalPages = data?.totalPages ?? 1;
+  const tookMs = data?.tookMs;
+  const activeSort = sort || 'last_visit';
   const toggleSort = (key) => setSort((cur) => (cur === key ? '' : key));
 
-  // Virtualized list sizing.
-  const listRef = useRef(null);
-  const [listHeight, setListHeight] = useState(560);
-  useEffect(() => {
-    const calc = () => setListHeight(Math.max(320, window.innerHeight - 300));
-    calc();
-    window.addEventListener('resize', calc);
-    return () => window.removeEventListener('resize', calc);
-  }, []);
-
-  const Row = ({ index, style }) => {
-    const c = rows[index];
-    if (!c) return <div style={style} />;
-    return (
-      <div className="trow" style={style} onClick={() => navigate(`/customers/${c.id}`)}>
-        <div className="cust-cell">
-          <Avatar name={c.full_name} size={38} />
-          <div style={{ minWidth: 0 }}>
-            <div className="nm">{c.full_name} {c.is_vip && <span style={{ color: 'var(--gold)' }}>★</span>}</div>
-            <div className="sub">{c.company || TYPE_LABELS[c.customer_type]} · {c.city}</div>
-          </div>
-        </div>
-        <div className="mono muted">{c.code}</div>
-        <div><StatusBadge status={c.status} /></div>
-        <div className="mono">{formatNumber(c.branches_count)} · {formatNumber(c.spaces_count)}</div>
-        <div className="muted">{formatDate(c.last_visit_at)}</div>
-        <div className="mono">{formatNumber(c.bookings_count)}</div>
-        <div className="num">{formatCurrency(c.total_value)}</div>
-        <div style={{ textAlign: 'right', color: 'var(--text-3)' }}><Icon name="chevronRight" size={16} /></div>
-      </div>
-    );
-  };
-
-  const onItemsRendered = ({ visibleStopIndex }) => {
-    if (visibleStopIndex >= rows.length - 8 && hasNextPage && !isFetchingNextPage) {
-      fetchNextPage();
-    }
-  };
+  const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, total);
 
   return (
     <div>
       <div className="page-head">
         <div>
           <h1>Πελάτες</h1>
-          <div className="sub">
-            {meta ? `${formatNumber(meta.estimatedCustomers)} πελάτες συνολικά` : '—'}
-          </div>
+          <div className="sub">{meta ? `${formatNumber(meta.estimatedCustomers)} πελάτες συνολικά` : '—'}</div>
         </div>
         <div style={{ display: 'flex', gap: 9 }}>
-          <button className="btn"><Icon name="download" size={16} /> Εξαγωγή</button>
+          <ExportMenu params={filterParams} />
           <button className="btn btn-primary"><Icon name="plus" size={16} /> Νέος πελάτης</button>
         </div>
       </div>
@@ -137,7 +167,7 @@ export default function Customers() {
             placeholder="Αναζήτηση με όνομα, κωδικό, τηλέφωνο, email, εταιρεία, ΑΦΜ…"
             onChange={(e) => setInput(e.target.value)}
           />
-          {isFetching && !isFetchingNextPage && <span className="spinner" />}
+          {isFetching && <span className="spinner" />}
         </div>
 
         <div className="filter-chip">
@@ -147,7 +177,6 @@ export default function Customers() {
             {meta?.statuses.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
         </div>
-
         <div className="filter-chip">
           <Icon name="briefcase" size={15} />
           <select value={customerType} onChange={(e) => setCustomerType(e.target.value)}>
@@ -155,7 +184,6 @@ export default function Customers() {
             {meta?.customerTypes.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
         </div>
-
         <div className="filter-chip">
           <Icon name="tag" size={15} />
           <select value={tag} onChange={(e) => setTag(e.target.value)}>
@@ -170,21 +198,19 @@ export default function Customers() {
           loader={(term, signal) => api.branches({ q: term, limit: 20 }, { signal })
             .then((r) => r.results.map((b) => ({ value: b.id, label: b.name, sub: b.city })))}
         />
-
         <AsyncSelect
           icon="grid" label="Χώρος" placeholder="Αναζήτηση χώρου…"
           value={space} onChange={setSpace}
           loader={(term, signal) => api.spaces({ q: term, branchId: branch?.value, limit: 20 }, { signal })
             .then((r) => r.results.map((s) => ({ value: s.id, label: s.name, sub: `${s.space_type} · ${s.branch_name}` })))}
         />
-
         <button className={`filter-chip${isVip ? ' active' : ''}`} onClick={() => setIsVip((v) => !v)}>
           <Icon name="star" size={15} /> VIP
         </button>
       </div>
 
       <div className="results-meta">
-        {countData && <span><b style={{ color: 'var(--text)' }}>{formatNumber(countData.total)}</b> αποτελέσματα</span>}
+        <span><b style={{ color: 'var(--text)' }}>{formatNumber(total)}</b> αποτελέσματα</span>
         {tookMs != null && <span className="took">αναζήτηση σε {tookMs} ms</span>}
         <span style={{ marginLeft: 'auto' }}>Ταξινόμηση: {sortLabel(activeSort)}</span>
       </div>
@@ -203,7 +229,7 @@ export default function Customers() {
 
         {isLoading ? (
           <div style={{ padding: 8 }}>
-            {Array.from({ length: 8 }).map((_, i) => (
+            {Array.from({ length: 10 }).map((_, i) => (
               <div className="trow" key={i} style={{ cursor: 'default' }}>
                 <div className="cust-cell"><Skeleton w={38} h={38} style={{ borderRadius: '50%' }} /><Skeleton w={140} /></div>
                 <Skeleton w={70} /><Skeleton w={80} /><Skeleton w={60} /><Skeleton w={70} /><Skeleton w={40} /><Skeleton w={60} /><span />
@@ -213,28 +239,43 @@ export default function Customers() {
         ) : rows.length === 0 ? (
           <EmptyState icon="users" title="Δεν βρέθηκαν πελάτες" hint="Δοκιμάστε διαφορετικά κριτήρια αναζήτησης ή φίλτρα." />
         ) : (
-          <FixedSizeList
-            ref={listRef}
-            height={listHeight}
-            itemCount={rows.length}
-            itemSize={60}
-            width="100%"
-            onItemsRendered={onItemsRendered}
-          >
-            {Row}
-          </FixedSizeList>
+          rows.map((c) => (
+            <div className="trow" key={c.id} onClick={() => navigate(`/customers/${c.id}`)}>
+              <div className="cust-cell">
+                <Avatar name={c.full_name} size={38} />
+                <div style={{ minWidth: 0 }}>
+                  <div className="nm">{c.full_name} {c.is_vip ? <span style={{ color: 'var(--gold)' }}>★</span> : null}</div>
+                  <div className="sub">{c.company || TYPE_LABELS[c.customer_type]} · {c.city}</div>
+                </div>
+              </div>
+              <div className="mono muted">{c.code}</div>
+              <div><StatusBadge status={c.status} /></div>
+              <div className="mono">{formatNumber(c.branches_count)} · {formatNumber(c.spaces_count)}</div>
+              <div className="muted">{formatDate(c.last_visit_at)}</div>
+              <div className="mono">{formatNumber(c.bookings_count)}</div>
+              <div className="num">{formatCurrency(c.total_value)}</div>
+              <div style={{ textAlign: 'right', color: 'var(--text-3)' }}><Icon name="chevronRight" size={16} /></div>
+            </div>
+          ))
         )}
+      </div>
 
-        {isFetchingNextPage && (
-          <div style={{ padding: 12, textAlign: 'center', color: 'var(--text-3)' }}>
-            <span className="spinner" /> Φόρτωση περισσότερων…
-          </div>
-        )}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14, flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: 'var(--text-3)', fontSize: 13 }}>
+          <span>{formatNumber(from)}–{formatNumber(to)} από {formatNumber(total)}</span>
+          <span className="filter-chip" style={{ height: 30 }}>
+            Ανά σελίδα
+            <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
+              {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </span>
+        </div>
+        <Pager page={page} totalPages={totalPages} onGo={(n) => setPage(Math.min(Math.max(1, n), totalPages))} />
       </div>
     </div>
   );
 }
 
 function sortLabel(key) {
-  return { relevance: 'Συνάφεια', last_visit: 'Τελ. επίσκεψη', name: 'Όνομα', value: 'Αξία', created: 'Ημ. εγγραφής' }[key] || key;
+  return { last_visit: 'Τελ. επίσκεψη', name: 'Όνομα', value: 'Αξία', created: 'Ημ. εγγραφής' }[key] || key;
 }
