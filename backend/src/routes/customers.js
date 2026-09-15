@@ -10,6 +10,7 @@ import { logActivity } from '../lib/activity.js';
 import { parseJson } from '../lib/masterData.js';
 import { CHANNELS, CHANNEL_META, deliverMessage, mergeMessaging } from '../lib/messaging.js';
 import { mergeTenantSettings } from '../lib/tenantSettings.js';
+import { diffRecords, snapshotFields, packDetails, changeSummary, parseDetails } from '../lib/activityDiff.js';
 
 const CUSTOMER_FIELDS = ['first_name', 'last_name', 'email', 'phone', 'mobile', 'company',
   'tax_id', 'customer_type', 'status', 'is_vip', 'date_of_birth', 'address_line', 'city',
@@ -178,7 +179,11 @@ customersRouter.post('/', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, re
     const code = `C-${100000 + id}`;
     await query('UPDATE customers SET code = ?, search_norm = ? WHERE id = ?',
       [code, customerSearchNorm({ ...vals, code }), id]);
-    await logActivity({ tenantId: req.user.tenantId, customerId: id, type: 'customer_created', description: 'Δημιουργία πελάτη' });
+    await logActivity({
+      tenantId: req.user.tenantId, customerId: id, type: 'customer_created',
+      description: `Δημιουργία πελάτη: ${b.first_name} ${b.last_name}`,
+      details: packDetails(req, { fields: snapshotFields(vals, CUSTOMER_FIELDS) }),
+    });
     res.status(201).json({ id, code });
   } catch (err) { next(err); }
 });
@@ -202,7 +207,18 @@ customersRouter.patch('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req
     sets.push('updated_at = NOW()');
     params.push(id);
     await query(`UPDATE customers SET ${sets.join(', ')} WHERE id = ?`, params);
-    await logActivity({ tenantId: req.user.tenantId, customerId: id, type: 'customer_updated', description: 'Ενημέρωση στοιχείων πελάτη' });
+    const patch = {};
+    for (const f of CUSTOMER_FIELDS) {
+      if (b[f] !== undefined) patch[f] = f === 'is_vip' ? (b[f] ? 1 : 0) : (b[f] === '' ? null : b[f]);
+    }
+    const changes = diffRecords(cur, patch);
+    if (changes.length) {
+      await logActivity({
+        tenantId: req.user.tenantId, customerId: id, type: 'customer_updated',
+        description: changeSummary('Ενημέρωση πελάτη', changes, 'Ενημέρωση στοιχείων πελάτη'),
+        details: packDetails(req, { changes }),
+      });
+    }
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
@@ -341,11 +357,12 @@ function subResource(sql, mapRow) {
 }
 
 customersRouter.get('/:id/activities', subResource(
-  `SELECT a.id, a.type, a.description, a.created_at, br.name AS branch_name, s.name AS space_name
+  `SELECT a.id, a.type, a.description, a.details, a.created_at, br.name AS branch_name, s.name AS space_name
    FROM activities a
    LEFT JOIN branches br ON br.id = a.branch_id
    LEFT JOIN spaces s ON s.id = a.space_id
-   WHERE a.customer_id = ? ORDER BY a.created_at DESC LIMIT ? OFFSET ?`));
+   WHERE a.customer_id = ? ORDER BY a.created_at DESC LIMIT ? OFFSET ?`,
+  (r) => ({ ...r, details: parseDetails(r.details) })));
 
 customersRouter.get('/:id/bookings', subResource(
   `SELECT b.id, b.starts_at, b.ends_at, b.status, b.amount, br.name AS branch_name, s.name AS space_name
@@ -399,6 +416,17 @@ customersRouter.post('/:id/messages', authorize(PERMISSIONS.CUSTOMERS_WRITE), as
       customerId,
       type: 'message_sent',
       description: `${channelLabel} προς ${to}`,
+      details: packDetails(req, {
+        message: {
+          channel,
+          channel_label: channelLabel,
+          to,
+          subject: subject || null,
+          body,
+          delivery_status: delivery.status,
+          delivery_detail: delivery.detail || null,
+        },
+      }),
     });
 
     res.status(201).json({
@@ -482,6 +510,12 @@ customersRouter.post('/:id/contacts', authorize(PERMISSIONS.CUSTOMERS_WRITE), as
     await logActivity({
       tenantId: req.user.tenantId, customerId, type: 'contact_added',
       description: `Προστέθηκε επαφή: ${b.first_name} ${b.last_name}`,
+      details: packDetails(req, {
+        fields: snapshotFields({
+          first_name: b.first_name, last_name: b.last_name, role: b.role,
+          email: b.email, phone: b.phone, mobile: b.mobile, is_primary: b.is_primary ? 1 : 0, notes: b.notes,
+        }, ['first_name', 'last_name', 'role', 'email', 'phone', 'mobile', 'is_primary', 'notes']),
+      }),
     });
     res.status(201).json({ id });
   } catch (err) { next(err); }
@@ -503,6 +537,17 @@ customersRouter.patch('/:id/contacts/:contactId', authorize(PERMISSIONS.CUSTOMER
     params.push(contactId);
     await query(`UPDATE customer_contacts SET ${sets.join(', ')} WHERE id = ?`, params);
     if (b.is_primary) await unsetOtherPrimary(customerId, contactId);
+    const patch = {};
+    for (const f of fields) if (b[f] !== undefined) patch[f] = b[f] === '' ? null : b[f];
+    if (b.is_primary !== undefined) patch.is_primary = b.is_primary ? 1 : 0;
+    const changes = diffRecords(cur, patch);
+    if (changes.length) {
+      await logActivity({
+        tenantId: req.user.tenantId, customerId, type: 'contact_updated',
+        description: changeSummary(`Ενημέρωση επαφής: ${cur.first_name} ${cur.last_name}`, changes, `Ενημέρωση επαφής: ${cur.first_name} ${cur.last_name}`),
+        details: packDetails(req, { changes }),
+      });
+    }
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
@@ -519,6 +564,9 @@ customersRouter.delete('/:id/contacts/:contactId', authorize(PERMISSIONS.CUSTOME
     await logActivity({
       tenantId: req.user.tenantId, customerId, type: 'contact_removed',
       description: `Διαγράφηκε επαφή: ${cur.first_name} ${cur.last_name}`,
+      details: packDetails(req, {
+        fields: snapshotFields(cur, ['first_name', 'last_name', 'role', 'email', 'phone', 'mobile']),
+      }),
     });
     res.json({ ok: true });
   } catch (err) { next(err); }

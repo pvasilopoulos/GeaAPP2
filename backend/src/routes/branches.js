@@ -10,6 +10,7 @@ import {
   defaultOpeningHours, isBranchStatus, parseJson, sanitizeHours,
 } from '../lib/masterData.js';
 import { loadEntityCustomFields, saveEntityCustomFields } from '../lib/customFields.js';
+import { diffRecords, snapshotFields, packDetails, changeSummary } from '../lib/activityDiff.js';
 
 export const branchesRouter = Router();
 branchesRouter.use(authorize(PERMISSIONS.BRANCHES_READ));
@@ -73,6 +74,13 @@ branchesRouter.post('/', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res
     await logActivity({
       tenantId: req.user.tenantId, customerId, type: 'branch_created',
       description: `Νέο υποκατάστημα: ${b.name}`, branchId: id,
+      details: packDetails(req, {
+        fields: snapshotFields({
+          name: b.name, city: b.city, area: b.area, address_line: b.address_line,
+          postal_code: b.postal_code, phone: b.phone, email: b.email,
+          status, is_primary: b.is_primary ? 1 : 0, lat: b.lat, lng: b.lng,
+        }, ['name', 'city', 'area', 'address_line', 'postal_code', 'phone', 'email', 'status', 'is_primary', 'lat', 'lng']),
+      }),
     });
     res.status(201).json({ id, code });
   } catch (err) { next(err); }
@@ -140,9 +148,20 @@ branchesRouter.patch('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req,
     params.push(id);
     await query(`UPDATE branches SET ${sets.join(', ')} WHERE id = ?`, params);
     if (b.is_primary) await query('UPDATE branches SET is_primary = 0 WHERE customer_id = ? AND id <> ?', [cur.customer_id, id]);
+    const patch = {};
+    for (const f of FIELDS) if (b[f] !== undefined) patch[f] = b[f] === '' ? null : b[f];
+    if (b.is_primary !== undefined) patch.is_primary = b.is_primary ? 1 : 0;
+    if (b.status !== undefined) patch.status = b.status;
+    if (b.manager_employee_id !== undefined) patch.manager_employee_id = b.manager_employee_id ? Number(b.manager_employee_id) : null;
+    if (b.opening_hours !== undefined) patch.opening_hours = sanitizeHours(b.opening_hours);
+    if (b.lat !== undefined) patch.lat = b.lat === '' || b.lat == null ? null : Number(b.lat);
+    if (b.lng !== undefined) patch.lng = b.lng === '' || b.lng == null ? null : Number(b.lng);
+    const changes = diffRecords(cur, patch);
     await logActivity({
       tenantId: req.user.tenantId, customerId: cur.customer_id, type: 'branch_updated',
-      description: `Ενημέρωση υποκαταστήματος: ${merged.name || cur.name}`, branchId: id,
+      description: changeSummary(`Ενημέρωση υποκαταστήματος: ${merged.name || cur.name}`, changes, `Ενημέρωση υποκαταστήματος: ${merged.name || cur.name}`),
+      branchId: id,
+      details: packDetails(req, { changes }),
     });
     res.json({ ok: true });
   } catch (err) { next(err); }
@@ -160,6 +179,7 @@ branchesRouter.delete('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req
     await logActivity({
       tenantId: req.user.tenantId, customerId: cur.customer_id, type: 'branch_deleted',
       description: `Διαγραφή υποκαταστήματος: ${cur.name}`,
+      details: packDetails(req, { fields: snapshotFields(cur, ['name', 'city', 'address_line']) }),
     });
     res.json({ ok: true });
   } catch (err) { next(err); }

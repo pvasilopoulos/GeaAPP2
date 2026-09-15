@@ -365,6 +365,7 @@ CREATE TABLE activities (
   customer_id BIGINT NOT NULL,
   type        VARCHAR(40) NOT NULL,
   description VARCHAR(400),
+  details     JSON NULL,
   branch_id   BIGINT NULL,
   space_id    BIGINT NULL,
   created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

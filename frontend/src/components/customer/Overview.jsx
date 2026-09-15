@@ -22,6 +22,7 @@ const ACTIVITY_ICONS = {
   customer_created: { icon: 'users', bg: 'var(--accent-soft)', fg: 'var(--accent)' },
   customer_updated: { icon: 'edit', bg: 'var(--accent-soft)', fg: 'var(--accent)' },
   contact_added: { icon: 'users', bg: 'var(--green-soft)', fg: 'var(--green)' },
+  contact_updated: { icon: 'edit', bg: 'var(--amber-soft)', fg: 'var(--amber)' },
   contact_removed: { icon: 'x', bg: 'var(--red-soft)', fg: 'var(--red)' },
   branch_created: { icon: 'building', bg: 'var(--accent-soft)', fg: 'var(--accent)' },
   branch_updated: { icon: 'building', bg: 'var(--amber-soft)', fg: 'var(--amber)' },
@@ -30,6 +31,17 @@ const ACTIVITY_ICONS = {
   space_updated: { icon: 'grid', bg: 'var(--amber-soft)', fg: 'var(--amber)' },
   space_deleted: { icon: 'grid', bg: 'var(--red-soft)', fg: 'var(--red)' },
 };
+
+function activityPreview(a) {
+  const d = a.details || {};
+  if (d.message?.body) {
+    const t = String(d.message.body).replace(/\s+/g, ' ').trim();
+    return t.length > 90 ? `${t.slice(0, 87)}…` : t;
+  }
+  const c = d.changes?.[0];
+  if (c) return `${c.label}: ${c.from} → ${c.to}`;
+  return null;
+}
 
 function fieldValue(f) {
   if (f.field_type === 'boolean') return f.boolean_value == null ? null : (f.boolean_value ? 'Ναι' : 'Όχι');
@@ -193,6 +205,7 @@ export default function Overview({ customerId, data, onOpenTab, onEditCustomer }
                       <div className="icn" style={{ background: cfg.bg, color: cfg.fg }}><Icon name={cfg.icon} size={14} /></div>
                       <div style={{ flex: 1 }}>
                         <div className="desc" style={{ fontSize: 13 }}>{a.description}</div>
+                        {activityPreview(a) && <div className="meta" style={{ fontSize: 12, marginTop: 2 }}>{activityPreview(a)}</div>}
                         <div className="time">{formatDateTime(a.created_at)}</div>
                       </div>
                     </div>

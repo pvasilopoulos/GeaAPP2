@@ -147,7 +147,7 @@ export default function CustomerProfile({ customerId, tabId, onBack }) {
         <CustomerFormDrawer
           initial={c}
           onClose={() => setShowEdit(false)}
-          onSaved={() => { setShowEdit(false); qc.invalidateQueries({ queryKey: ['customer', id] }); qc.invalidateQueries({ queryKey: ['customers'] }); }}
+          onSaved={() => { setShowEdit(false); qc.invalidateQueries({ queryKey: ['customer', id] }); qc.invalidateQueries({ queryKey: ['customers'] }); qc.invalidateQueries({ queryKey: ['history', 'activity', id] }); }}
         />
       )}
     </div>
