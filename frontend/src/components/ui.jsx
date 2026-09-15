@@ -76,14 +76,12 @@ export function Drawer({ title, subtitle, onClose, children, wide = false }) {
   );
 }
 
-export function BranchThumb({ src, name, size = 56, radius = 9, placeholder = false }) {
-  if (src) {
-    return (
-      <img className="branch-thumb" src={src} alt={name}
-        style={{ width: size, height: size, borderRadius: radius, objectFit: 'cover', flex: 'none', background: 'var(--surface-2)' }}
-        onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-    );
-  }
-  if (!placeholder) return null;
-  return <div style={{ width: size, height: size, borderRadius: radius, flex: 'none', background: avatarColor(name) }} />;
+export function BranchThumb({ src, name, size = 56, radius = 9 }) {
+  const url = String(src || '').trim();
+  if (!url) return null;
+  return (
+    <img className="branch-thumb" src={url} alt={name}
+      style={{ width: size, height: size, borderRadius: radius, objectFit: 'cover', flex: 'none', background: 'var(--surface-2)' }}
+      onError={(e) => { e.currentTarget.remove(); }} />
+  );
 }
