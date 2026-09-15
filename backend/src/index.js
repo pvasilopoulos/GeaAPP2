@@ -74,7 +74,14 @@ app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 const distDir = path.resolve(__dirname, '../../frontend/dist');
 const frontendOrigin = process.env.FRONTEND_ORIGIN || 'http://127.0.0.1:5173';
 if (existsSync(distDir)) {
-  app.use(express.static(distDir));
+  app.use(express.static(distDir, {
+    setHeaders(res, filePath) {
+      if (filePath.endsWith(`${path.sep}sw.js`) || filePath.endsWith('/sw.js') || filePath.endsWith('manifest.webmanifest')) {
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Service-Worker-Allowed', '/');
+      }
+    },
+  }));
   app.get('*', (_req, res) => res.sendFile(path.join(distDir, 'index.html')));
 } else {
   app.get('*', (req, res) => {

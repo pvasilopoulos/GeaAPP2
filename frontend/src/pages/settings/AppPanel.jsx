@@ -4,6 +4,7 @@ import { api } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
 import { Skeleton } from '../../components/ui.jsx';
 import { MAP_PROVIDERS } from '../../lib/maps.js';
+import { isStandalone, promptInstall, refreshApp, subscribeInstallPrompt } from '../../lib/pwa.js';
 
 const inp = { width: '100%', height: 40, padding: '0 10px', border: '1px solid var(--border-strong)', borderRadius: 9 };
 const chk = { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5, padding: '6px 0' };
@@ -15,7 +16,11 @@ export default function AppPanel() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
+  const [canInstall, setCanInstall] = useState(false);
+  const [pwaBusy, setPwaBusy] = useState(false);
+  const [pwaMsg, setPwaMsg] = useState('');
   useEffect(() => { if (data?.settings) setF({ ...data.settings }); }, [data]);
+  useEffect(() => subscribeInstallPrompt((ev) => setCanInstall(!!ev)), []);
   const set = (k) => (e) => {
     const v = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
     setF((s) => ({ ...s, [k]: v }));
@@ -90,6 +95,37 @@ export default function AppPanel() {
         Το κουμπί χάρτη στα υποκαταστήματα ανοίγει τον πάροχο που επιλέγετε. Το API key χρειάζεται μόνο για την ενσωματωμένη προεπισκόπηση Google Maps
         (Maps Embed API στο Google Cloud, περιορισμός HTTP referrer). Κενό πεδίο κρατά το αποθηκευμένο κλειδί.
       </p>
+
+      <div className="section-title">Εφαρμογή συσκευής</div>
+      <p className="muted" style={{ fontSize: 12.5, margin: '0 0 12px' }}>
+        {isStandalone()
+          ? 'Η εφαρμογή τρέχει σε λειτουργία οθόνης (PWA). Το κουμπί ανανέωσης στην κορυφή ενημερώνει δεδομένα και cache.'
+          : 'Για εμπειρία σαν native app, εγκαταστήστε το SpaceHub στην αρχική οθόνη. Στο κινητό κλειδώνει το rubber-band του browser· η ανανέωση γίνεται μόνο από το κουμπί στην κορυφή (ή εδώ).'}
+      </p>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+        {canInstall && (
+          <button type="button" className="btn" onClick={() => promptInstall()}>
+            <Icon name="download" size={16} /> Εγκατάσταση
+          </button>
+        )}
+        <button
+          type="button"
+          className="btn"
+          disabled={pwaBusy}
+          onClick={async () => {
+            setPwaBusy(true); setPwaMsg('');
+            try {
+              const r = await refreshApp(qc);
+              if (!r.reloaded) setPwaMsg('Τα δεδομένα ανανεώθηκαν.');
+            } catch (ex) { setPwaMsg(ex.message); }
+            finally { setPwaBusy(false); }
+          }}
+        >
+          {pwaBusy ? <span className="spinner" /> : <Icon name="refresh" size={16} />} Ανανέωση &amp; cache
+        </button>
+      </div>
+      {pwaMsg && <div className="voice-msg ok" style={{ marginBottom: 10 }}>{pwaMsg}</div>}
+
       <button className="btn btn-accent" disabled={saving} style={{ marginTop: 12 }}>{saving ? <span className="spinner" /> : <Icon name="check" size={16} />} Αποθήκευση</button>
     </form>
   );
