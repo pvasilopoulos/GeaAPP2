@@ -34,7 +34,7 @@ export default function MessageComposer({ customer, contacts = [], channelId, ch
   const enabled = channelStatus?.enabled !== false;
   const configured = !!channelStatus?.configured;
   const count = body.length;
-  const limit = channelId === 'sms' ? 160 : channelId === 'email' ? 0 : 4096;
+  const limit = channelId === 'sms' ? 160 : channelId === 'viber_routee' ? 1000 : channelId === 'email' ? 0 : 4096;
 
   const send = async (e) => {
     e.preventDefault();
