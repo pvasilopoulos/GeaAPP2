@@ -28,8 +28,15 @@ export function buildFilters(req) {
   if (req.query.customerType) where.push(`c.customer_type = ${push(req.query.customerType)}`);
   if (req.query.isVip === 'true') where.push('c.is_vip = 1');
   if (req.query.employeeId) where.push(`c.assigned_employee_id = ${push(Number(req.query.employeeId))}`);
+  if (req.query.city) where.push(`c.city = ${push(req.query.city)}`);
+  if (req.query.createdFrom) where.push(`c.registered_at >= ${push(req.query.createdFrom)}`);
+  if (req.query.createdTo) where.push(`c.registered_at <= ${push(`${req.query.createdTo} 23:59:59`)}`);
   if (req.query.lastVisitFrom) where.push(`c.last_visit_at >= ${push(req.query.lastVisitFrom)}`);
-  if (req.query.lastVisitTo) where.push(`c.last_visit_at <= ${push(req.query.lastVisitTo)}`);
+  if (req.query.lastVisitTo) where.push(`c.last_visit_at <= ${push(`${req.query.lastVisitTo} 23:59:59`)}`);
+  if (req.query.valueMin) where.push(`c.total_value >= ${push(Number(req.query.valueMin))}`);
+  if (req.query.valueMax) where.push(`c.total_value <= ${push(Number(req.query.valueMax))}`);
+  if (req.query.minBranches) where.push(`c.branches_count >= ${push(Number(req.query.minBranches))}`);
+  if (req.query.minSpaces) where.push(`c.spaces_count >= ${push(Number(req.query.minSpaces))}`);
   if (req.query.tag) {
     where.push(`EXISTS (SELECT 1 FROM customer_tags ct JOIN tags t ON t.id = ct.tag_id
       WHERE ct.customer_id = c.id AND t.slug = ${push(req.query.tag)})`);

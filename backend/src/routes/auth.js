@@ -4,6 +4,7 @@ import { hashPassword, verifyPassword, signToken } from '../lib/auth.js';
 import { authenticate } from '../middleware/auth.js';
 import { normalize } from '../lib/normalize.js';
 import { insertTenantRoles } from '../lib/roles.js';
+import { insertTenantCustomFields } from '../lib/customFields.js';
 
 export const authRouter = Router();
 
@@ -43,8 +44,9 @@ authRouter.post('/register', async (req, res, next) => {
     const slug = await uniqueSlug(tenantName);
     const t = await query('INSERT INTO tenants (name, slug) VALUES (?, ?)', [tenantName, slug]);
     const tenantId = t.rows.insertId;
-    // Clone the default roles for this new tenant; the signup user is the owner.
+    // Clone the default roles + custom field definitions for this new tenant.
     const roleMap = await insertTenantRoles(query, tenantId);
+    await insertTenantCustomFields(query, tenantId);
     const hash = await hashPassword(String(password));
     const u = await query(
       `INSERT INTO users (tenant_id, role_id, email, password_hash, first_name, last_name)

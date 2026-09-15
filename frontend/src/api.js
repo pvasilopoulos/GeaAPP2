@@ -85,6 +85,12 @@ export const api = {
   branches: (params, opts) => get(`/branches${qs(params)}`, opts),
   spaces: (params, opts) => get(`/spaces${qs(params)}`, opts),
   customFields: (entity, opts) => get(`/custom-fields${qs({ entity })}`, opts),
+  createCustomField: (payload) => send('POST', '/custom-fields', payload),
+  updateCustomField: (id, payload) => send('PATCH', `/custom-fields/${id}`, payload),
+  deleteCustomField: (id) => send('DELETE', `/custom-fields/${id}`),
+  duplicateCustomField: (id) => send('POST', `/custom-fields/${id}/duplicate`),
+  reorderCustomFields: (ids) => send('PATCH', '/custom-fields/reorder', { ids }),
+  saveCustomerCustomFields: (id, values) => send('PUT', `/customers/${id}/custom-fields`, { values }),
   // export (fetch as blob so the Authorization header is sent, then download)
   async exportCustomers(format, params) {
     const res = await fetch(`/api/customers/export${qs({ ...params, format })}`, { headers: authHeaders() });

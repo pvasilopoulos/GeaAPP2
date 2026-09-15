@@ -10,10 +10,11 @@ metaRouter.use(authorize(PERMISSIONS.CUSTOMERS_READ));
 metaRouter.get('/', async (req, res, next) => {
   try {
     const tenantId = req.user.tenantId;
-    const [tags, employees, cities, spaceTypes, total] = await Promise.all([
+    const [tags, employees, cities, custCities, spaceTypes, total] = await Promise.all([
       query('SELECT id, name, slug, color FROM tags ORDER BY name'),
       query('SELECT id, full_name FROM employees WHERE tenant_id = ? ORDER BY full_name', [tenantId]),
       query(`SELECT DISTINCT city FROM branches WHERE tenant_id = ? AND city IS NOT NULL ORDER BY city`, [tenantId]),
+      query(`SELECT DISTINCT city FROM customers WHERE tenant_id = ? AND city IS NOT NULL ORDER BY city`, [tenantId]),
       query(`SELECT DISTINCT space_type FROM spaces WHERE tenant_id = ? AND space_type IS NOT NULL ORDER BY space_type`, [tenantId]),
       query('SELECT COUNT(*) AS total FROM customers WHERE tenant_id = ?', [tenantId]),
     ]);
@@ -21,6 +22,7 @@ metaRouter.get('/', async (req, res, next) => {
       tags: tags.rows,
       employees: employees.rows,
       branchCities: cities.rows.map((r) => r.city),
+      customerCities: custCities.rows.map((r) => r.city),
       spaceTypes: spaceTypes.rows.map((r) => r.space_type),
       statuses: [
         { value: 'active', label: 'Ενεργός' },

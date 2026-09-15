@@ -3,10 +3,11 @@ import bcrypt from 'bcryptjs';
 import { config } from '../config.js';
 import { normalizeFields } from '../lib/normalize.js';
 import { insertTenantRoles } from '../lib/roles.js';
+import { insertTenantCustomFields } from '../lib/customFields.js';
 import {
   maleFirst, femaleFirst, lastNames, companies, companySuffix, cities, streets,
   spaceTypes, spaceImages, branchImages, tags as tagDefs, employees as employeeDefs,
-  customFieldDefs, pick, randInt, chance, greeklish,
+  pick, randInt, chance, greeklish,
 } from './seed-data.js';
 
 const TENANT1_CUSTOMERS = config.seedCustomers;
@@ -262,16 +263,8 @@ async function main() {
   const tagRows = tagDefs.map((t, i) => { tagIds[t.slug] = i + 1; return [i + 1, t.name, t.slug, t.color]; });
   await conn.query('INSERT INTO tags (id, name, slug, color) VALUES ?', [tagRows]);
 
-  // Custom field definitions (global)
-  const cfd = {};
-  const cfdRows = customFieldDefs.map((d, i) => {
-    cfd[`${d.entity_type}:${d.key}`] = i + 1;
-    return [i + 1, d.entity_type, d.name, d.key, d.field_type, !!d.required, !!d.searchable,
-      !!d.filterable, !!d.visible_in_list, JSON.stringify(d.settings || {}), d.section, d.sort_order, true];
-  });
-  await conn.query(
-    'INSERT INTO custom_field_definitions (id, entity_type, name, `key`, field_type, required, searchable, filterable, visible_in_list, settings, section, sort_order, active) VALUES ?',
-    [cfdRows]);
+  // Custom field definitions cloned per tenant.
+  const cfdByTenant = { 1: await insertTenantCustomFields(q, 1), 2: await insertTenantCustomFields(q, 2) };
 
   console.log('3/4 Customers + branches + spaces + history…');
   const I = {
@@ -290,8 +283,8 @@ async function main() {
   };
 
   const C = { cust: 0, branch: 0, space: 0, booking: 0 };
-  await seedTenant(conn, C, I, { tenantId: 1, count: TENANT1_CUSTOMERS, empIds: empByTenant[1], cfd, tagIds });
-  await seedTenant(conn, C, I, { tenantId: 2, count: TENANT2_CUSTOMERS, empIds: empByTenant[2], cfd, tagIds });
+  await seedTenant(conn, C, I, { tenantId: 1, count: TENANT1_CUSTOMERS, empIds: empByTenant[1], cfd: cfdByTenant[1], tagIds });
+  await seedTenant(conn, C, I, { tenantId: 2, count: TENANT2_CUSTOMERS, empIds: empByTenant[2], cfd: cfdByTenant[2], tagIds });
   for (const ins of Object.values(I)) await ins.flush();
 
   console.log('4/4 ANALYZE…');

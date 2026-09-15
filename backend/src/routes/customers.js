@@ -5,6 +5,7 @@ import { SORTS, buildFilters } from '../lib/customerFilters.js';
 import { authorize } from '../middleware/auth.js';
 import { PERMISSIONS } from '../lib/permissions.js';
 import { normalizeFields } from '../lib/normalize.js';
+import { valueColumns } from '../lib/customFields.js';
 
 const CUSTOMER_FIELDS = ['first_name', 'last_name', 'email', 'phone', 'mobile', 'company',
   'tax_id', 'customer_type', 'status', 'is_vip', 'date_of_birth', 'address_line', 'city',
@@ -315,18 +316,51 @@ customersRouter.get('/:id/custom-fields', async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     const { rows } = await query(
-      `SELECT d.id, d.name, d.\`key\`, d.field_type, d.section, d.sort_order, d.settings,
+      `SELECT d.id, d.name, d.\`key\`, d.field_type, d.section, d.sort_order, d.settings, d.required,
               d.searchable, d.filterable,
               v.text_value, v.number_value, v.date_value, v.boolean_value, v.json_value
        FROM custom_field_definitions d
        LEFT JOIN customer_custom_field_values v
          ON v.field_definition_id = d.id AND v.customer_id = ?
-       WHERE d.entity_type = 'customer' AND d.active = 1
-       ORDER BY d.sort_order, d.id`, [id]);
+       WHERE d.entity_type = 'customer' AND d.active = 1 AND d.tenant_id = ?
+       ORDER BY d.sort_order, d.id`, [id, req.user.tenantId]);
     for (const r of rows) {
       if (typeof r.settings === 'string') { try { r.settings = JSON.parse(r.settings); } catch { r.settings = {}; } }
+      if (typeof r.json_value === 'string') { try { r.json_value = JSON.parse(r.json_value); } catch { /* keep */ } }
     }
     res.json({ fields: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/customers/:id/custom-fields — upsert this customer's custom field values.
+customersRouter.put('/:id/custom-fields', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const values = req.body?.values || {};
+    const defs = (await query(
+      'SELECT id, field_type FROM custom_field_definitions WHERE tenant_id = ? AND entity_type = ?',
+      [req.user.tenantId, 'customer'])).rows;
+    const byId = new Map(defs.map((d) => [String(d.id), d]));
+    for (const [defId, val] of Object.entries(values)) {
+      const def = byId.get(String(defId));
+      if (!def) continue;
+      const c = valueColumns(def.field_type, val);
+      const empty = c.text_value == null && c.number_value == null && c.date_value == null && c.boolean_value == null && c.json_value == null;
+      if (empty) {
+        await query('DELETE FROM customer_custom_field_values WHERE customer_id=? AND field_definition_id=?', [id, defId]);
+      } else {
+        await query(
+          `INSERT INTO customer_custom_field_values
+            (customer_id, field_definition_id, text_value, number_value, date_value, boolean_value, json_value)
+           VALUES (?,?,?,?,?,?,?)
+           ON DUPLICATE KEY UPDATE text_value=VALUES(text_value), number_value=VALUES(number_value),
+             date_value=VALUES(date_value), boolean_value=VALUES(boolean_value), json_value=VALUES(json_value)`,
+          [id, defId, c.text_value, c.number_value, c.date_value, c.boolean_value, c.json_value]);
+      }
+    }
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }

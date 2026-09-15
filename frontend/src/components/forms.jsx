@@ -1,10 +1,57 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api.js';
 import Icon from './Icon.jsx';
 import { Drawer } from './ui.jsx';
 
 const SPACE_TYPES = ['Αίθουσα συνεδριάσεων', 'Ιδιωτικό γραφείο', 'Co-working', 'Lounge', 'Αίθουσα εκδηλώσεων', 'Studio', 'Αίθουσα εκπαίδευσης'];
+
+// Derives a form value from a stored custom-field row (or a blank default).
+function cfInitialValue(fld) {
+  switch (fld.field_type) {
+    case 'boolean': return fld.boolean_value == null ? false : !!fld.boolean_value;
+    case 'number': case 'decimal': case 'currency': case 'percent': return fld.number_value ?? '';
+    case 'date': case 'datetime': return fld.date_value ? String(fld.date_value).slice(0, 10) : '';
+    case 'multiselect': case 'checkbox': return Array.isArray(fld.json_value) ? fld.json_value : [];
+    default: return fld.text_value ?? '';
+  }
+}
+// Conditional visibility against the customer base fields (e.g. customer_type).
+function cfVisible(fld, base) {
+  const cond = fld.settings?.showIf;
+  if (!cond || !cond.field) return true;
+  return String(base[cond.field] ?? '') === String(cond.equals);
+}
+
+function CustomFieldInput({ fld, value, onChange }) {
+  const opts = fld.settings?.options || [];
+  const label = <label>{fld.name}{fld.required ? ' *' : ''}</label>;
+  if (fld.field_type === 'boolean') {
+    return <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '6px 0' }}>
+      <input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} /> {fld.name}
+    </label>;
+  }
+  if (fld.field_type === 'select') {
+    return <div className="field-group">{label}
+      <select style={cfInp} value={value || ''} onChange={(e) => onChange(e.target.value)}>
+        <option value="">—</option>{opts.map((o) => <option key={o} value={o}>{o}</option>)}
+      </select></div>;
+  }
+  if (fld.field_type === 'multiselect') {
+    const arr = Array.isArray(value) ? value : [];
+    const toggle = (o) => onChange(arr.includes(o) ? arr.filter((x) => x !== o) : [...arr, o]);
+    return <div className="field-group">{label}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {opts.map((o) => <label key={o} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}><input type="checkbox" checked={arr.includes(o)} onChange={() => toggle(o)} /> {o}</label>)}
+      </div></div>;
+  }
+  if (fld.field_type === 'long_text') {
+    return <div className="field-group">{label}<textarea rows={2} style={{ ...cfInp, height: 'auto', padding: '8px 10px', fontFamily: 'inherit' }} value={value || ''} onChange={(e) => onChange(e.target.value)} /></div>;
+  }
+  const type = (fld.field_type === 'number' || fld.field_type === 'decimal' || fld.field_type === 'currency' || fld.field_type === 'percent') ? 'number' : (fld.field_type === 'date' ? 'date' : 'text');
+  return <div className="field-group">{label}<input type={type} style={cfInp} value={value ?? ''} onChange={(e) => onChange(e.target.value)} /></div>;
+}
+const cfInp = { width: '100%', height: 40, padding: '0 10px', border: '1px solid var(--border-strong)', borderRadius: 9 };
 
 function Field({ label, children }) {
   return <div className="field-group"><label>{label}</label>{children}</div>;
@@ -27,10 +74,34 @@ export function CustomerFormDrawer({ initial, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
+
+  // Custom fields: definitions (+ existing values when editing).
+  const cfQ = useQuery({
+    queryKey: initial ? ['cf-form', initial.id] : ['cf-defs', 'customer'],
+    queryFn: ({ signal }) => (initial ? api.customerCustomFields(initial.id, { signal }) : api.customFields('customer', { signal })),
+  });
+  const [cfFields, setCfFields] = useState([]);
+  const [cfValues, setCfValues] = useState({});
+  useEffect(() => {
+    if (!cfQ.data) return;
+    const list = (cfQ.data.fields || []).filter((x) => (initial ? true : x.active));
+    setCfFields(list);
+    const init = {};
+    for (const fld of list) init[fld.id] = cfInitialValue(fld);
+    setCfValues(init);
+  }, [cfQ.data, initial]);
+  const visibleCf = cfFields.filter((fld) => cfVisible(fld, f));
+
   const submit = async (e) => {
     e.preventDefault(); setErr(''); setSaving(true);
     try {
       const res = initial ? (await api.updateCustomer(initial.id, f), { id: initial.id }) : await api.createCustomer(f);
+      // Persist visible custom field values.
+      if (visibleCf.length) {
+        const values = {};
+        for (const fld of visibleCf) values[fld.id] = cfValues[fld.id];
+        await api.saveCustomerCustomFields(res.id, values);
+      }
       onSaved({ id: res.id, full_name: `${f.first_name} ${f.last_name}` });
     } catch (ex) { setErr(ex.message); } finally { setSaving(false); }
   };
@@ -75,6 +146,15 @@ export function CustomerFormDrawer({ initial, onClose, onSaved }) {
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 14px' }}>
           <input type="checkbox" checked={f.is_vip} onChange={set('is_vip')} /> VIP πελάτης
         </label>
+        {visibleCf.length > 0 && (
+          <div style={{ borderTop: '1px solid var(--border)', margin: '2px 0 12px', paddingTop: 10 }}>
+            <div style={{ fontSize: 11.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--text-3)', marginBottom: 8 }}>Πρόσθετα πεδία</div>
+            {visibleCf.map((fld) => (
+              <CustomFieldInput key={fld.id} fld={fld} value={cfValues[fld.id]}
+                onChange={(v) => setCfValues((s) => ({ ...s, [fld.id]: v }))} />
+            ))}
+          </div>
+        )}
         <button className="btn btn-accent btn-block" disabled={saving}>{saving ? <span className="spinner" /> : <Icon name="check" size={16} />} {initial ? 'Αποθήκευση' : 'Δημιουργία'}</button>
       </form>
     </Drawer>

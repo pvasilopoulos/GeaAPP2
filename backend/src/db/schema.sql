@@ -321,6 +321,7 @@ CREATE TABLE activities (
 -- ---------------------------------------------------------------------------
 CREATE TABLE custom_field_definitions (
   id            BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  tenant_id     BIGINT NOT NULL,
   entity_type   VARCHAR(20) NOT NULL,
   name          VARCHAR(120) NOT NULL,
   `key`         VARCHAR(120) NOT NULL,
@@ -334,8 +335,9 @@ CREATE TABLE custom_field_definitions (
   sort_order    INT NOT NULL DEFAULT 0,
   active        TINYINT(1) NOT NULL DEFAULT 1,
   created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_cfd (entity_type, `key`),
-  KEY idx_cfd_entity (entity_type, active, sort_order)
+  UNIQUE KEY uq_cfd (tenant_id, entity_type, `key`),
+  KEY idx_cfd_entity (tenant_id, entity_type, active, sort_order),
+  CONSTRAINT fk_cfd_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE customer_custom_field_values (
