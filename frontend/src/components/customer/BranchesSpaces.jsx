@@ -210,7 +210,7 @@ function BranchDetail({ selected, canWrite, mapProvider, branchVisits, visitsLoa
       <div className="bd-body">
         <header className="bd-head">
           <div>
-            <div className="bd-kicker">{selected.city}{selected.area ? ` · ${selected.area}` : ''}{selected.code ? ` · ${selected.code}` : ''}</div>
+            <div className="bd-kicker">{[selected.city !== selected.name ? selected.city : null, selected.area, selected.code].filter(Boolean).join(' · ') || 'Υποκατάστημα'}</div>
             <h2>{selected.name}</h2>
             <div className="bd-badges">
               {selected.is_primary && <span className="pill" style={{ color: 'var(--accent)', background: 'var(--accent-soft)', border: 'none' }}>Κύριο</span>}

@@ -302,7 +302,7 @@ input, select { font-family: inherit; font-size: 14px; }
 .bd-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 16px 0 18px; }
 .bd-kpi {
   display: flex; align-items: center; gap: 10px;
-  background: var(--surface-2); border-radius: 12px; padding: 12px 14px;
+  background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px;
 }
 .bd-kpi svg { color: var(--accent); flex: none; }
 .bd-kpi .v { font-size: 18px; font-weight: 750; letter-spacing: -0.03em; line-height: 1.1; }
