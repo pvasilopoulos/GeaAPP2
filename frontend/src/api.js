@@ -91,6 +91,28 @@ export const api = {
   duplicateCustomField: (id) => send('POST', `/custom-fields/${id}/duplicate`),
   reorderCustomFields: (ids) => send('PATCH', '/custom-fields/reorder', { ids }),
   saveCustomerCustomFields: (id, values) => send('PUT', `/customers/${id}/custom-fields`, { values }),
+  checkDuplicates: (payload) => send('POST', '/customers/check-duplicates', payload),
+  addCustomerTag: (id, payload) => send('POST', `/customers/${id}/tags`, payload),
+  removeCustomerTag: (id, tagId) => send('DELETE', `/customers/${id}/tags/${tagId}`),
+  customerContacts: (id, opts) => get(`/customers/${id}/contacts`, opts),
+  createContact: (id, payload) => send('POST', `/customers/${id}/contacts`, payload),
+  updateContact: (id, contactId, payload) => send('PATCH', `/customers/${id}/contacts/${contactId}`, payload),
+  deleteContact: (id, contactId) => send('DELETE', `/customers/${id}/contacts/${contactId}`),
+  branchCustomFields: (id, opts) => get(`/branches/${id}/custom-fields`, opts),
+  saveBranchCustomFields: (id, values) => send('PUT', `/branches/${id}/custom-fields`, { values }),
+  spaceCustomFields: (id, opts) => get(`/spaces/${id}/custom-fields`, opts),
+  saveSpaceCustomFields: (id, values) => send('PUT', `/spaces/${id}/custom-fields`, { values }),
+  metaCustomFields: (entity, opts) => get(`/meta/custom-fields${qs({ entity })}`, opts),
+  geoLookup: (q, opts) => get(`/geo/lookup${qs({ q })}`, opts),
+  async uploadImage(file) {
+    const data = await new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result));
+      r.onerror = reject;
+      r.readAsDataURL(file);
+    });
+    return send('POST', '/uploads', { mime: file.type, data });
+  },
   // export (fetch as blob so the Authorization header is sent, then download)
   async exportCustomers(format, params) {
     const res = await fetch(`/api/customers/export${qs({ ...params, format })}`, { headers: authHeaders() });

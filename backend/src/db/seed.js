@@ -4,6 +4,7 @@ import { config } from '../config.js';
 import { normalizeFields } from '../lib/normalize.js';
 import { insertTenantRoles } from '../lib/roles.js';
 import { insertTenantCustomFields } from '../lib/customFields.js';
+import { defaultOpeningHours, AMENITIES } from '../lib/masterData.js';
 import {
   maleFirst, femaleFirst, lastNames, companies, companySuffix, cities, streets,
   spaceTypes, spaceImages, branchImages, tags as tagDefs, employees as employeeDefs,
@@ -76,20 +77,35 @@ async function seedTenant(conn, C, I, { tenantId, count, empIds, cfd, tagIds }) 
       const addr = `${pick(streets)} ${randInt(1, 180)}`;
       const spaces = [];
       const nSpaces = randInt(2, 6);
+      const amenityKeys = AMENITIES.map((a) => a.key);
       for (let si = 0; si < nSpaces; si++) {
         C.space++;
         const sid = C.space;
         const type = pick(spaceTypes);
         const sname = chance(0.5) ? `Αίθουσα ${LABELS[si % LABELS.length]}` : `${pick(['Γραφείο', 'Studio', 'Lounge', 'Room'])} ${si + 1}`;
+        const amenCount = randInt(2, 5);
+        const amenities = [];
+        const pool = [...amenityKeys];
+        for (let k = 0; k < amenCount && pool.length; k++) {
+          const idx = randInt(0, pool.length - 1);
+          amenities.push(pool.splice(idx, 1)[0]);
+        }
+        const hourly = randInt(10, 80);
         spaces.push({
           id: sid, name: sname, type, code: `S-${1000000 + sid}`, capacity: randInt(2, 40),
-          floor: `${randInt(0, 4)}ος`, hourly: randInt(10, 80), img: spaceImages[sid % spaceImages.length],
+          floor: `${randInt(0, 4)}ος`, hourly, daily: hourly * 8, weekend: Math.round(hourly * 1.2),
+          img: spaceImages[sid % spaceImages.length],
+          status: chance(0.88) ? 'available' : chance(0.5) ? 'maintenance' : 'inactive',
+          amenities, minDur: pick([30, 60, 60, 90]), step: pick([15, 30, 30, 60]), buffer: pick([0, 0, 15, 30]),
           visits: 0, bookings: 0, last: null,
         });
       }
       branchList.push({
         id: bid, name: bname, city: cityObj.city, area, addr, code: `B-${100000 + bid}`,
         img: branchImages[bid % branchImages.length], isPrimary: bi === 0,
+        status: chance(0.9) ? 'active' : chance(0.5) ? 'renovation' : 'closed',
+        managerId: pick(empIds),
+        hours: JSON.stringify(defaultOpeningHours()),
         spaces, visits: 0, value: 0, last: null,
       });
     }
@@ -179,13 +195,15 @@ async function seedTenant(conn, C, I, { tenantId, count, empIds, cfd, tagIds }) 
       await I.branches.push([
         b.id, tenantId, id, b.code, b.name, b.addr, b.city, b.area, String(randInt(10000, 85000)),
         `+30 2${randInt(1, 8)}${randInt(1000000, 9999999)}`, `${greeklish(b.city)}@${greeklish(last)}.gr`,
-        b.img, 37 + Math.random() * 3, 21 + Math.random() * 4, b.isPrimary, b.spaces.length, b.visits, b.value, b.last,
+        b.img, 37 + Math.random() * 3, 21 + Math.random() * 4, b.isPrimary, b.status, b.managerId, b.hours,
+        b.spaces.length, b.visits, b.value, b.last,
         normalizeFields(b.name, b.city, b.area, b.code, b.addr),
       ]);
       for (const s of b.spaces) {
         await I.spaces.push([
-          s.id, tenantId, id, b.id, s.code, s.name, s.type, s.capacity, s.floor, s.hourly, s.img,
-          `${s.type} στο υποκατάστημα ${b.name}.`, s.visits, s.bookings, s.last,
+          s.id, tenantId, id, b.id, s.code, s.name, s.type, s.capacity, s.floor, s.hourly, s.daily, s.weekend, s.img,
+          `${s.type} στο υποκατάστημα ${b.name}.`, s.status, JSON.stringify(s.amenities),
+          s.minDur, s.step, s.buffer, s.visits, s.bookings, s.last,
           normalizeFields(s.name, s.type, s.code, b.name),
         ]);
       }
@@ -207,6 +225,19 @@ async function seedTenant(conn, C, I, { tenantId, count, empIds, cfd, tagIds }) 
     if (isCompany) {
       await I.ccfv.push([id, cfd['customer:legal_rep'], `${pick(maleFirst)} ${pick(lastNames)}`, null, null, null, null]);
       await I.ccfv.push([id, cfd['customer:gemi'], String(randInt(100000000000, 999999999999)), null, null, null, null]);
+    }
+
+    const contactCount = isCompany ? randInt(1, 3) : (chance(0.15) ? 1 : 0);
+    const contactRoles = ['Κύρια επαφή', 'Διευθυντής', 'Υπεύθυνος χώρων', 'Λογιστήριο', 'Γραμματεία'];
+    for (let ci = 0; ci < contactCount; ci++) {
+      const cf = chance(0.5) ? pick(femaleFirst) : pick(maleFirst);
+      const cl = pick(lastNames);
+      await I.contacts.push([
+        tenantId, id, cf, cl, contactRoles[ci] || 'Άλλο',
+        `${greeklish(cf)}.${greeklish(cl)}${randInt(1, 99)}@${pick(['gmail.com', 'email.gr'])}`,
+        `+30 21${randInt(1000000, 9999999)}`, `+30 69${randInt(10000000, 99999999)}`,
+        ci === 0 ? 1 : 0, null,
+      ]);
     }
 
     if (n % 25000 === 0) {
@@ -269,8 +300,8 @@ async function main() {
   console.log('3/4 Customers + branches + spaces + history…');
   const I = {
     customers: new Inserter(conn, 'customers', ['id', 'tenant_id', 'code', 'first_name', 'last_name', 'email', 'phone', 'mobile', 'company', 'tax_id', 'customer_type', 'status', 'is_vip', 'date_of_birth', 'address_line', 'city', 'postal_code', 'country', 'avatar_url', 'profile_note', 'assigned_employee_id', 'registered_at', 'branches_count', 'spaces_count', 'bookings_count', 'visits_count', 'total_value', 'last_visit_at', 'next_booking_at', 'last_visit_sort', 'search_norm'], 1000),
-    branches: new Inserter(conn, 'branches', ['id', 'tenant_id', 'customer_id', 'code', 'name', 'address_line', 'city', 'area', 'postal_code', 'phone', 'email', 'image_url', 'lat', 'lng', 'is_primary', 'spaces_count', 'visits_count', 'total_value', 'last_visit_at', 'search_norm'], 2000),
-    spaces: new Inserter(conn, 'spaces', ['id', 'tenant_id', 'customer_id', 'branch_id', 'code', 'name', 'space_type', 'capacity', 'floor', 'hourly_price', 'image_url', 'description', 'visits_count', 'bookings_count', 'last_visit_at', 'search_norm'], 3000),
+    branches: new Inserter(conn, 'branches', ['id', 'tenant_id', 'customer_id', 'code', 'name', 'address_line', 'city', 'area', 'postal_code', 'phone', 'email', 'image_url', 'lat', 'lng', 'is_primary', 'status', 'manager_employee_id', 'opening_hours', 'spaces_count', 'visits_count', 'total_value', 'last_visit_at', 'search_norm'], 2000),
+    spaces: new Inserter(conn, 'spaces', ['id', 'tenant_id', 'customer_id', 'branch_id', 'code', 'name', 'space_type', 'capacity', 'floor', 'hourly_price', 'daily_price', 'weekend_hourly_price', 'image_url', 'description', 'status', 'amenities', 'min_duration_minutes', 'slot_step_minutes', 'buffer_minutes', 'visits_count', 'bookings_count', 'last_visit_at', 'search_norm'], 3000),
     bookings: new Inserter(conn, 'bookings', ['id', 'tenant_id', 'customer_id', 'branch_id', 'space_id', 'employee_id', 'starts_at', 'ends_at', 'status', 'amount'], 3000),
     visits: new Inserter(conn, 'visits', ['customer_id', 'branch_id', 'space_id', 'visited_at', 'duration_minutes', 'visit_type', 'status'], 4000),
     payments: new Inserter(conn, 'payments', ['customer_id', 'booking_id', 'amount', 'method', 'status', 'paid_at'], 4000),
@@ -280,6 +311,7 @@ async function main() {
     notes: new Inserter(conn, 'notes', ['customer_id', 'body', 'employee_id', 'created_at'], 4000),
     ctags: new Inserter(conn, 'customer_tags', ['customer_id', 'tag_id'], 5000),
     ccfv: new Inserter(conn, 'customer_custom_field_values', ['customer_id', 'field_definition_id', 'text_value', 'number_value', 'date_value', 'boolean_value', 'json_value'], 4000),
+    contacts: new Inserter(conn, 'customer_contacts', ['tenant_id', 'customer_id', 'first_name', 'last_name', 'role', 'email', 'phone', 'mobile', 'is_primary', 'notes'], 3000),
   };
 
   const C = { cust: 0, branch: 0, space: 0, booking: 0 };

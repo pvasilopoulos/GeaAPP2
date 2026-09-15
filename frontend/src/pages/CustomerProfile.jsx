@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api.js';
 import Icon from '../components/Icon.jsx';
-import { Avatar, VipBadge, Tag, Skeleton } from '../components/ui.jsx';
+import { Avatar, VipBadge, Skeleton } from '../components/ui.jsx';
 import { STATUS_LABELS, TYPE_LABELS, formatDate } from '../lib/format.js';
 import Overview from '../components/customer/Overview.jsx';
 import BranchesSpaces from '../components/customer/BranchesSpaces.jsx';
 import HistoryList from '../components/customer/HistoryList.jsx';
+import ContactsPanel from '../components/customer/ContactsPanel.jsx';
 import { useTabs } from '../store/tabs.js';
 import { useAuth } from '../store/auth.js';
 import { PERMS } from '../lib/perms.js';
@@ -14,6 +15,7 @@ import { CustomerFormDrawer } from '../components/forms.jsx';
 
 const TABS = [
   { key: 'overview', label: 'Σύνοψη', icon: 'home' },
+  { key: 'contacts', label: 'Επαφές', icon: 'users' },
   { key: 'branches', label: 'Υποκαταστήματα & Χώροι', icon: 'building' },
   { key: 'bookings', label: 'Κρατήσεις', icon: 'calendar' },
   { key: 'payments', label: 'Πληρωμές', icon: 'wallet' },
@@ -120,7 +122,8 @@ export default function CustomerProfile({ customerId, tabId, onBack }) {
       </div>
 
       <div style={{ marginTop: 20 }}>
-        {tab === 'overview' && <Overview customerId={id} data={data} onOpenTab={setTab} />}
+        {tab === 'overview' && <Overview customerId={id} data={data} onOpenTab={setTab} onEditCustomer={() => setShowEdit(true)} />}
+        {tab === 'contacts' && <ContactsPanel customerId={id} customerType={c.customer_type} />}
         {tab === 'branches' && <BranchesSpaces customerId={id} />}
         {tab === 'bookings' && <HistoryList kind="bookings" customerId={id} />}
         {tab === 'payments' && <HistoryList kind="payments" customerId={id} />}

@@ -38,6 +38,10 @@ const ACT_LABELS = {
   booking_created: 'Νέα κράτηση', booking_completed: 'Ολοκληρωμένη κράτηση',
   payment_received: 'Πληρωμή', message_sent: 'Μήνυμα', note_added: 'Σημείωση',
   visit: 'Επίσκεψη', document_uploaded: 'Έγγραφο',
+  customer_created: 'Δημιουργία πελάτη', customer_updated: 'Ενημέρωση πελάτη',
+  contact_added: 'Νέα επαφή', contact_removed: 'Διαγραφή επαφής',
+  branch_created: 'Νέο υποκατάστημα', branch_updated: 'Ενημέρωση υποκαταστήματος', branch_deleted: 'Διαγραφή υποκαταστήματος',
+  space_created: 'Νέος χώρος', space_updated: 'Ενημέρωση χώρου', space_deleted: 'Διαγραφή χώρου',
 };
 
 export default function HistoryList({ kind, customerId }) {

@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import path from 'node:path';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import { pool } from './db.js';
@@ -16,6 +16,8 @@ import { statsRouter } from './routes/stats.js';
 import { exportRouter } from './routes/export.js';
 import { authRouter } from './routes/auth.js';
 import { usersRouter } from './routes/users.js';
+import { uploadsRouter, UPLOADS_DIR } from './routes/uploads.js';
+import { geoRouter } from './routes/geo.js';
 import { authenticate } from './middleware/auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -24,8 +26,11 @@ const app = express();
 // CORS is only needed for the split-origin dev setup (Vite on :5173). In
 // production the same Express process serves the SPA, so it is same-origin.
 if (config.nodeEnv !== 'production') app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '8mb' }));
 app.use(morgan('tiny'));
+
+mkdirSync(UPLOADS_DIR, { recursive: true });
+app.use('/uploads', express.static(UPLOADS_DIR));
 
 app.get('/api/health', async (_req, res) => {
   try {
@@ -52,6 +57,8 @@ app.use('/api/branches', branchesRouter);
 app.use('/api/spaces', spacesRouter);
 app.use('/api/custom-fields', customFieldsRouter);
 app.use('/api/stats', statsRouter);
+app.use('/api/uploads', uploadsRouter);
+app.use('/api/geo', geoRouter);
 app.use('/api', usersRouter);
 
 // Unknown API routes return JSON 404 (never the SPA shell).
