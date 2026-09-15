@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import Icon from './components/Icon.jsx';
 import GlobalSearch from './components/GlobalSearch.jsx';
 import TabBar from './components/TabBar.jsx';
@@ -6,6 +7,7 @@ import { Avatar } from './components/ui.jsx';
 import { useTabs } from './store/tabs.js';
 import { useAuth } from './store/auth.js';
 import { PERMS } from './lib/perms.js';
+import { isStandalone, promptInstall, refreshApp, subscribeInstallPrompt } from './lib/pwa.js';
 import Dashboard from './pages/Dashboard.jsx';
 import Customers from './pages/Customers.jsx';
 import CustomerProfile from './pages/CustomerProfile.jsx';
@@ -26,17 +28,48 @@ const NAV = [
   { id: 'settings', type: 'settings', label: 'Ρυθμίσεις', icon: 'settings', perms: [PERMS.SETTINGS_MANAGE, PERMS.USERS_MANAGE, PERMS.ROLES_MANAGE, PERMS.TENANT_MANAGE, PERMS.TENANTS_PLATFORM] },
 ];
 
+function isIosDevice() {
+  if (typeof navigator === 'undefined') return false;
+  return /iphone|ipad|ipod/i.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+function AppRefresh() {
+  const qc = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const onClick = async () => {
+    if (busy) return;
+    setBusy(true);
+    try { await refreshApp(qc); }
+    finally { setBusy(false); }
+  };
+  return (
+    <button
+      className="btn btn-icon btn-ghost"
+      onClick={onClick}
+      disabled={busy}
+      aria-label="Ανανέωση"
+      title="Ανανέωση δεδομένων και cache"
+    >
+      {busy ? <span className="spinner" /> : <Icon name="refresh" />}
+    </button>
+  );
+}
+
 function UserMenu() {
   const user = useAuth((s) => s.user);
   const logout = useAuth((s) => s.logout);
   const [open, setOpen] = useState(false);
+  const [canInstall, setCanInstall] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
     const onClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
   }, []);
+  useEffect(() => subscribeInstallPrompt((ev) => setCanInstall(!!ev)), []);
   if (!user) return null;
+  const showIosHint = !canInstall && !isStandalone() && isIosDevice();
   return (
     <div className="user-menu" ref={ref}>
       <button className="user-btn" onClick={() => setOpen((o) => !o)}>
@@ -54,6 +87,22 @@ function UserMenu() {
               <span style={{ fontSize: 12, color: 'var(--text-3)' }}>· {user.tenantName}</span>
             </div>
           </div>
+          {canInstall && (
+            <div className="item" onClick={async () => { await promptInstall(); setOpen(false); }}>
+              <Icon name="download" size={16} /> Εγκατάσταση εφαρμογής
+            </div>
+          )}
+          {showIosHint && (
+            <div
+              className="item"
+              onClick={() => {
+                window.alert('Στο Safari πατήστε Κοινή χρήση → Προσθήκη στην οθόνη Αφετηρίας.');
+                setOpen(false);
+              }}
+            >
+              <Icon name="download" size={16} /> Προσθήκη στην αρχική οθόνη
+            </div>
+          )}
           <div className="item" onClick={logout}><Icon name="arrowLeft" size={16} /> Αποσύνδεση</div>
         </div>
       )}
@@ -116,6 +165,7 @@ export default function App() {
           </button>
           <GlobalSearch />
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <AppRefresh />
             <button className="btn btn-icon btn-ghost" aria-label="Ειδοποιήσεις"><Icon name="bell" /></button>
             <UserMenu />
           </div>
