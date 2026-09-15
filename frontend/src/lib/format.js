@@ -85,19 +85,27 @@ export function defaultOpeningHours() {
     sun: { open: '10:00', close: '16:00', closed: true },
   };
 }
-export function mapUrl(branch) {
-  if (branch?.lat != null && branch?.lng != null && branch.lat !== '' && branch.lng !== '') {
-    return `https://www.openstreetmap.org/?mlat=${branch.lat}&mlon=${branch.lng}#map=16/${branch.lat}/${branch.lng}`;
-  }
-  const q = encodeURIComponent([branch?.address_line, branch?.city, branch?.postal_code].filter(Boolean).join(', '));
-  return q ? `https://www.openstreetmap.org/search?query=${q}` : null;
-}
 export function hoursSummary(hours) {
   if (!hours) return '—';
   const open = WEEKDAYS.filter((d) => hours[d.key] && !hours[d.key].closed);
   if (!open.length) return 'Κλειστό';
   const first = hours[open[0].key];
   return `${open[0].short}–${open[open.length - 1].short} ${first.open}–${first.close}`;
+}
+
+export function weekdayKey(date = new Date()) {
+  return ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][date.getDay()];
+}
+
+export function isOpenNow(hours, date = new Date()) {
+  if (!hours) return null;
+  const row = hours[weekdayKey(date)];
+  if (!row) return null;
+  if (row.closed) return false;
+  const [oh, om] = String(row.open || '00:00').split(':').map(Number);
+  const [ch, cm] = String(row.close || '23:59').split(':').map(Number);
+  const n = date.getHours() * 60 + date.getMinutes();
+  return n >= oh * 60 + (om || 0) && n <= ch * 60 + (cm || 0);
 }
 export const BOOKING_STATUS = {
   confirmed: 'Επιβεβαιωμένη', completed: 'Ολοκληρώθηκε', pending: 'Εκκρεμεί',

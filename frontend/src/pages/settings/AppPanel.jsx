@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
-import { Skeleton } from '../../components/ui.jsx';
+import { MAP_PROVIDERS } from '../../lib/maps.js';
 
 const inp = { width: '100%', height: 40, padding: '0 10px', border: '1px solid var(--border-strong)', borderRadius: 9 };
 const chk = { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5, padding: '6px 0' };
@@ -25,6 +25,7 @@ export default function AppPanel() {
     try {
       await api.updateAppSettings(f);
       qc.invalidateQueries({ queryKey: ['settings-app'] });
+      qc.invalidateQueries({ queryKey: ['meta'] });
       setMsg('Αποθηκεύτηκε.');
     } catch (ex) { setErr(ex.message); } finally { setSaving(false); }
   };
@@ -68,6 +69,15 @@ export default function AppPanel() {
           <option value="en-US">English</option>
         </select>
       </div>
+      <div className="section-title">Χάρτες</div>
+      <div className="field-group"><label>Άνοιγμα τοποθεσίας με</label>
+        <select style={inp} value={f.map_provider || 'google'} onChange={set('map_provider')}>
+          {MAP_PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+        </select>
+      </div>
+      <p className="muted" style={{ fontSize: 12.5, margin: '-6px 0 12px' }}>
+        Ισχύει για το κουμπί «Προβολή στον χάρτη» στα υποκαταστήματα.
+      </p>
       <button className="btn btn-accent" disabled={saving} style={{ marginTop: 12 }}>{saving ? <span className="spinner" /> : <Icon name="check" size={16} />} Αποθήκευση</button>
     </form>
   );
