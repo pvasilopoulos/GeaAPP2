@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { query } from '../db.js';
 import { authorize } from '../middleware/auth.js';
 import { PERMISSIONS } from '../lib/permissions.js';
+import { BRANCH_STATUSES, SPACE_STATUSES, AMENITIES, WEEKDAYS, CONTACT_ROLES } from '../lib/masterData.js';
+import { loadActiveDefinitions } from '../lib/customFields.js';
 
 export const metaRouter = Router();
 metaRouter.use(authorize(PERMISSIONS.CUSTOMERS_READ));
@@ -34,8 +36,22 @@ metaRouter.get('/', async (req, res, next) => {
         { value: 'company', label: 'Εταιρεία' },
       ],
       estimatedCustomers: Number(total.rows[0].total),
+      branchStatuses: BRANCH_STATUSES,
+      spaceStatuses: SPACE_STATUSES,
+      amenities: AMENITIES,
+      weekdays: WEEKDAYS,
+      contactRoles: CONTACT_ROLES,
     });
   } catch (err) {
     next(err);
   }
+});
+
+// GET /api/meta/custom-fields?entity= — active definitions (no settings.manage required).
+metaRouter.get('/custom-fields', async (req, res, next) => {
+  try {
+    const entity = ['customer', 'branch', 'space'].includes(req.query.entity) ? req.query.entity : 'customer';
+    const fields = await loadActiveDefinitions(query, { tenantId: req.user.tenantId, entityType: entity });
+    res.json({ fields });
+  } catch (err) { next(err); }
 });

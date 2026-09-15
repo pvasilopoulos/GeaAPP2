@@ -5,11 +5,13 @@ import { SORTS, buildFilters } from '../lib/customerFilters.js';
 import { authorize } from '../middleware/auth.js';
 import { PERMISSIONS } from '../lib/permissions.js';
 import { normalizeFields } from '../lib/normalize.js';
-import { valueColumns } from '../lib/customFields.js';
+import { loadEntityCustomFields, saveEntityCustomFields } from '../lib/customFields.js';
+import { logActivity } from '../lib/activity.js';
+import { parseJson } from '../lib/masterData.js';
 
 const CUSTOMER_FIELDS = ['first_name', 'last_name', 'email', 'phone', 'mobile', 'company',
   'tax_id', 'customer_type', 'status', 'is_vip', 'date_of_birth', 'address_line', 'city',
-  'postal_code', 'profile_note', 'assigned_employee_id'];
+  'postal_code', 'country', 'profile_note', 'assigned_employee_id', 'avatar_url'];
 
 function customerSearchNorm(r) {
   return normalizeFields(r.first_name, r.last_name, r.email, r.phone, r.mobile, r.company, r.tax_id, r.code);
@@ -116,6 +118,40 @@ customersRouter.get('/count', async (req, res, next) => {
   }
 });
 
+// POST /api/customers/check-duplicates — same tenant, email/phone/mobile/tax_id.
+customersRouter.post('/check-duplicates', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const excludeId = Number(b.excludeId) || 0;
+    const email = String(b.email || '').trim().toLowerCase();
+    const phone = String(b.phone || '').trim();
+    const mobile = String(b.mobile || '').trim();
+    const taxId = String(b.tax_id || '').trim();
+    const clauses = [];
+    const params = [req.user.tenantId];
+    if (email) { clauses.push('LOWER(c.email) = ?'); params.push(email); }
+    if (phone) { clauses.push('c.phone = ? OR c.mobile = ?'); params.push(phone, phone); }
+    if (mobile && mobile !== phone) { clauses.push('c.phone = ? OR c.mobile = ?'); params.push(mobile, mobile); }
+    if (taxId) { clauses.push('c.tax_id = ?'); params.push(taxId); }
+    if (!clauses.length) return res.json({ matches: [] });
+    if (excludeId) { params.push(excludeId); }
+    const { rows } = await query(
+      `SELECT c.id, c.code, c.full_name, c.email, c.phone, c.mobile, c.tax_id, c.company, c.city, c.customer_type
+       FROM customers c
+       WHERE c.tenant_id = ? AND (${clauses.join(' OR ')}) ${excludeId ? 'AND c.id <> ?' : ''}
+       ORDER BY c.id DESC LIMIT 8`, params);
+    const matches = rows.map((r) => {
+      const reasons = [];
+      if (email && String(r.email || '').toLowerCase() === email) reasons.push('email');
+      if (phone && (r.phone === phone || r.mobile === phone)) reasons.push('τηλέφωνο');
+      if (mobile && mobile !== phone && (r.phone === mobile || r.mobile === mobile)) reasons.push('κινητό');
+      if (taxId && r.tax_id === taxId) reasons.push('ΑΦΜ');
+      return { ...r, reasons };
+    });
+    res.json({ matches });
+  } catch (err) { next(err); }
+});
+
 // POST /api/customers — create a customer in the caller's tenant.
 customersRouter.post('/', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
   try {
@@ -129,6 +165,7 @@ customersRouter.post('/', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, re
       tax_id: b.tax_id || null, customer_type: b.customer_type || 'individual',
       status: b.status || 'active', is_vip: b.is_vip ? 1 : 0, date_of_birth: b.date_of_birth || null,
       address_line: b.address_line || null, city: b.city || null, postal_code: b.postal_code || null,
+      country: b.country || 'Ελλάδα', avatar_url: b.avatar_url || null,
       profile_note: b.profile_note || null, assigned_employee_id: b.assigned_employee_id || null,
       search_norm: '',
     };
@@ -139,6 +176,7 @@ customersRouter.post('/', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, re
     const code = `C-${100000 + id}`;
     await query('UPDATE customers SET code = ?, search_norm = ? WHERE id = ?',
       [code, customerSearchNorm({ ...vals, code }), id]);
+    await logActivity({ tenantId: req.user.tenantId, customerId: id, type: 'customer_created', description: 'Δημιουργία πελάτη' });
     res.status(201).json({ id, code });
   } catch (err) { next(err); }
 });
@@ -162,6 +200,7 @@ customersRouter.patch('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req
     sets.push('updated_at = NOW()');
     params.push(id);
     await query(`UPDATE customers SET ${sets.join(', ')} WHERE id = ?`, params);
+    await logActivity({ tenantId: req.user.tenantId, customerId: id, type: 'customer_updated', description: 'Ενημέρωση στοιχείων πελάτη' });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
@@ -197,7 +236,18 @@ customersRouter.get('/:id', async (req, res, next) => {
        WHERE b.customer_id = ? AND b.starts_at >= NOW()
        ORDER BY b.starts_at ASC LIMIT 1`, [id]);
 
-    res.json({ customer, tags: tags.rows, nextBooking: nextBooking.rows[0] || null });
+    const contacts = await query(
+      `SELECT id, first_name, last_name, role, email, phone, mobile, is_primary, notes
+       FROM customer_contacts WHERE customer_id = ?
+       ORDER BY is_primary DESC, last_name, first_name`, [id]);
+
+    res.json({
+      customer,
+      tags: tags.rows,
+      nextBooking: nextBooking.rows[0] || null,
+      contacts: contacts.rows,
+      primaryContact: contacts.rows.find((c) => c.is_primary) || contacts.rows[0] || null,
+    });
   } catch (err) {
     next(err);
   }
@@ -208,20 +258,33 @@ customersRouter.get('/:id/branches', async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     const branches = await query(
-      `SELECT id, is_primary, visits_count, spaces_count, total_value, last_visit_at,
-              name, address_line, city, area, phone, email, image_url, lat, lng
-       FROM branches WHERE customer_id = ?
-       ORDER BY is_primary DESC, visits_count DESC`, [id]);
+      `SELECT b.id, b.is_primary, b.visits_count, b.spaces_count, b.total_value, b.last_visit_at,
+              b.name, b.address_line, b.city, b.area, b.phone, b.email, b.image_url, b.lat, b.lng,
+              b.status, b.opening_hours, b.manager_employee_id, e.full_name AS manager_name,
+              b.postal_code
+       FROM branches b LEFT JOIN employees e ON e.id = b.manager_employee_id
+       WHERE b.customer_id = ?
+       ORDER BY b.is_primary DESC, b.visits_count DESC`, [id]);
 
     const spaces = await query(
       `SELECT id, branch_id, visits_count, bookings_count, last_visit_at,
-              name, space_type, image_url, capacity, floor
+              name, space_type, image_url, capacity, floor, status, amenities,
+              hourly_price, daily_price, weekend_hourly_price
        FROM spaces WHERE customer_id = ?
        ORDER BY visits_count DESC`, [id]);
 
     const byBranch = {};
-    for (const s of spaces.rows) (byBranch[s.branch_id] ||= []).push(s);
-    res.json({ branches: branches.rows.map((b) => ({ ...b, spaces: byBranch[b.id] || [] })) });
+    for (const s of spaces.rows) {
+      s.amenities = parseJson(s.amenities, []);
+      (byBranch[s.branch_id] ||= []).push(s);
+    }
+    res.json({
+      branches: branches.rows.map((b) => ({
+        ...b,
+        opening_hours: parseJson(b.opening_hours, null),
+        spaces: byBranch[b.id] || [],
+      })),
+    });
   } catch (err) {
     next(err);
   }
@@ -246,6 +309,7 @@ customersRouter.get('/:id/spaces/:spaceId/usage', async (req, res, next) => {
        WHERE customer_id = ? AND space_id = ? ORDER BY visited_at DESC LIMIT 10`, [id, spaceId]);
 
     const s = space.rows[0];
+    s.amenities = parseJson(s.amenities, []);
     res.json({
       space: s,
       usage: { visits_count: s.visits_count, bookings_count: s.bookings_count, last_visit_at: s.last_visit_at },
@@ -311,24 +375,117 @@ customersRouter.get('/:id/notes', subResource(
   `SELECT id, body, created_at FROM notes
    WHERE customer_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`));
 
+// ---- Tags -----------------------------------------------------------------
+customersRouter.post('/:id/tags', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    let tagId = Number(req.body?.tagId);
+    const name = String(req.body?.name || '').trim();
+    if (!tagId && name) {
+      const slug = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `tag-${Date.now()}`;
+      const color = ['blue', 'green', 'gold', 'indigo', 'teal', 'purple', 'slate'][Math.floor(Math.random() * 7)];
+      const existing = (await query('SELECT id FROM tags WHERE slug = ?', [slug])).rows[0];
+      if (existing) tagId = existing.id;
+      else {
+        const r = await query('INSERT INTO tags (name, slug, color) VALUES (?,?,?)', [name, slug, req.body?.color || color]);
+        tagId = r.rows.insertId;
+      }
+    }
+    if (!tagId) return res.status(400).json({ error: 'Απαιτείται ετικέτα' });
+    await query('INSERT IGNORE INTO customer_tags (customer_id, tag_id) VALUES (?,?)', [id, tagId]);
+    const tag = (await query('SELECT id, name, slug, color FROM tags WHERE id = ?', [tagId])).rows[0];
+    res.status(201).json({ tag });
+  } catch (err) { next(err); }
+});
+
+customersRouter.delete('/:id/tags/:tagId', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
+  try {
+    await query('DELETE FROM customer_tags WHERE customer_id = ? AND tag_id = ?',
+      [Number(req.params.id), Number(req.params.tagId)]);
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// ---- Contacts -------------------------------------------------------------
+customersRouter.get('/:id/contacts', async (req, res, next) => {
+  try {
+    const { rows } = await query(
+      `SELECT id, first_name, last_name, role, email, phone, mobile, is_primary, notes, created_at
+       FROM customer_contacts WHERE customer_id = ?
+       ORDER BY is_primary DESC, last_name, first_name`, [Number(req.params.id)]);
+    res.json({ contacts: rows });
+  } catch (err) { next(err); }
+});
+
+async function unsetOtherPrimary(customerId, keepId) {
+  await query('UPDATE customer_contacts SET is_primary = 0 WHERE customer_id = ? AND id <> ?', [customerId, keepId || 0]);
+}
+
+customersRouter.post('/:id/contacts', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
+  try {
+    const customerId = Number(req.params.id);
+    const b = req.body || {};
+    if (!b.first_name || !b.last_name) return res.status(400).json({ error: 'Συμπληρώστε όνομα και επώνυμο' });
+    const r = await query(
+      `INSERT INTO customer_contacts
+        (tenant_id, customer_id, first_name, last_name, role, email, phone, mobile, is_primary, notes)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      [req.user.tenantId, customerId, b.first_name, b.last_name, b.role || null, b.email || null,
+        b.phone || null, b.mobile || null, b.is_primary ? 1 : 0, b.notes || null]);
+    const id = r.rows.insertId;
+    if (b.is_primary) await unsetOtherPrimary(customerId, id);
+    await logActivity({
+      tenantId: req.user.tenantId, customerId, type: 'contact_added',
+      description: `Προστέθηκε επαφή: ${b.first_name} ${b.last_name}`,
+    });
+    res.status(201).json({ id });
+  } catch (err) { next(err); }
+});
+
+customersRouter.patch('/:id/contacts/:contactId', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
+  try {
+    const customerId = Number(req.params.id);
+    const contactId = Number(req.params.contactId);
+    const cur = (await query(
+      'SELECT * FROM customer_contacts WHERE id = ? AND customer_id = ?', [contactId, customerId])).rows[0];
+    if (!cur) return res.status(404).json({ error: 'Η επαφή δεν βρέθηκε' });
+    const b = req.body || {};
+    const fields = ['first_name', 'last_name', 'role', 'email', 'phone', 'mobile', 'notes'];
+    const sets = []; const params = [];
+    for (const f of fields) if (b[f] !== undefined) { sets.push(`${f} = ?`); params.push(b[f] === '' ? null : b[f]); }
+    if (b.is_primary !== undefined) { sets.push('is_primary = ?'); params.push(b.is_primary ? 1 : 0); }
+    if (!sets.length) return res.status(400).json({ error: 'Καμία αλλαγή' });
+    params.push(contactId);
+    await query(`UPDATE customer_contacts SET ${sets.join(', ')} WHERE id = ?`, params);
+    if (b.is_primary) await unsetOtherPrimary(customerId, contactId);
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+customersRouter.delete('/:id/contacts/:contactId', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
+  try {
+    const customerId = Number(req.params.id);
+    const contactId = Number(req.params.contactId);
+    const cur = (await query(
+      'SELECT first_name, last_name FROM customer_contacts WHERE id = ? AND customer_id = ?',
+      [contactId, customerId])).rows[0];
+    if (!cur) return res.status(404).json({ error: 'Η επαφή δεν βρέθηκε' });
+    await query('DELETE FROM customer_contacts WHERE id = ?', [contactId]);
+    await logActivity({
+      tenantId: req.user.tenantId, customerId, type: 'contact_removed',
+      description: `Διαγράφηκε επαφή: ${cur.first_name} ${cur.last_name}`,
+    });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 // GET /api/customers/:id/custom-fields — definitions + this customer's values.
 customersRouter.get('/:id/custom-fields', async (req, res, next) => {
   try {
-    const id = Number(req.params.id);
-    const { rows } = await query(
-      `SELECT d.id, d.name, d.\`key\`, d.field_type, d.section, d.sort_order, d.settings, d.required,
-              d.searchable, d.filterable,
-              v.text_value, v.number_value, v.date_value, v.boolean_value, v.json_value
-       FROM custom_field_definitions d
-       LEFT JOIN customer_custom_field_values v
-         ON v.field_definition_id = d.id AND v.customer_id = ?
-       WHERE d.entity_type = 'customer' AND d.active = 1 AND d.tenant_id = ?
-       ORDER BY d.sort_order, d.id`, [id, req.user.tenantId]);
-    for (const r of rows) {
-      if (typeof r.settings === 'string') { try { r.settings = JSON.parse(r.settings); } catch { r.settings = {}; } }
-      if (typeof r.json_value === 'string') { try { r.json_value = JSON.parse(r.json_value); } catch { /* keep */ } }
-    }
-    res.json({ fields: rows });
+    const fields = await loadEntityCustomFields(query, {
+      tenantId: req.user.tenantId, entityType: 'customer', entityId: Number(req.params.id),
+    });
+    res.json({ fields });
   } catch (err) {
     next(err);
   }
@@ -337,29 +494,10 @@ customersRouter.get('/:id/custom-fields', async (req, res, next) => {
 // PUT /api/customers/:id/custom-fields — upsert this customer's custom field values.
 customersRouter.put('/:id/custom-fields', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
   try {
-    const id = Number(req.params.id);
-    const values = req.body?.values || {};
-    const defs = (await query(
-      'SELECT id, field_type FROM custom_field_definitions WHERE tenant_id = ? AND entity_type = ?',
-      [req.user.tenantId, 'customer'])).rows;
-    const byId = new Map(defs.map((d) => [String(d.id), d]));
-    for (const [defId, val] of Object.entries(values)) {
-      const def = byId.get(String(defId));
-      if (!def) continue;
-      const c = valueColumns(def.field_type, val);
-      const empty = c.text_value == null && c.number_value == null && c.date_value == null && c.boolean_value == null && c.json_value == null;
-      if (empty) {
-        await query('DELETE FROM customer_custom_field_values WHERE customer_id=? AND field_definition_id=?', [id, defId]);
-      } else {
-        await query(
-          `INSERT INTO customer_custom_field_values
-            (customer_id, field_definition_id, text_value, number_value, date_value, boolean_value, json_value)
-           VALUES (?,?,?,?,?,?,?)
-           ON DUPLICATE KEY UPDATE text_value=VALUES(text_value), number_value=VALUES(number_value),
-             date_value=VALUES(date_value), boolean_value=VALUES(boolean_value), json_value=VALUES(json_value)`,
-          [id, defId, c.text_value, c.number_value, c.date_value, c.boolean_value, c.json_value]);
-      }
-    }
+    await saveEntityCustomFields(query, {
+      tenantId: req.user.tenantId, entityType: 'customer',
+      entityId: Number(req.params.id), values: req.body?.values || {},
+    });
     res.json({ ok: true });
   } catch (err) {
     next(err);

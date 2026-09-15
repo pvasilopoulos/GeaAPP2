@@ -22,6 +22,7 @@ DROP TABLE IF EXISTS notes;
 DROP TABLE IF EXISTS payments;
 DROP TABLE IF EXISTS visits;
 DROP TABLE IF EXISTS bookings;
+DROP TABLE IF EXISTS customer_contacts;
 DROP TABLE IF EXISTS customer_tags;
 DROP TABLE IF EXISTS tags;
 DROP TABLE IF EXISTS customer_spaces;
@@ -134,9 +135,32 @@ CREATE TABLE customers (
   KEY idx_customers_created_keyset (tenant_id, created_at, id),
   KEY idx_customers_name_keyset (tenant_id, full_name, id),
   KEY idx_customers_employee (assigned_employee_id),
+  KEY idx_customers_email (tenant_id, email),
+  KEY idx_customers_phone (tenant_id, phone),
+  KEY idx_customers_tax (tenant_id, tax_id),
   FULLTEXT KEY ft_customers_search (search_norm),
   CONSTRAINT fk_customers_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
   CONSTRAINT fk_customers_employee FOREIGN KEY (assigned_employee_id) REFERENCES employees(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Multiple contacts per customer (company stakeholders, extra people).
+CREATE TABLE customer_contacts (
+  id          BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  tenant_id   BIGINT NOT NULL,
+  customer_id BIGINT NOT NULL,
+  first_name  VARCHAR(120) NOT NULL,
+  last_name   VARCHAR(120) NOT NULL,
+  role        VARCHAR(120),
+  email       VARCHAR(255),
+  phone       VARCHAR(40),
+  mobile      VARCHAR(40),
+  is_primary  TINYINT(1) NOT NULL DEFAULT 0,
+  notes       VARCHAR(400),
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_contacts_customer (customer_id, is_primary),
+  KEY idx_contacts_tenant (tenant_id),
+  CONSTRAINT fk_contacts_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+  CONSTRAINT fk_contacts_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------------
@@ -158,6 +182,9 @@ CREATE TABLE branches (
   lat           DOUBLE,
   lng           DOUBLE,
   is_primary    TINYINT(1) NOT NULL DEFAULT 0,
+  status        VARCHAR(20) NOT NULL DEFAULT 'active',
+  manager_employee_id BIGINT NULL,
+  opening_hours JSON NULL,
   spaces_count  INT NOT NULL DEFAULT 0,
   visits_count  INT NOT NULL DEFAULT 0,
   total_value   DECIMAL(12,2) NOT NULL DEFAULT 0,
@@ -166,9 +193,11 @@ CREATE TABLE branches (
   search_norm   VARCHAR(768) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',
   KEY idx_branches_customer (customer_id),
   KEY idx_branches_tenant_city (tenant_id, city),
+  KEY idx_branches_status (tenant_id, status),
   FULLTEXT KEY ft_branches_search (search_norm),
   CONSTRAINT fk_branches_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
-  CONSTRAINT fk_branches_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+  CONSTRAINT fk_branches_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+  CONSTRAINT fk_branches_manager FOREIGN KEY (manager_employee_id) REFERENCES employees(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------------
@@ -185,8 +214,15 @@ CREATE TABLE spaces (
   capacity       INT,
   floor          VARCHAR(40),
   hourly_price   DECIMAL(10,2),
+  daily_price    DECIMAL(10,2),
+  weekend_hourly_price DECIMAL(10,2),
   image_url      VARCHAR(512),
   description    TEXT,
+  status         VARCHAR(20) NOT NULL DEFAULT 'available',
+  amenities      JSON NULL,
+  min_duration_minutes INT NOT NULL DEFAULT 60,
+  slot_step_minutes    INT NOT NULL DEFAULT 30,
+  buffer_minutes       INT NOT NULL DEFAULT 0,
   visits_count   INT NOT NULL DEFAULT 0,
   bookings_count INT NOT NULL DEFAULT 0,
   last_visit_at  DATETIME NULL,
@@ -195,6 +231,7 @@ CREATE TABLE spaces (
   KEY idx_spaces_branch (branch_id),
   KEY idx_spaces_customer (customer_id),
   KEY idx_spaces_tenant_type (tenant_id, space_type),
+  KEY idx_spaces_status (tenant_id, status),
   FULLTEXT KEY ft_spaces_search (search_norm),
   CONSTRAINT fk_spaces_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
   CONSTRAINT fk_spaces_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,

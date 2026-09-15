@@ -21,7 +21,7 @@ searchRouter.get('/global', async (req, res, next) => {
 
     const [customers, branches, spaces] = await Promise.all([
       query(
-        `SELECT c.id, c.code, c.full_name, c.status, c.is_vip, c.city,
+        `SELECT c.id, c.code, c.full_name, c.status, c.is_vip, c.city, c.avatar_url,
                 (SELECT b.name FROM branches b WHERE b.customer_id = c.id
                  ORDER BY b.is_primary DESC LIMIT 1) AS primary_branch
          FROM customers c

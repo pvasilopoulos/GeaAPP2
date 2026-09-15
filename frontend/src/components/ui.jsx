@@ -1,7 +1,8 @@
-import { initials, avatarColor, STATUS_LABELS } from '../lib/format.js';
+import { initials, avatarColor, STATUS_LABELS, BRANCH_STATUS_LABELS, SPACE_STATUS_LABELS } from '../lib/format.js';
 import Icon from './Icon.jsx';
 
-export function Avatar({ name, src, size = 40, square = false }) {
+export function Avatar({ name, src, size = 40, square = false, fallback = true }) {
+  if (!src && !fallback) return null;
   const style = { width: size, height: size, fontSize: size * 0.38, background: avatarColor(name) };
   return (
     <div className={`avatar${square ? ' sq' : ''}`} style={style}>
@@ -11,10 +12,11 @@ export function Avatar({ name, src, size = 40, square = false }) {
 }
 
 export function StatusBadge({ status }) {
+  const label = STATUS_LABELS[status] || BRANCH_STATUS_LABELS[status] || SPACE_STATUS_LABELS[status] || status;
   return (
     <span className={`badge badge-${status}`}>
       <span className="dot" />
-      {STATUS_LABELS[status] || status}
+      {label}
     </span>
   );
 }
@@ -27,8 +29,17 @@ export function VipBadge() {
   );
 }
 
-export function Tag({ name, color = 'blue' }) {
-  return <span className={`tag tag-${color}`}>{name}</span>;
+export function Tag({ name, color = 'blue', onRemove }) {
+  return (
+    <span className={`tag tag-${color}`}>
+      {name}
+      {onRemove && (
+        <button type="button" className="tag-x" onClick={(e) => { e.stopPropagation(); onRemove(); }} aria-label="Αφαίρεση">
+          <Icon name="x" size={11} />
+        </button>
+      )}
+    </span>
+  );
 }
 
 export function Skeleton({ w = '100%', h = 14, style }) {
@@ -65,10 +76,14 @@ export function Drawer({ title, subtitle, onClose, children }) {
   );
 }
 
-export function BranchThumb({ src, name, size = 56, radius = 9 }) {
-  return src
-    ? <img className="branch-thumb" src={src} alt={name}
+export function BranchThumb({ src, name, size = 56, radius = 9, placeholder = true }) {
+  if (src) {
+    return (
+      <img className="branch-thumb" src={src} alt={name}
         style={{ width: size, height: size, borderRadius: radius, objectFit: 'cover', flex: 'none', background: 'var(--surface-2)' }}
         onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-    : <div style={{ width: size, height: size, borderRadius: radius, flex: 'none', background: avatarColor(name) }} />;
+    );
+  }
+  if (!placeholder) return null;
+  return <div style={{ width: size, height: size, borderRadius: radius, flex: 'none', background: avatarColor(name) }} />;
 }

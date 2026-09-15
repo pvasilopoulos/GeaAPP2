@@ -1,7 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api.js';
 import Icon from '../Icon.jsx';
-import { Avatar, Tag, StatusBadge, Skeleton, EmptyState } from '../ui.jsx';
+import { Avatar, StatusBadge, Skeleton, EmptyState } from '../ui.jsx';
+import TagsEditor from './TagsEditor.jsx';
+import { useAuth } from '../../store/auth.js';
+import { PERMS } from '../../lib/perms.js';
 import { BranchThumb } from '../ui.jsx';
 import {
   formatCurrency, formatNumber, formatDate, formatDateTime, formatTime,
@@ -16,6 +19,16 @@ const ACTIVITY_ICONS = {
   note_added: { icon: 'note', bg: 'var(--amber-soft)', fg: 'var(--amber)' },
   visit: { icon: 'pin', bg: '#eaeafe', fg: '#6d28d9' },
   document_uploaded: { icon: 'file', bg: 'var(--surface-2)', fg: 'var(--text-2)' },
+  customer_created: { icon: 'users', bg: 'var(--accent-soft)', fg: 'var(--accent)' },
+  customer_updated: { icon: 'edit', bg: 'var(--accent-soft)', fg: 'var(--accent)' },
+  contact_added: { icon: 'users', bg: 'var(--green-soft)', fg: 'var(--green)' },
+  contact_removed: { icon: 'x', bg: 'var(--red-soft)', fg: 'var(--red)' },
+  branch_created: { icon: 'building', bg: 'var(--accent-soft)', fg: 'var(--accent)' },
+  branch_updated: { icon: 'building', bg: 'var(--amber-soft)', fg: 'var(--amber)' },
+  branch_deleted: { icon: 'building', bg: 'var(--red-soft)', fg: 'var(--red)' },
+  space_created: { icon: 'grid', bg: 'var(--accent-soft)', fg: 'var(--accent)' },
+  space_updated: { icon: 'grid', bg: 'var(--amber-soft)', fg: 'var(--amber)' },
+  space_deleted: { icon: 'grid', bg: 'var(--red-soft)', fg: 'var(--red)' },
 };
 
 function fieldValue(f) {
@@ -32,8 +45,9 @@ function visible(f, customer) {
   return true;
 }
 
-export default function Overview({ customerId, data, onOpenTab }) {
+export default function Overview({ customerId, data, onOpenTab, onEditCustomer }) {
   const c = data.customer;
+  const canWrite = useAuth((s) => s.hasPerm(PERMS.CUSTOMERS_WRITE));
 
   const branchesQ = useQuery({ queryKey: ['c-branches', customerId], queryFn: ({ signal }) => api.customerBranches(customerId, { signal }) });
   const actsQ = useQuery({ queryKey: ['c-acts', customerId, 'ov'], queryFn: ({ signal }) => api.customerActivities(customerId, { limit: 6 }, { signal }) });
@@ -55,7 +69,9 @@ export default function Overview({ customerId, data, onOpenTab }) {
       {/* LEFT */}
       <div className="stack">
         <div className="card">
-          <div className="card-head"><h3><Icon name="users" /> Βασικά στοιχεία</h3><a className="link" onClick={() => onOpenTab('branches')}>Επεξεργασία</a></div>
+          <div className="card-head"><h3><Icon name="users" /> Βασικά στοιχεία</h3>
+            {canWrite && <a className="link" onClick={onEditCustomer}>Επεξεργασία</a>}
+          </div>
           <div className="card-pad" style={{ paddingTop: 4 }}>
             <InfoRow k="Ονοματεπώνυμο" v={c.full_name} />
             <InfoRow k="Τύπος πελάτη" v={TYPE_LABELS[c.customer_type]} />
@@ -63,9 +79,12 @@ export default function Overview({ customerId, data, onOpenTab }) {
             {c.tax_id && <InfoRow k="ΑΦΜ" v={c.tax_id} />}
             <InfoRow k="Τηλέφωνο" v={c.phone} />
             <InfoRow k="Email" v={c.email} />
-            <InfoRow k="Διεύθυνση" v={[c.address_line, c.city, c.postal_code].filter(Boolean).join(', ')} />
+            <InfoRow k="Διεύθυνση" v={[c.address_line, c.city, c.postal_code, c.country].filter(Boolean).join(', ')} />
             <InfoRow k="Ημ. γέννησης" v={formatDate(c.date_of_birth)} />
             <InfoRow k="Υπεύθυνος" v={c.assigned_employee} />
+            {data.primaryContact && (
+              <InfoRow k="Κύρια επαφή" v={`${data.primaryContact.first_name} ${data.primaryContact.last_name}${data.primaryContact.role ? ` · ${data.primaryContact.role}` : ''}`} />
+            )}
             {customFields.length > 0 && (
               <>
                 <div style={{ fontSize: 11.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--text-3)', margin: '14px 0 6px' }}>Πρόσθετα πεδία</div>
@@ -76,12 +95,8 @@ export default function Overview({ customerId, data, onOpenTab }) {
         </div>
 
         <div className="card">
-          <div className="card-head"><h3><Icon name="tag" /> Tags</h3><a className="link"><Icon name="plus" size={13} /> Προσθήκη</a></div>
-          <div className="card-pad" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {data.tags.length === 0 && <span className="muted">Χωρίς ετικέτες</span>}
-            {data.tags.map((t) => <Tag key={t.id} name={t.name} color={t.color} />)}
-            <span className="tag tag-add"><Icon name="plus" size={12} /></span>
-          </div>
+          <div className="card-head"><h3><Icon name="tag" /> Tags</h3></div>
+          <TagsEditor customerId={customerId} tags={data.tags} canWrite={canWrite} />
         </div>
 
         <div className="card">
@@ -119,7 +134,7 @@ export default function Overview({ customerId, data, onOpenTab }) {
               <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 6 }}>Χώροι που χρησιμοποιεί ({b.spaces.length})</div>
               {b.spaces.slice(0, 3).map((s) => (
                 <div key={s.id} className="search-row" style={{ padding: '7px 8px' }}>
-                  <BranchThumb src={s.image_url} name={s.name} size={34} radius={7} />
+                  <BranchThumb src={s.image_url} name={s.name} size={34} radius={7} placeholder={false} />
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 600, fontSize: 13 }}>{s.name}</div>
                     <div className="meta" style={{ fontSize: 11.5 }}>{formatNumber(s.bookings_count)} κρατήσεις</div>
@@ -130,7 +145,7 @@ export default function Overview({ customerId, data, onOpenTab }) {
             </div>
           ))}
           <button className="btn" style={{ width: '100%', justifyContent: 'center', marginTop: 4 }} onClick={() => onOpenTab('branches')}>
-            <Icon name="plus" size={15} /> Νέα κράτηση για τον πελάτη
+            <Icon name="plus" size={15} /> Διαχείριση υποκαταστημάτων & χώρων
           </button>
         </div>
       </div>

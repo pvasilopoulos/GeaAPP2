@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api.js';
 import Icon from '../Icon.jsx';
-import { Skeleton, EmptyState, Drawer, BranchThumb } from '../ui.jsx';
-import { formatCurrency, formatNumber, formatDate, BOOKING_STATUS } from '../../lib/format.js';
+import { Skeleton, EmptyState, Drawer, BranchThumb, StatusBadge } from '../ui.jsx';
+import { formatCurrency, formatNumber, formatDate, BOOKING_STATUS, AMENITY_LABELS, mapUrl, hoursSummary } from '../../lib/format.js';
 import { useAuth } from '../../store/auth.js';
 import { PERMS } from '../../lib/perms.js';
 import { BranchFormDrawer, SpaceFormDrawer } from '../forms.jsx';
@@ -88,7 +88,7 @@ export default function BranchesSpaces({ customerId }) {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div className="nm">{b.name} {b.is_primary && <span className="pill" style={{ color: 'var(--accent)', background: 'var(--accent-soft)', border: 'none' }}>Κύριο</span>}</div>
                     <div className="ad">{b.address_line}, {b.city}</div>
-                    <div className="st">{formatNumber(b.spaces.length)} χώροι · {formatNumber(b.visits_count)} επισκέψεις</div>
+                    <div className="st"><StatusBadge status={b.status || 'active'} /> · {formatNumber(b.spaces.length)} χώροι · {formatNumber(b.visits_count)} επισκέψεις</div>
                   </div>
                   <Icon name="chevronRight" size={16} style={{ color: 'var(--text-3)' }} />
                 </div>
@@ -117,9 +117,10 @@ export default function BranchesSpaces({ customerId }) {
             <div className="hero">
               <BranchThumb src={selected.image_url} name={selected.name} size={92} radius={11} />
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
                   <h2 style={{ margin: 0, fontSize: 20 }}>{selected.name}</h2>
                   {selected.is_primary && <span className="pill" style={{ color: 'var(--accent)', background: 'var(--accent-soft)', border: 'none' }}>Κύριο υποκατάστημα</span>}
+                  <StatusBadge status={selected.status || 'active'} />
                 </div>
                 <div className="ph-contact" style={{ marginTop: 8 }}>
                   <span className="item"><Icon name="pin" /> {selected.address_line}, {selected.city}</span>
@@ -127,6 +128,8 @@ export default function BranchesSpaces({ customerId }) {
                 <div className="ph-contact" style={{ marginTop: 4 }}>
                   {selected.phone && <span className="item"><Icon name="phone" /> {selected.phone}</span>}
                   {selected.email && <span className="item"><Icon name="mail" /> {selected.email}</span>}
+                  {selected.manager_name && <span className="item"><Icon name="users" /> {selected.manager_name}</span>}
+                  <span className="item"><Icon name="clock" /> {hoursSummary(selected.opening_hours)}</span>
                 </div>
               </div>
             </div>
@@ -138,7 +141,11 @@ export default function BranchesSpaces({ customerId }) {
           </div>
 
           <div style={{ display: 'flex', gap: 9, marginTop: 14 }}>
-            <button className="btn btn-sm"><Icon name="map" size={15} /> Προβολή στον χάρτη</button>
+            {mapUrl(selected) && (
+              <a className="btn btn-sm" href={mapUrl(selected)} target="_blank" rel="noreferrer">
+                <Icon name="map" size={15} /> Προβολή στον χάρτη
+              </a>
+            )}
             {canWrite && <button className="btn btn-sm" onClick={() => setBranchForm({ branch: selected })}><Icon name="edit" size={15} /> Επεξεργασία</button>}
             {canWrite && <button className="btn btn-sm" onClick={deleteBranch}><Icon name="x" size={15} /> Διαγραφή</button>}
           </div>
@@ -156,12 +163,20 @@ export default function BranchesSpaces({ customerId }) {
               {selected.spaces.map((s) => (
                 <div key={s.id} className="space-card" onClick={() => setDrawerSpace(s)}>
                   {s.image_url
-                    ? <img className="img" src={s.image_url} alt={s.name} onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }} />
-                    : <div className="img" />}
+                    ? <img className="img" src={s.image_url} alt={s.name} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                    : null}
                   <div className="body">
                     <div className="nm">{s.name}</div>
                     <div className="st">{formatNumber(s.visits_count)} επισκέψεις · {formatNumber(s.bookings_count)} κρατήσεις</div>
-                    <div style={{ marginTop: 6 }}><span className="pill">{s.space_type}</span></div>
+                    <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <span className="pill">{s.space_type}</span>
+                      <StatusBadge status={s.status || 'available'} />
+                    </div>
+                    {!!(s.amenities || []).length && (
+                      <div className="amenity-mini">
+                        {(s.amenities || []).slice(0, 4).map((k) => <span key={k} className="amenity-chip on tiny">{AMENITY_LABELS[k] || k}</span>)}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -239,9 +254,19 @@ function SpaceDrawer({ customerId, space, canWrite, onClose, onEdit, onDeleted }
           <div className="section-title">Πληροφορίες χώρου</div>
           <InfoRow k="Υποκατάστημα" v={`${data.space.branch_name}, ${data.space.city}`} />
           <InfoRow k="Τύπος" v={data.space.space_type} />
+          <InfoRow k="Κατάσταση" v={<StatusBadge status={data.space.status || 'available'} />} />
           <InfoRow k="Χωρητικότητα" v={data.space.capacity ? `${data.space.capacity} άτομα` : '—'} />
           <InfoRow k="Όροφος" v={data.space.floor} />
           <InfoRow k="Τιμή/ώρα" v={data.space.hourly_price ? formatCurrency(data.space.hourly_price) : '—'} />
+          <InfoRow k="Τιμή/ημέρα" v={data.space.daily_price ? formatCurrency(data.space.daily_price) : '—'} />
+          <InfoRow k="Σαββατοκύριακο/ώρα" v={data.space.weekend_hourly_price ? formatCurrency(data.space.weekend_hourly_price) : '—'} />
+          <InfoRow k="Ελάχ. διάρκεια" v={data.space.min_duration_minutes ? `${data.space.min_duration_minutes} λεπτά` : '—'} />
+          <InfoRow k="Βήμα / buffer" v={`${data.space.slot_step_minutes || 0}′ / ${data.space.buffer_minutes || 0}′`} />
+          {(data.space.amenities || []).length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '10px 0 4px' }}>
+              {data.space.amenities.map((k) => <span key={k} className="amenity-chip on">{AMENITY_LABELS[k] || k}</span>)}
+            </div>
+          )}
 
           <div className="section-title" style={{ marginTop: 18 }}>Χρήση από τον πελάτη</div>
           <div className="stat-grid">

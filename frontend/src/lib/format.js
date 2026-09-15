@@ -58,6 +58,47 @@ export function avatarColor(seed) {
 
 export const STATUS_LABELS = { active: 'Ενεργός', inactive: 'Ανενεργός', prospect: 'Υποψήφιος' };
 export const TYPE_LABELS = { individual: 'Ιδιώτης', company: 'Εταιρεία' };
+export const BRANCH_STATUS_LABELS = { active: 'Ενεργό', renovation: 'Ανακαίνιση', closed: 'Κλειστό' };
+export const SPACE_STATUS_LABELS = { available: 'Διαθέσιμος', maintenance: 'Συντήρηση', inactive: 'Ανενεργός' };
+export const AMENITY_LABELS = {
+  wifi: 'Wi‑Fi', projector: 'Projector', whiteboard: 'Whiteboard', parking: 'Parking',
+  accessible: 'Προσβασιμότητα ΑμεΑ', video_conf: 'Video conference', coffee: 'Καφές / κουζίνα', ac: 'Κλιματισμός',
+};
+export const WEEKDAYS = [
+  { key: 'mon', label: 'Δευτέρα', short: 'Δευ' },
+  { key: 'tue', label: 'Τρίτη', short: 'Τρί' },
+  { key: 'wed', label: 'Τετάρτη', short: 'Τετ' },
+  { key: 'thu', label: 'Πέμπτη', short: 'Πέμ' },
+  { key: 'fri', label: 'Παρασκευή', short: 'Παρ' },
+  { key: 'sat', label: 'Σάββατο', short: 'Σάβ' },
+  { key: 'sun', label: 'Κυριακή', short: 'Κυρ' },
+];
+export const CONTACT_ROLES = [
+  'Κύρια επαφή', 'Διευθυντής', 'Υπεύθυνος χώρων', 'Λογιστήριο',
+  'Γραμματεία', 'IT', 'Νόμιμος εκπρόσωπος', 'Άλλο',
+];
+export function defaultOpeningHours() {
+  const day = { open: '09:00', close: '18:00', closed: false };
+  return {
+    mon: { ...day }, tue: { ...day }, wed: { ...day }, thu: { ...day }, fri: { ...day },
+    sat: { open: '10:00', close: '16:00', closed: true },
+    sun: { open: '10:00', close: '16:00', closed: true },
+  };
+}
+export function mapUrl(branch) {
+  if (branch?.lat != null && branch?.lng != null && branch.lat !== '' && branch.lng !== '') {
+    return `https://www.openstreetmap.org/?mlat=${branch.lat}&mlon=${branch.lng}#map=16/${branch.lat}/${branch.lng}`;
+  }
+  const q = encodeURIComponent([branch?.address_line, branch?.city, branch?.postal_code].filter(Boolean).join(', '));
+  return q ? `https://www.openstreetmap.org/search?query=${q}` : null;
+}
+export function hoursSummary(hours) {
+  if (!hours) return '—';
+  const open = WEEKDAYS.filter((d) => hours[d.key] && !hours[d.key].closed);
+  if (!open.length) return 'Κλειστό';
+  const first = hours[open[0].key];
+  return `${open[0].short}–${open[open.length - 1].short} ${first.open}–${first.close}`;
+}
 export const BOOKING_STATUS = {
   confirmed: 'Επιβεβαιωμένη', completed: 'Ολοκληρώθηκε', pending: 'Εκκρεμεί',
   cancelled: 'Ακυρώθηκε', no_show: 'Μη προσέλευση',
