@@ -6,6 +6,8 @@ import { Drawer } from './ui.jsx';
 import { ImageUpload, HoursEditor, AmenitiesPicker } from './formBits.jsx';
 import VoiceFill from './VoiceFill.jsx';
 import { defaultOpeningHours, BRANCH_STATUS_LABELS, SPACE_STATUS_LABELS } from '../lib/format.js';
+import { offlineFirst } from '../lib/offlineCache.js';
+import { useOffline } from '../store/offline.js';
 
 const SPACE_TYPES = ['Αίθουσα συνεδριάσεων', 'Ιδιωτικό γραφείο', 'Co-working', 'Lounge', 'Αίθουσα εκδηλώσεων', 'Studio', 'Αίθουσα εκπαίδευσης'];
 
@@ -97,7 +99,12 @@ function Row({ children }) { return <div style={{ display: 'flex', gap: 10 }}>{c
 
 // ---- Customer -------------------------------------------------------------
 export function CustomerFormDrawer({ initial, onClose, onSaved, onOpenExisting }) {
-  const { data: meta } = useQuery({ queryKey: ['meta'], queryFn: ({ signal }) => api.meta({ signal }) });
+  const { data: meta } = useQuery({
+    queryKey: ['meta'],
+    queryFn: offlineFirst('meta', ({ signal }) => api.meta({ signal })),
+  });
+  const online = useOffline((s) => s.online);
+  const queueAction = useOffline((s) => s.add);
   const [f, setF] = useState(() => ({
     first_name: initial?.first_name || '', last_name: initial?.last_name || '',
     customer_type: initial?.customer_type || 'individual', company: initial?.company || '',
@@ -128,7 +135,10 @@ export function CustomerFormDrawer({ initial, onClose, onSaved, onOpenExisting }
 
   const cfQ = useQuery({
     queryKey: initial ? ['cf-form', initial.id] : ['cf-defs', 'customer'],
-    queryFn: ({ signal }) => (initial ? api.customerCustomFields(initial.id, { signal }) : api.metaCustomFields('customer', { signal })),
+    queryFn: offlineFirst(
+      initial ? null : 'cf-defs:customer',
+      ({ signal }) => (initial ? api.customerCustomFields(initial.id, { signal }) : api.metaCustomFields('customer', { signal })),
+    ),
   });
   const [cfFields, setCfFields] = useState([]);
   const [cfValues, setCfValues] = useState({});
@@ -159,9 +169,26 @@ export function CustomerFormDrawer({ initial, onClose, onSaved, onOpenExisting }
     } catch { return []; }
   };
 
+  const cfPayload = () => {
+    const values = {};
+    for (const fld of visibleCf) values[fld.id] = cfValues[fld.id];
+    return values;
+  };
+  const fullName = `${f.first_name} ${f.last_name}`.trim();
+
+  // Without a connection the record is parked in the device queue and replayed
+  // later, so field work does not depend on coverage.
+  const queueOffline = async () => {
+    const customFields = cfPayload();
+    if (initial) await queueAction('customer.update', { id: initial.id, name: fullName, customer: f, customFields });
+    else await queueAction('customer.create', { customer: f, customFields, force });
+    onSaved({ queued: true, full_name: fullName });
+  };
+
   const submit = async (e) => {
     e.preventDefault(); setErr(''); setSaving(true);
     try {
+      if (!online) { await queueOffline(); return; }
       if (!force) {
         const matches = await checkDups();
         if (matches.length) {
@@ -171,16 +198,23 @@ export function CustomerFormDrawer({ initial, onClose, onSaved, onOpenExisting }
       }
       const res = initial ? (await api.updateCustomer(initial.id, f), { id: initial.id }) : await api.createCustomer(f);
       if (visibleCf.length) {
-        const values = {};
-        for (const fld of visibleCf) values[fld.id] = cfValues[fld.id];
-        await api.saveCustomerCustomFields(res.id, values);
+        await api.saveCustomerCustomFields(res.id, cfPayload());
       }
-      onSaved({ id: res.id, full_name: `${f.first_name} ${f.last_name}` });
-    } catch (ex) { setErr(ex.message); } finally { setSaving(false); }
+      onSaved({ id: res.id, full_name: fullName });
+    } catch (ex) {
+      if (ex?.offline) {
+        try { await queueOffline(); return; } catch { setErr('Δεν ήταν δυνατή η τοπική αποθήκευση'); }
+      } else setErr(ex.message);
+    } finally { setSaving(false); }
   };
   return (
     <Drawer title={initial ? 'Επεξεργασία πελάτη' : 'Νέος πελάτης'} subtitle={initial ? `#${initial.code}` : 'Δημιουργία εγγραφής πελάτη'} onClose={onClose}>
       {err && <div className="auth-error">{err}</div>}
+      {!online && (
+        <div className="msg-banner">
+          Χωρίς σύνδεση. Η εγγραφή αποθηκεύεται στη συσκευή και στέλνεται αυτόματα μόλις επανέλθει το δίκτυο.
+        </div>
+      )}
       <form onSubmit={submit}>
         <VoiceFill onApply={applyVoice} defaultLang={tset.voice_lang} />
         <ImageUpload value={f.avatar_url} onChange={(url) => setF((s) => ({ ...s, avatar_url: url }))} label="Φωτογραφία" />
@@ -227,8 +261,10 @@ export function CustomerFormDrawer({ initial, onClose, onSaved, onOpenExisting }
         <DuplicateBox matches={dups} onOpen={onOpenExisting ? (m) => { onClose(); onOpenExisting(m); } : undefined} />
         <CustomFieldsSection fields={visibleCf} values={cfValues} onChange={setCfValues} base={f} />
         <button className="btn btn-accent btn-block" disabled={saving}>
-          {saving ? <span className="spinner" /> : <Icon name="check" size={16} />}
-          {initial ? 'Αποθήκευση' : (force && dups.length ? 'Δημιουργία ούτως ή άλλως' : 'Δημιουργία')}
+          {saving ? <span className="spinner" /> : <Icon name={online ? 'check' : 'cloudUp'} size={16} />}
+          {!online ? 'Αποθήκευση στη συσκευή'
+            : initial ? 'Αποθήκευση'
+              : (force && dups.length ? 'Δημιουργία ούτως ή άλλως' : 'Δημιουργία')}
         </button>
       </form>
     </Drawer>
