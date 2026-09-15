@@ -13,7 +13,7 @@ The UI is in Greek; code, APIs and database identifiers are in English (per spec
 ## Architecture highlights
 
 - **Multi-tenancy.** Every customer/branch/space/booking/activity is scoped by `tenant_id`; all queries are bound to the authenticated user's tenant (tenant isolation enforced server-side).
-- **Auth + RBAC.** JWT login/register (register creates a tenant + owner). Built-in roles (owner / admin / manager / agent / viewer) map to a permission catalog (`customers.*`, `branches.read`, `settings.manage`, `users.manage`, …) enforced on the server and used to gate the UI.
+- **Auth + RBAC.** JWT login/register (register creates a tenant + owner). Roles are **per-tenant and fully manageable**: default roles (owner / admin / manager / agent / viewer) are cloned into each tenant, and users with `roles.manage` can create custom roles and toggle each role's permissions from a catalog (`customers.*`, `branches.read`, `settings.manage`, `users.manage`, `roles.manage`, …). Permissions are enforced on the server and reloaded per request, so changes take effect immediately; they also gate the UI. The owner role always keeps full access.
 - **Ownership hierarchy.** Each customer owns its branches (`branches.customer_id`); each branch owns its spaces (`spaces.branch_id`).
 - **Never loads all customers.** Server-side search/filter/sort with keyset + page pagination and denormalized aggregates keep the directory index-fast.
 - **Smart search** across customers, branches and spaces via FULLTEXT boolean prefix search over a transliterated `search_norm` column. Global command-style search groups results by entity.
