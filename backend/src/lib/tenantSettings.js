@@ -3,8 +3,10 @@ import { mergeMessaging } from './messaging.js';
 export const APP_SETTING_KEYS = [
   'default_country', 'date_format', 'week_starts_on',
   'default_customer_status', 'require_email', 'strict_duplicates',
-  'voice_lang', 'allow_vip',
+  'voice_lang', 'allow_vip', 'map_provider',
 ];
+
+export const MAP_PROVIDER_IDS = ['google', 'osm', 'apple', 'bing'];
 
 export const DEFAULT_TENANT_SETTINGS = {
   default_country: 'Ελλάδα',
@@ -15,6 +17,7 @@ export const DEFAULT_TENANT_SETTINGS = {
   strict_duplicates: false,
   voice_lang: 'el-GR',
   allow_vip: true,
+  map_provider: 'google',
 };
 
 export const DEFAULT_PLATFORM_SETTINGS = {
@@ -35,9 +38,11 @@ export function parseJson(v, fallback) {
 
 export function mergeTenantSettings(raw) {
   const parsed = parseJson(raw, {}) || {};
+  const map_provider = MAP_PROVIDER_IDS.includes(parsed.map_provider) ? parsed.map_provider : DEFAULT_TENANT_SETTINGS.map_provider;
   return {
     ...DEFAULT_TENANT_SETTINGS,
     ...parsed,
+    map_provider,
     messaging: mergeMessaging(parsed.messaging),
   };
 }

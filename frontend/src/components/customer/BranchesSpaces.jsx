@@ -3,7 +3,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api.js';
 import Icon from '../Icon.jsx';
 import { Skeleton, EmptyState, Drawer, BranchThumb, StatusBadge } from '../ui.jsx';
-import { formatCurrency, formatNumber, formatDate, BOOKING_STATUS, AMENITY_LABELS, mapUrl, hoursSummary } from '../../lib/format.js';
+import { formatCurrency, formatNumber, formatDate, BOOKING_STATUS, AMENITY_LABELS, hoursSummary, WEEKDAYS, isOpenNow, weekdayKey } from '../../lib/format.js';
+import { mapUrl, mapEmbedUrl, mapProviderLabel } from '../../lib/maps.js';
 import { useAuth } from '../../store/auth.js';
 import { PERMS } from '../../lib/perms.js';
 import { BranchFormDrawer, SpaceFormDrawer } from '../forms.jsx';
@@ -21,6 +22,8 @@ export default function BranchesSpaces({ customerId }) {
     queryKey: ['c-branches', customerId],
     queryFn: ({ signal }) => api.customerBranches(customerId, { signal }),
   });
+  const { data: meta } = useQuery({ queryKey: ['meta'], queryFn: ({ signal }) => api.meta({ signal }) });
+  const mapProvider = meta?.tenant?.settings?.map_provider || 'google';
   const visitsQ = useQuery({
     queryKey: ['c-visits', customerId, 'bs'],
     queryFn: ({ signal }) => api.customerVisits(customerId, { limit: 50 }, { signal }),
@@ -112,96 +115,17 @@ export default function BranchesSpaces({ customerId }) {
 
       {/* RIGHT PANEL */}
       {selected && (
-        <div className="card card-pad branch-detail">
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-            <div className="hero">
-              {selected.image_url ? <BranchThumb src={selected.image_url} name={selected.name} size={92} radius={11} /> : null}
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
-                  <h2 style={{ margin: 0, fontSize: 20 }}>{selected.name}</h2>
-                  {selected.is_primary && <span className="pill" style={{ color: 'var(--accent)', background: 'var(--accent-soft)', border: 'none' }}>Κύριο υποκατάστημα</span>}
-                  <StatusBadge status={selected.status || 'active'} />
-                </div>
-                <div className="ph-contact" style={{ marginTop: 8 }}>
-                  <span className="item"><Icon name="pin" /> {selected.address_line}, {selected.city}</span>
-                </div>
-                <div className="ph-contact" style={{ marginTop: 4 }}>
-                  {selected.phone && <span className="item"><Icon name="phone" /> {selected.phone}</span>}
-                  {selected.email && <span className="item"><Icon name="mail" /> {selected.email}</span>}
-                  {selected.manager_name && <span className="item"><Icon name="users" /> {selected.manager_name}</span>}
-                  <span className="item"><Icon name="clock" /> {hoursSummary(selected.opening_hours)}</span>
-                </div>
-              </div>
-            </div>
-            <div className="mini-stats">
-              <div className="mini-stat"><div className="v">{formatNumber(selected.spaces.length)}</div><div className="l">Χώροι</div></div>
-              <div className="mini-stat"><div className="v">{formatNumber(selected.visits_count)}</div><div className="l">Επισκέψεις</div></div>
-              <div className="mini-stat"><div className="v">{formatCurrency(selected.total_value)}</div><div className="l">Συνολική αξία</div></div>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', gap: 9, marginTop: 14 }}>
-            {mapUrl(selected) && (
-              <a className="btn btn-sm" href={mapUrl(selected)} target="_blank" rel="noreferrer">
-                <Icon name="map" size={15} /> Προβολή στον χάρτη
-              </a>
-            )}
-            {canWrite && <button className="btn btn-sm" onClick={() => setBranchForm({ branch: selected })}><Icon name="edit" size={15} /> Επεξεργασία</button>}
-            {canWrite && <button className="btn btn-sm" onClick={deleteBranch}><Icon name="x" size={15} /> Διαγραφή</button>}
-          </div>
-
-          <div className="divider" />
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <div className="section-title" style={{ margin: 0 }}>Χώροι που χρησιμοποιεί ο πελάτης ({selected.spaces.length})</div>
-            {canWrite && <button className="btn btn-sm btn-accent" onClick={() => setSpaceForm({ branchId: selected.id })}><Icon name="plus" size={14} /> Προσθήκη χώρου</button>}
-          </div>
-          {selected.spaces.length === 0 ? (
-            <div className="muted" style={{ padding: '8px 0' }}>Χωρίς χώρους σε αυτό το υποκατάστημα.</div>
-          ) : (
-            <div className="space-cards">
-              {selected.spaces.map((s) => (
-                <div key={s.id} className="space-card" onClick={() => setDrawerSpace(s)}>
-                  {s.image_url
-                    ? <img className="img" src={s.image_url} alt={s.name} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                    : null}
-                  <div className="body">
-                    <div className="nm">{s.name}</div>
-                    <div className="st">{formatNumber(s.visits_count)} επισκέψεις · {formatNumber(s.bookings_count)} κρατήσεις</div>
-                    <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      <span className="pill">{s.space_type}</span>
-                      <StatusBadge status={s.status || 'available'} />
-                    </div>
-                    {!!(s.amenities || []).length && (
-                      <div className="amenity-mini">
-                        {(s.amenities || []).slice(0, 4).map((k) => <span key={k} className="amenity-chip on tiny">{AMENITY_LABELS[k] || k}</span>)}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="divider" />
-
-          <div className="section-title">Ιστορικό επισκέψεων ανά χώρο</div>
-          <table className="data-table">
-            <thead><tr><th>Ημερομηνία</th><th>Χώρος</th><th>Τύπος</th><th>Διάρκεια</th><th>Κατάσταση</th></tr></thead>
-            <tbody>
-              {branchVisits.slice(0, 6).map((v) => (
-                <tr key={v.id}>
-                  <td className="mono">{formatDate(v.visited_at)}</td>
-                  <td>{v.space_name}</td>
-                  <td>{v.visit_type === 'booking' ? 'Κράτηση' : 'Επίσκεψη'}</td>
-                  <td>{v.duration_minutes ? `${Math.round(v.duration_minutes / 60)} ώρες` : '—'}</td>
-                  <td><span className={`badge badge-${v.status}`}>{BOOKING_STATUS[v.status] || v.status}</span></td>
-                </tr>
-              ))}
-              {branchVisits.length === 0 && <tr><td colSpan={5} className="muted" style={{ textAlign: 'center', padding: 20 }}>Χωρίς επισκέψεις</td></tr>}
-            </tbody>
-          </table>
-        </div>
+        <BranchDetail
+          selected={selected}
+          canWrite={canWrite}
+          mapProvider={mapProvider}
+          branchVisits={branchVisits}
+          visitsLoading={visitsQ.isLoading}
+          onEdit={() => setBranchForm({ branch: selected })}
+          onDelete={deleteBranch}
+          onAddSpace={() => setSpaceForm({ branchId: selected.id })}
+          onOpenSpace={setDrawerSpace}
+        />
       )}
 
       {drawerSpace && (
@@ -223,6 +147,167 @@ function MiniOverview({ icon, v, l }) {
     <div className="stat">
       <div className="icn"><Icon name={icon} /></div>
       <div><div className="v" style={{ fontSize: 16 }}>{v}</div><div className="l">{l}</div></div>
+    </div>
+  );
+}
+
+function Fact({ icon, label, value, href }) {
+  if (!value) return null;
+  const inner = (
+    <>
+      <span className="bd-ico"><Icon name={icon} size={15} /></span>
+      <span>
+        <small>{label}</small>
+        <b>{value}</b>
+      </span>
+    </>
+  );
+  if (href) return <a className="bd-fact" href={href} target={href.startsWith('http') ? '_blank' : undefined} rel="noreferrer">{inner}</a>;
+  return <div className="bd-fact">{inner}</div>;
+}
+
+function HoursStrip({ hours }) {
+  const today = weekdayKey();
+  const open = isOpenNow(hours);
+  return (
+    <div className="bd-hours-card">
+      <div className="bd-hours-h">
+        <span>Ωράριο</span>
+        {open == null ? null : (
+          <span className={`bd-live${open ? ' on' : ''}`}>{open ? 'Ανοιχτό τώρα' : 'Κλειστό τώρα'}</span>
+        )}
+      </div>
+      <div className="bd-hours">
+        {WEEKDAYS.map((d) => {
+          const row = hours?.[d.key];
+          const closed = !row || row.closed;
+          return (
+            <div key={d.key} className={`bd-day${closed ? ' off' : ' on'}${d.key === today ? ' today' : ''}`}>
+              <em>{d.short}</em>
+              <span>{closed ? '—' : `${(row.open || '').slice(0, 5)}`}</span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="bd-hours-sum">{hoursSummary(hours)}</div>
+    </div>
+  );
+}
+
+function BranchDetail({ selected, canWrite, mapProvider, branchVisits, visitsLoading, onEdit, onDelete, onAddSpace, onOpenSpace }) {
+  const href = mapUrl(selected, mapProvider);
+  const embed = mapEmbedUrl(selected);
+  const providerName = mapProviderLabel(mapProvider);
+  const address = [selected.address_line, selected.city, selected.postal_code].filter(Boolean).join(', ');
+
+  return (
+    <div className="card branch-detail">
+      {selected.image_url && (
+        <div className="bd-cover">
+          <img src={selected.image_url} alt={selected.name} onError={(e) => { e.currentTarget.parentElement.style.display = 'none'; }} />
+        </div>
+      )}
+      <div className="bd-body">
+        <header className="bd-head">
+          <div>
+            <div className="bd-kicker">{[selected.city !== selected.name ? selected.city : null, selected.area, selected.code].filter(Boolean).join(' · ') || 'Υποκατάστημα'}</div>
+            <h2>{selected.name}</h2>
+            <div className="bd-badges">
+              {selected.is_primary && <span className="pill" style={{ color: 'var(--accent)', background: 'var(--accent-soft)', border: 'none' }}>Κύριο</span>}
+              <StatusBadge status={selected.status || 'active'} />
+            </div>
+          </div>
+          <div className="bd-actions">
+            {href && (
+              <a className="btn btn-sm btn-accent" href={href} target="_blank" rel="noreferrer" title={`Άνοιγμα σε ${providerName}`}>
+                <Icon name="map" size={15} /> {providerName}
+              </a>
+            )}
+            {canWrite && <button className="btn btn-sm" onClick={onEdit}><Icon name="edit" size={15} /> Επεξεργασία</button>}
+            {canWrite && <button className="btn btn-sm btn-icon" title="Διαγραφή" onClick={onDelete}><Icon name="x" size={15} /></button>}
+          </div>
+        </header>
+
+        <div className="bd-kpis">
+          <div className="bd-kpi"><Icon name="grid" size={16} /><div><div className="v">{formatNumber(selected.spaces.length)}</div><div className="l">Χώροι</div></div></div>
+          <div className="bd-kpi"><Icon name="pin" size={16} /><div><div className="v">{formatNumber(selected.visits_count)}</div><div className="l">Επισκέψεις</div></div></div>
+          <div className="bd-kpi"><Icon name="wallet" size={16} /><div><div className="v">{formatCurrency(selected.total_value)}</div><div className="l">Αξία</div></div></div>
+        </div>
+
+        <div className="bd-split">
+          <div className="bd-facts">
+            <Fact icon="pin" label="Διεύθυνση" value={address || selected.city} href={href} />
+            <Fact icon="phone" label="Τηλέφωνο" value={selected.phone} href={selected.phone ? `tel:${selected.phone}` : null} />
+            <Fact icon="mail" label="Email" value={selected.email} href={selected.email ? `mailto:${selected.email}` : null} />
+            <Fact icon="users" label="Υπεύθυνος" value={selected.manager_name} />
+          </div>
+          <div className="bd-aside">
+            <HoursStrip hours={selected.opening_hours} />
+            {embed && (
+              <div className="bd-map">
+                <iframe title="Χάρτης" src={embed} loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
+                <a className="bd-map-open" href={href} target="_blank" rel="noreferrer">Άνοιγμα σε {providerName}</a>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="bd-section">
+          <div className="bd-section-h">
+            <div>
+              <div className="section-title" style={{ margin: 0 }}>Χώροι</div>
+              <div className="muted" style={{ fontSize: 12.5, marginTop: 2 }}>{selected.spaces.length} στον χώρο εργασίας του πελάτη</div>
+            </div>
+            {canWrite && <button className="btn btn-sm btn-accent" onClick={onAddSpace}><Icon name="plus" size={14} /> Προσθήκη</button>}
+          </div>
+          {selected.spaces.length === 0 ? (
+            <div className="bd-empty">Δεν υπάρχουν χώροι σε αυτό το υποκατάστημα.</div>
+          ) : (
+            <div className="space-cards">
+              {selected.spaces.map((s) => (
+                <button type="button" key={s.id} className="space-card" onClick={() => onOpenSpace(s)}>
+                  {s.image_url
+                    ? <img className="img" src={s.image_url} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                    : <div className="space-ph"><Icon name="grid" size={22} /></div>}
+                  <div className="body">
+                    <div className="nm">{s.name}</div>
+                    <div className="st">{formatNumber(s.visits_count)} επισκέψεις · {formatNumber(s.bookings_count)} κρατήσεις</div>
+                    <div className="space-tags">
+                      {s.space_type && <span className="pill">{s.space_type}</span>}
+                      <StatusBadge status={s.status || 'available'} />
+                    </div>
+                    {!!(s.amenities || []).length && (
+                      <div className="amenity-mini">
+                        {(s.amenities || []).slice(0, 3).map((k) => <span key={k} className="amenity-chip on tiny">{AMENITY_LABELS[k] || k}</span>)}
+                      </div>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="bd-section">
+          <div className="section-title" style={{ marginBottom: 8 }}>Πρόσφατες επισκέψεις</div>
+          {visitsLoading ? <Skeleton h={80} /> : branchVisits.length === 0 ? (
+            <div className="bd-empty">Χωρίς επισκέψεις σε αυτό το υποκατάστημα.</div>
+          ) : (
+            <div className="visit-list">
+              {branchVisits.slice(0, 6).map((v) => (
+                <div key={v.id} className="visit-row">
+                  <div className="visit-date">{formatDate(v.visited_at)}</div>
+                  <div>
+                    <div className="visit-space">{v.space_name || 'Χώρος'}</div>
+                    <div className="muted" style={{ fontSize: 12 }}>{v.visit_type === 'booking' ? 'Κράτηση' : 'Επίσκεψη'}{v.duration_minutes ? ` · ${Math.round(v.duration_minutes / 60)} ώρες` : ''}</div>
+                  </div>
+                  <span className={`badge badge-${v.status}`}>{BOOKING_STATUS[v.status] || v.status}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
