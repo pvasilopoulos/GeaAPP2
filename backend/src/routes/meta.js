@@ -4,7 +4,7 @@ import { authorize } from '../middleware/auth.js';
 import { PERMISSIONS } from '../lib/permissions.js';
 import { BRANCH_STATUSES, SPACE_STATUSES, AMENITIES, WEEKDAYS, CONTACT_ROLES } from '../lib/masterData.js';
 import { loadActiveDefinitions } from '../lib/customFields.js';
-import { mergeTenantSettings } from '../lib/tenantSettings.js';
+import { clientTenantSettings } from '../lib/tenantSettings.js';
 
 export const metaRouter = Router();
 metaRouter.use(authorize(PERMISSIONS.CUSTOMERS_READ));
@@ -47,7 +47,7 @@ metaRouter.get('/', async (req, res, next) => {
         locale: tenantRow.rows[0]?.locale || 'el',
         timezone: tenantRow.rows[0]?.timezone || 'Europe/Athens',
         currency: tenantRow.rows[0]?.currency || 'EUR',
-        settings: mergeTenantSettings(tenantRow.rows[0]?.settings),
+        settings: clientTenantSettings(tenantRow.rows[0]?.settings),
       },
     });
   } catch (err) {

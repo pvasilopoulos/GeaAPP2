@@ -1,4 +1,4 @@
-import { slugify, mergeTenantSettings, publicAppSettings } from './tenantSettings.js';
+import { slugify, mergeTenantSettings, publicAppSettings, clientTenantSettings, applyAppSettingsPatch } from './tenantSettings.js';
 
 function assert(cond, msg) {
   if (!cond) throw new Error(msg);
@@ -16,5 +16,17 @@ assert(mergeTenantSettings({}).map_provider === 'google', 'default maps');
 assert(mergeTenantSettings({ map_provider: 'osm' }).map_provider === 'osm', 'osm maps');
 assert(mergeTenantSettings({ map_provider: 'nope' }).map_provider === 'google', 'invalid maps fallback');
 assert(publicAppSettings({ map_provider: 'apple' }).map_provider === 'apple', 'app maps key');
+assert(publicAppSettings({ google_maps_api_key: 'AIzaSecret' }).google_maps_api_key === '', 'maps key masked');
+assert(publicAppSettings({ google_maps_api_key: 'AIzaSecret' }).has_google_maps_api_key === true, 'maps key flag');
+assert(clientTenantSettings({ google_maps_api_key: 'AIzaSecret', messaging: { sms: { api_key: 'sms' } } }).google_maps_api_key === 'AIzaSecret', 'client maps key');
+assert(clientTenantSettings({ messaging: { sms: { api_key: 'sms' } } }).messaging === undefined, 'messaging stripped from client settings');
+
+const kept = applyAppSettingsPatch({ google_maps_api_key: 'keep-me', map_provider: 'osm' }, { map_provider: 'google', google_maps_api_key: '' });
+assert(kept.google_maps_api_key === 'keep-me', 'blank maps key does not wipe');
+assert(kept.map_provider === 'google', 'provider still patches');
+const updated = applyAppSettingsPatch({ google_maps_api_key: 'keep-me' }, { google_maps_api_key: 'AIzaNew' });
+assert(updated.google_maps_api_key === 'AIzaNew', 'maps key updates');
+const masked = applyAppSettingsPatch({ google_maps_api_key: 'keep-me' }, { google_maps_api_key: '••••••••' });
+assert(masked.google_maps_api_key === 'keep-me', 'bullet placeholder does not wipe');
 
 console.log('tenantSettings slugify: ok');

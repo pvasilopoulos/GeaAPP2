@@ -44,7 +44,18 @@ export function mapUrl(branch, provider = 'google') {
   return `https://www.google.com/maps/search/?api=1&query=${q}`;
 }
 
-export function mapEmbedUrl(branch) {
+export function mapEmbedUrl(branch, provider = 'google', apiKey = '') {
+  const key = String(apiKey || '').trim();
+  if (normalizeMapProvider(provider) === 'google' && key) {
+    const params = new URLSearchParams({ key });
+    if (hasCoords(branch)) params.set('q', `${Number(branch.lat)},${Number(branch.lng)}`);
+    else {
+      const q = addressQuery(branch);
+      if (!q) return null;
+      params.set('q', q);
+    }
+    return `https://www.google.com/maps/embed/v1/place?${params.toString()}`;
+  }
   if (!hasCoords(branch)) return null;
   const lat = Number(branch.lat);
   const lng = Number(branch.lng);

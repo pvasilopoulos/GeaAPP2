@@ -3,7 +3,7 @@ import { query } from '../db.js';
 import { authorize } from '../middleware/auth.js';
 import { PERMISSIONS } from '../lib/permissions.js';
 import { loadTenant, getPlatformSettings, setPlatformSetting } from '../lib/tenants.js';
-import { mergeTenantSettings, parseJson, DEFAULT_PLATFORM_SETTINGS, APP_SETTING_KEYS, publicAppSettings } from '../lib/tenantSettings.js';
+import { mergeTenantSettings, parseJson, DEFAULT_PLATFORM_SETTINGS, publicAppSettings, applyAppSettingsPatch } from '../lib/tenantSettings.js';
 import { applyMessagingPatch, channelStatuses, publicMessaging } from '../lib/messaging.js';
 
 export const settingsRouter = Router();
@@ -46,11 +46,7 @@ settingsRouter.patch('/app', authorize(PERMISSIONS.SETTINGS_MANAGE), async (req,
   try {
     const { rows } = await query('SELECT settings FROM tenants WHERE id = ?', [req.user.tenantId]);
     const current = parseJson(rows[0]?.settings, {}) || {};
-    const patch = {};
-    for (const k of APP_SETTING_KEYS) {
-      if (req.body?.[k] !== undefined) patch[k] = req.body[k];
-    }
-    const nextSettings = mergeTenantSettings({ ...current, ...patch });
+    const nextSettings = applyAppSettingsPatch(current, req.body || {});
     await query('UPDATE tenants SET settings = ?, updated_at = NOW() WHERE id = ?',
       [JSON.stringify(nextSettings), req.user.tenantId]);
     res.json({ settings: publicAppSettings(nextSettings) });
