@@ -16,7 +16,7 @@ assert(payload.telegram.has_bot_token === undefined, 'meta stripped');
 assert(payload.telegram.configured === undefined, 'configured stripped');
 assert(payload.email.from_email === 'a@b.gr', 'email kept');
 assert(payload.email.has_smtp_pass === undefined, 'smtp meta stripped');
-assert(payload.sms && payload.viber, 'all channels present');
+assert(payload.sms && payload.viber && payload.viber_routee, 'all channels present');
 
 const broken = {};
 for (const ch of [{ id: 'telegram' }]) {

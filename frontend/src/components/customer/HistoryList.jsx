@@ -33,7 +33,7 @@ const CONFIG = {
   },
 };
 
-const CHANNEL_LABELS = { email: 'Email', sms: 'SMS', call: 'Κλήση', viber: 'Viber', telegram: 'Telegram' };
+const CHANNEL_LABELS = { email: 'Email', sms: 'SMS', call: 'Κλήση', viber: 'Viber', viber_routee: 'Viber Routee', telegram: 'Telegram' };
 const DELIVERY_LABELS = { sent: 'Στάλθηκε', logged: 'Καταχωρήθηκε', failed: 'Αποτυχία' };
 const ACT_LABELS = {
   booking_created: 'Νέα κράτηση', booking_completed: 'Ολοκληρωμένη κράτηση',

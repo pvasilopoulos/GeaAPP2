@@ -2,7 +2,9 @@ export const MESSAGE_CHANNELS = [
   { id: 'email', label: 'Email', icon: 'mail', color: '#2563eb', recipientKind: 'email',
     hint: 'Email μέσω SMTP', placeholder: 'email@domain.gr' },
   { id: 'viber', label: 'Viber', icon: 'viber', color: '#7360f2', recipientKind: 'phone',
-    hint: 'Viber Business', placeholder: '30XXXXXXXXXX' },
+    hint: 'Viber bot (Public Account)', placeholder: '30XXXXXXXXXX' },
+  { id: 'viber_routee', label: 'Viber Routee', icon: 'viber', color: '#5b4fc9', recipientKind: 'phone',
+    hint: 'Viber σε κινητό μέσω Routee', placeholder: '+3069XXXXXXXX' },
   { id: 'sms', label: 'SMS', icon: 'sms', color: '#059669', recipientKind: 'phone',
     hint: 'Γραπτό μήνυμα', placeholder: '30XXXXXXXXXX' },
   { id: 'telegram', label: 'Telegram', icon: 'telegram', color: '#229ed9', recipientKind: 'telegram',
@@ -36,7 +38,7 @@ export function recipientSuggestions(channelId, customer = {}, contacts = []) {
   return items;
 }
 
-const STRIP_KEYS = ['configured', 'has_smtp_pass', 'has_api_key', 'has_auth_token', 'has_bot_token'];
+const STRIP_KEYS = ['configured', 'has_smtp_pass', 'has_api_key', 'has_auth_token', 'has_application_secret', 'has_bot_token'];
 
 export function messagingSavePayload(form) {
   const payload = {};
