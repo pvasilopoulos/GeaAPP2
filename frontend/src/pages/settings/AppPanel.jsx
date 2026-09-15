@@ -82,7 +82,7 @@ export default function AppPanel() {
           type="password"
           value={f.google_maps_api_key || ''}
           onChange={set('google_maps_api_key')}
-          placeholder={data?.settings?.has_google_maps_api_key ? '••••••••' : 'AIza…'}
+          placeholder={data?.settings?.has_google_maps_api_key ? '••••••••' : 'AIzaSy...'}
           autoComplete="new-password"
         />
       </div>
