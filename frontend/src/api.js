@@ -47,11 +47,15 @@ export const api = {
   login: (email, password) => send('POST', '/auth/login', { email, password }),
   register: (payload) => send('POST', '/auth/register', payload),
   me: (opts) => get('/auth/me', opts),
-  // users / roles
+  // users / roles / permissions
   users: (opts) => get('/users', opts),
   roles: (opts) => get('/roles', opts),
+  permissions: (opts) => get('/permissions', opts),
   createUser: (payload) => send('POST', '/users', payload),
   updateUser: (id, payload) => send('PATCH', `/users/${id}`, payload),
+  createRole: (payload) => send('POST', '/roles', payload),
+  updateRole: (id, payload) => send('PATCH', `/roles/${id}`, payload),
+  deleteRole: (id) => send('DELETE', `/roles/${id}`),
   // app
   meta: (opts) => get('/meta', opts),
   statsOverview: (opts) => get('/stats/overview', opts),

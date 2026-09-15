@@ -24,8 +24,8 @@ const NAV = [
   { id: 'reports', type: 'reports', label: 'Αναφορές', icon: 'chart' },
   { id: 'communications', type: 'communications', label: 'Επικοινωνίες', icon: 'message' },
   { id: 'documents', type: 'documents', label: 'Έγγραφα', icon: 'file' },
-  { id: 'users', type: 'users', label: 'Χρήστες', icon: 'users', perm: PERMS.USERS_MANAGE },
-  { id: 'settings', type: 'settings', label: 'Ρυθμίσεις', icon: 'settings', perm: PERMS.SETTINGS_MANAGE },
+  { id: 'users', type: 'users', label: 'Χρήστες & Ρόλοι', icon: 'users', perms: [PERMS.USERS_MANAGE, PERMS.ROLES_MANAGE] },
+  { id: 'settings', type: 'settings', label: 'Ρυθμίσεις', icon: 'settings', perms: [PERMS.SETTINGS_MANAGE] },
 ];
 
 function UserMenu() {
@@ -81,7 +81,7 @@ export default function App() {
   const hasPerm = useAuth((s) => s.hasPerm);
   const { tabs, activeId, openTab } = useTabs();
 
-  const nav = NAV.filter((n) => !n.perm || hasPerm(n.perm));
+  const nav = NAV.filter((n) => !n.perms || n.perms.some((p) => hasPerm(p)));
 
   return (
     <div className="app">

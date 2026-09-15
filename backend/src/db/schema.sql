@@ -47,11 +47,14 @@ CREATE TABLE tenants (
 
 CREATE TABLE roles (
   id          BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  `key`       VARCHAR(40) NOT NULL UNIQUE,   -- owner | admin | manager | agent | viewer
+  tenant_id   BIGINT NOT NULL,
+  `key`       VARCHAR(60) NOT NULL,          -- owner | admin | manager | agent | viewer | custom-*
   name        VARCHAR(80) NOT NULL,
   permissions JSON NOT NULL,                 -- array of permission codes
-  is_system   TINYINT(1) NOT NULL DEFAULT 1,
-  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  is_system   TINYINT(1) NOT NULL DEFAULT 1, -- 1 = cloned default, 0 = custom
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_roles_tenant_key (tenant_id, `key`),
+  CONSTRAINT fk_roles_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE users (

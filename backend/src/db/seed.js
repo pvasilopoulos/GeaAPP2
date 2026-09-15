@@ -2,7 +2,7 @@ import mysql from 'mysql2/promise';
 import bcrypt from 'bcryptjs';
 import { config } from '../config.js';
 import { normalizeFields } from '../lib/normalize.js';
-import { ROLES } from '../lib/permissions.js';
+import { insertTenantRoles } from '../lib/roles.js';
 import {
   maleFirst, femaleFirst, lastNames, companies, companySuffix, cities, streets,
   spaceTypes, spaceImages, branchImages, tags as tagDefs, employees as employeeDefs,
@@ -222,24 +222,24 @@ async function main() {
   await conn.query('SET SESSION FOREIGN_KEY_CHECKS=0');
   await conn.query('SET SESSION UNIQUE_CHECKS=0');
 
-  console.log('1/4 Roles, tenants, users…');
-  // Roles
-  const roleId = {};
-  const roleRows = ROLES.map((r, i) => { roleId[r.key] = i + 1; return [i + 1, r.key, r.name, JSON.stringify(r.permissions), 1]; });
-  await conn.query('INSERT INTO roles (id, `key`, name, permissions, is_system) VALUES ?', [roleRows]);
+  console.log('1/4 Tenants, roles, users…');
+  const q = async (sql, params) => { const [rows] = await conn.query(sql, params); return { rows }; };
 
   // Tenants
   await conn.query('INSERT INTO tenants (id, name, slug) VALUES ?', [[[1, 'Demo Α.Ε.', 'demo'], [2, 'Acme Ε.Π.Ε.', 'acme']]]);
 
+  // Default roles cloned per tenant.
+  const roleMap = { 1: await insertTenantRoles(q, 1), 2: await insertTenantRoles(q, 2) };
+
   // Users (bcrypt). Same demo password for all accounts.
   const hash = await bcrypt.hash(DEMO_PASSWORD, 10);
   const users = [
-    [1, roleId.owner, 'owner@demo.gr', hash, 'Αναστασία', 'Κωνσταντίνου'],
-    [1, roleId.admin, 'admin@demo.gr', hash, 'Νίκος', 'Παπαδόπουλος'],
-    [1, roleId.manager, 'manager@demo.gr', hash, 'Ελένη', 'Γεωργίου'],
-    [1, roleId.agent, 'agent@demo.gr', hash, 'Γιώργος', 'Δημητρίου'],
-    [1, roleId.viewer, 'viewer@demo.gr', hash, 'Μαρία', 'Νικολάου'],
-    [2, roleId.owner, 'owner@acme.gr', hash, 'Κώστας', 'Βασιλείου'],
+    [1, roleMap[1].owner, 'owner@demo.gr', hash, 'Αναστασία', 'Κωνσταντίνου'],
+    [1, roleMap[1].admin, 'admin@demo.gr', hash, 'Νίκος', 'Παπαδόπουλος'],
+    [1, roleMap[1].manager, 'manager@demo.gr', hash, 'Ελένη', 'Γεωργίου'],
+    [1, roleMap[1].agent, 'agent@demo.gr', hash, 'Γιώργος', 'Δημητρίου'],
+    [1, roleMap[1].viewer, 'viewer@demo.gr', hash, 'Μαρία', 'Νικολάου'],
+    [2, roleMap[2].owner, 'owner@acme.gr', hash, 'Κώστας', 'Βασιλείου'],
   ];
   await conn.query('INSERT INTO users (tenant_id, role_id, email, password_hash, first_name, last_name) VALUES ?', [users]);
 

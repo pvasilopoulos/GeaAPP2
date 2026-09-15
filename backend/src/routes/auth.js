@@ -3,6 +3,7 @@ import { query } from '../db.js';
 import { hashPassword, verifyPassword, signToken } from '../lib/auth.js';
 import { authenticate } from '../middleware/auth.js';
 import { normalize } from '../lib/normalize.js';
+import { insertTenantRoles } from '../lib/roles.js';
 
 export const authRouter = Router();
 
@@ -42,12 +43,13 @@ authRouter.post('/register', async (req, res, next) => {
     const slug = await uniqueSlug(tenantName);
     const t = await query('INSERT INTO tenants (name, slug) VALUES (?, ?)', [tenantName, slug]);
     const tenantId = t.rows.insertId;
-    const role = await query("SELECT id FROM roles WHERE `key` = 'owner'");
+    // Clone the default roles for this new tenant; the signup user is the owner.
+    const roleMap = await insertTenantRoles(query, tenantId);
     const hash = await hashPassword(String(password));
     const u = await query(
       `INSERT INTO users (tenant_id, role_id, email, password_hash, first_name, last_name)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [tenantId, role.rows[0].id, String(email).toLowerCase(), hash, firstName, lastName || '']);
+      [tenantId, roleMap.owner, String(email).toLowerCase(), hash, firstName, lastName || '']);
 
     const token = signToken({ sub: u.rows.insertId });
     const me = await loadUser(u.rows.insertId);

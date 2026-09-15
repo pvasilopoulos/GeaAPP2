@@ -9,5 +9,6 @@ export const PERMS = {
   REPORTS_READ: 'reports.read',
   SETTINGS_MANAGE: 'settings.manage',
   USERS_MANAGE: 'users.manage',
+  ROLES_MANAGE: 'roles.manage',
   TENANT_MANAGE: 'tenant.manage',
 };
