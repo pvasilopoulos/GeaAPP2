@@ -75,12 +75,14 @@ export default function CustomerProfile({ customerId, tabId, onBack }) {
 
       <div className="profile-header">
         <div className="ph-top">
-          <div style={{ position: 'relative' }}>
-            <Avatar name={c.full_name} src={c.avatar_url} size={72} />
-            {c.status === 'active' && (
-              <span style={{ position: 'absolute', right: 2, bottom: 2, width: 15, height: 15, borderRadius: '50%', background: 'var(--green)', border: '3px solid #fff' }} />
-            )}
-          </div>
+          {c.avatar_url ? (
+            <div style={{ position: 'relative' }}>
+              <Avatar name={c.full_name} src={c.avatar_url} size={72} />
+              {c.status === 'active' && (
+                <span style={{ position: 'absolute', right: 2, bottom: 2, width: 15, height: 15, borderRadius: '50%', background: 'var(--green)', border: '3px solid #fff' }} />
+              )}
+            </div>
+          ) : null}
 
           <div style={{ minWidth: 0 }}>
             <div className="ph-id">

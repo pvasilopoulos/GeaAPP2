@@ -63,7 +63,7 @@ export default function GlobalSearch() {
               <div className="search-group-label">Πελάτες</div>
               {results.customers.map((c) => (
                 <div className="search-row" key={`c${c.id}`} onClick={() => open2({ id: c.id, full_name: c.full_name })}>
-                  <Avatar name={c.full_name} size={32} />
+                  <Avatar name={c.full_name} src={c.avatar_url} size={32} fallback={false} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600 }}>{c.full_name}</div>
                     <div className="meta">#{c.code}{c.primary_branch ? ` · ${c.primary_branch}` : ''}</div>

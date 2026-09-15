@@ -22,7 +22,7 @@ export function ImageUpload({ value, onChange, label = 'Φωτογραφία' })
       <div className="img-upload">
         {value
           ? <img src={value} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-          : <div className="img-ph"><Icon name="file" size={18} /></div>}
+          : null}
         <div>
           <label className="btn btn-sm">
             {busy ? <span className="spinner" /> : <Icon name="plus" size={14} />} {value ? 'Αλλαγή' : 'Ανέβασμα'}

@@ -246,7 +246,7 @@ export default function Customers({ onOpenCustomer }) {
           rows.map((c) => (
             <div className="trow" key={c.id} onClick={() => onOpenCustomer(c)}>
               <div className="cust-cell">
-                <Avatar name={c.full_name} src={c.avatar_url} size={38} />
+                <Avatar name={c.full_name} src={c.avatar_url} size={38} fallback={false} />
                 <div style={{ minWidth: 0 }}>
                   <div className="nm">{c.full_name} {c.is_vip ? <span style={{ color: 'var(--gold)' }}>★</span> : null}</div>
                   <div className="sub">{c.company || TYPE_LABELS[c.customer_type]} · {c.city}</div>

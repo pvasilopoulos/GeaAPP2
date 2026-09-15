@@ -163,8 +163,8 @@ export default function BranchesSpaces({ customerId }) {
               {selected.spaces.map((s) => (
                 <div key={s.id} className="space-card" onClick={() => setDrawerSpace(s)}>
                   {s.image_url
-                    ? <img className="img" src={s.image_url} alt={s.name} onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }} />
-                    : <div className="img" />}
+                    ? <img className="img" src={s.image_url} alt={s.name} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                    : null}
                   <div className="body">
                     <div className="nm">{s.name}</div>
                     <div className="st">{formatNumber(s.visits_count)} επισκέψεις · {formatNumber(s.bookings_count)} κρατήσεις</div>
