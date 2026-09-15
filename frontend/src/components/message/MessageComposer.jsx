@@ -328,7 +328,7 @@ export default function MessageComposer({ customer, contacts = [], channelId, ch
 
           <div className={`msg-count${overLimit ? ' over' : ''}`}>
             {segments
-              ? `${segments.units} χαρακτήρες · ${segments.segments} SMS · ${segments.unicode ? 'ελληνικά (70/μήνυμα)' : 'λατινικά (160/μήνυμα)'}`
+              ? `${segments.units} χαρακτήρες · ${segments.segments} SMS · ${segments.unicode ? 'ελληνικά' : 'λατινικά'} ${segments.perSegment}/μήνυμα`
               : caps.maxLength ? `${length} / ${caps.maxLength}` : `${length} χαρακτήρες`}
           </div>
         </div>
