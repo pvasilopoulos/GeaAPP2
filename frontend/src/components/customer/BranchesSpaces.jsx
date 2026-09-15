@@ -24,6 +24,7 @@ export default function BranchesSpaces({ customerId }) {
   });
   const { data: meta } = useQuery({ queryKey: ['meta'], queryFn: ({ signal }) => api.meta({ signal }) });
   const mapProvider = meta?.tenant?.settings?.map_provider || 'google';
+  const mapsApiKey = meta?.tenant?.settings?.google_maps_api_key || '';
   const visitsQ = useQuery({
     queryKey: ['c-visits', customerId, 'bs'],
     queryFn: ({ signal }) => api.customerVisits(customerId, { limit: 50 }, { signal }),
@@ -119,6 +120,7 @@ export default function BranchesSpaces({ customerId }) {
           selected={selected}
           canWrite={canWrite}
           mapProvider={mapProvider}
+          mapsApiKey={mapsApiKey}
           branchVisits={branchVisits}
           visitsLoading={visitsQ.isLoading}
           onEdit={() => setBranchForm({ branch: selected })}
@@ -194,9 +196,9 @@ function HoursStrip({ hours }) {
   );
 }
 
-function BranchDetail({ selected, canWrite, mapProvider, branchVisits, visitsLoading, onEdit, onDelete, onAddSpace, onOpenSpace }) {
+function BranchDetail({ selected, canWrite, mapProvider, mapsApiKey, branchVisits, visitsLoading, onEdit, onDelete, onAddSpace, onOpenSpace }) {
   const href = mapUrl(selected, mapProvider);
-  const embed = mapEmbedUrl(selected);
+  const embed = mapEmbedUrl(selected, mapProvider, mapsApiKey);
   const providerName = mapProviderLabel(mapProvider);
   const address = [selected.address_line, selected.city, selected.postal_code].filter(Boolean).join(', ');
 

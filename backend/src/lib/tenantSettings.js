@@ -18,6 +18,7 @@ export const DEFAULT_TENANT_SETTINGS = {
   voice_lang: 'el-GR',
   allow_vip: true,
   map_provider: 'google',
+  google_maps_api_key: '',
 };
 
 export const DEFAULT_PLATFORM_SETTINGS = {
@@ -39,19 +40,54 @@ export function parseJson(v, fallback) {
 export function mergeTenantSettings(raw) {
   const parsed = parseJson(raw, {}) || {};
   const map_provider = MAP_PROVIDER_IDS.includes(parsed.map_provider) ? parsed.map_provider : DEFAULT_TENANT_SETTINGS.map_provider;
+  const google_maps_api_key = parsed.google_maps_api_key == null ? '' : String(parsed.google_maps_api_key);
   return {
     ...DEFAULT_TENANT_SETTINGS,
     ...parsed,
     map_provider,
+    google_maps_api_key,
     messaging: mergeMessaging(parsed.messaging),
   };
 }
 
-export function publicAppSettings(raw) {
-  const merged = mergeTenantSettings(raw);
+function pickAppKeys(merged) {
   const out = {};
   for (const k of APP_SETTING_KEYS) out[k] = merged[k];
   return out;
+}
+
+export function publicAppSettings(raw) {
+  const merged = mergeTenantSettings(raw);
+  return {
+    ...pickAppKeys(merged),
+    google_maps_api_key: '',
+    has_google_maps_api_key: !!(merged.google_maps_api_key && String(merged.google_maps_api_key).trim()),
+  };
+}
+
+/** Settings safe for the logged-in app UI (no messaging secrets). */
+export function clientTenantSettings(raw) {
+  const merged = mergeTenantSettings(raw);
+  return {
+    ...pickAppKeys(merged),
+    google_maps_api_key: merged.google_maps_api_key || '',
+  };
+}
+
+export function applyAppSettingsPatch(current, body) {
+  const src = body && typeof body === 'object' ? body : {};
+  const merged = mergeTenantSettings(current);
+  const patch = {};
+  for (const k of APP_SETTING_KEYS) {
+    if (src[k] !== undefined) patch[k] = src[k];
+  }
+  const next = mergeTenantSettings({ ...merged, ...patch, messaging: merged.messaging });
+  const incomingKey = src.google_maps_api_key;
+  if (incomingKey !== undefined && incomingKey !== null) {
+    const v = String(incomingKey).trim();
+    if (v && !v.startsWith('•')) next.google_maps_api_key = v;
+  }
+  return next;
 }
 
 export function slugify(name) {

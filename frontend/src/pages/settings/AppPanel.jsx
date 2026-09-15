@@ -76,8 +76,19 @@ export default function AppPanel() {
           {MAP_PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
         </select>
       </div>
+      <div className="field-group"><label>Google Maps API key</label>
+        <input
+          style={inp}
+          type="password"
+          value={f.google_maps_api_key || ''}
+          onChange={set('google_maps_api_key')}
+          placeholder={data?.settings?.has_google_maps_api_key ? '••••••••' : 'AIzaSy...'}
+          autoComplete="new-password"
+        />
+      </div>
       <p className="muted" style={{ fontSize: 12.5, margin: '-6px 0 12px' }}>
-        Ισχύει για το κουμπί χάρτη στα υποκαταστήματα.
+        Το κουμπί χάρτη στα υποκαταστήματα ανοίγει τον πάροχο που επιλέγετε. Το API key χρειάζεται μόνο για την ενσωματωμένη προεπισκόπηση Google Maps
+        (Maps Embed API στο Google Cloud, περιορισμός HTTP referrer). Κενό πεδίο κρατά το αποθηκευμένο κλειδί.
       </p>
       <button className="btn btn-accent" disabled={saving} style={{ marginTop: 12 }}>{saving ? <span className="spinner" /> : <Icon name="check" size={16} />} Αποθήκευση</button>
     </form>
