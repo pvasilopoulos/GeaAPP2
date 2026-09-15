@@ -69,12 +69,17 @@ app.use('/api', usersRouter);
 // Unknown API routes return JSON 404 (never the SPA shell).
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 
-// Serve the built frontend (production / single-app deployment, e.g. Plesk).
+// Browser visits to :4000 should never show Express's "Cannot GET /".
+// Production serves the built SPA; in local/dev we redirect to Vite (:5173).
 const distDir = path.resolve(__dirname, '../../frontend/dist');
+const frontendOrigin = process.env.FRONTEND_ORIGIN || 'http://127.0.0.1:5173';
 if (existsSync(distDir)) {
   app.use(express.static(distDir));
-  // SPA fallback so client-side routes (deep links) resolve to index.html.
   app.get('*', (_req, res) => res.sendFile(path.join(distDir, 'index.html')));
+} else {
+  app.get('*', (req, res) => {
+    res.redirect(302, `${frontendOrigin}${req.originalUrl || '/'}`);
+  });
 }
 
 // Central error handler.
