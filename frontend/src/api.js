@@ -56,6 +56,15 @@ async function send(method, path, body) {
   });
 }
 
+function readAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
 function qs(params) {
   const sp = new URLSearchParams();
   for (const [k, v] of Object.entries(params || {})) {
@@ -96,6 +105,11 @@ export const api = {
   updateMessagingSettings: (payload) => send('PATCH', '/settings/messaging', payload),
   messagingChannels: (opts) => get('/settings/messaging/channels', opts),
   sendCustomerMessage: (id, payload) => send('POST', `/customers/${id}/messages`, payload),
+  previewCustomerMessage: (id, payload) => send('POST', `/customers/${id}/messages/preview`, payload),
+  messageTemplates: (opts) => get('/message-templates', opts),
+  createMessageTemplate: (payload) => send('POST', '/message-templates', payload),
+  updateMessageTemplate: (id, payload) => send('PATCH', `/message-templates/${id}`, payload),
+  deleteMessageTemplate: (id) => send('DELETE', `/message-templates/${id}`),
   // app
   meta: (opts) => get('/meta', opts),
   statsOverview: (opts) => get('/stats/overview', opts),
@@ -145,13 +159,12 @@ export const api = {
   metaCustomFields: (entity, opts) => get(`/meta/custom-fields${qs({ entity })}`, opts),
   geoLookup: (q, opts) => get(`/geo/lookup${qs({ q })}`, opts),
   async uploadImage(file) {
-    const data = await new Promise((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => resolve(String(r.result));
-      r.onerror = reject;
-      r.readAsDataURL(file);
-    });
+    const data = await readAsDataUrl(file);
     return send('POST', '/uploads', { mime: file.type, data });
+  },
+  async uploadAttachment(file) {
+    const data = await readAsDataUrl(file);
+    return send('POST', '/uploads/attachment', { mime: file.type, data, name: file.name });
   },
   // export (fetch as blob so the Authorization header is sent, then download)
   async exportCustomers(format, params) {

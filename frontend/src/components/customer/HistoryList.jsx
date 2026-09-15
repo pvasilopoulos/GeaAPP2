@@ -34,6 +34,22 @@ const CONFIG = {
 };
 
 const CHANNEL_LABELS = { email: 'Email', sms: 'SMS', call: 'Κλήση', viber: 'Viber', viber_routee: 'Viber Routee', telegram: 'Telegram' };
+
+// Formatted bodies are stored as markup; the history reads better as the text
+// the customer saw, and rendering stored HTML here would be an injection path.
+function messageText(body, format) {
+  if (format !== 'html') return body;
+  return String(body || '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|h[1-3]|blockquote)>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
 const DELIVERY_LABELS = { sent: 'Στάλθηκε', logged: 'Καταχωρήθηκε', failed: 'Αποτυχία' };
 const ACT_LABELS = {
   booking_created: 'Νέα κράτηση', booking_completed: 'Ολοκληρωμένη κράτηση',
@@ -104,12 +120,23 @@ function Item({ kind, r }) {
   }
   if (kind === 'communications') {
     const delivery = DELIVERY_LABELS[r.delivery_status];
+    const files = Array.isArray(r.attachments) ? r.attachments : [];
     return (
       <div className="hist-item">
         <Line icon="message" title={r.subject || CHANNEL_LABELS[r.channel] || r.channel}
           sub={[CHANNEL_LABELS[r.channel] || r.channel, r.recipient, r.direction === 'inbound' ? 'Εισερχόμενο' : 'Εξερχόμενο', delivery, formatDateTime(r.created_at)].filter(Boolean).join(' · ')}
           right={r.delivery_status ? <span className={`badge ${deliveryClass(r.delivery_status)}`}>{delivery}</span> : null} />
-        {r.body && <div className="hist-msg">{r.body}</div>}
+        {r.body && <div className="hist-msg">{messageText(r.body, r.body_format)}</div>}
+        {files.length > 0 && (
+          <div className="hist-att">
+            {files.map((f) => (
+              <a key={f.url} className="att-item" href={f.url} target="_blank" rel="noreferrer">
+                <Icon name={String(f.mime || '').startsWith('image/') ? 'image' : 'file'} size={14} />
+                <span className="att-name">{f.name}</span>
+              </a>
+            ))}
+          </div>
+        )}
       </div>
     );
   }

@@ -389,7 +389,9 @@ customersRouter.get('/:id/payments', subResource(
 
 customersRouter.get('/:id/communications', subResource(
   `SELECT id, channel, direction, subject, body, body_format, attachments, recipient, delivery_status, created_at
-   FROM communications WHERE customer_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`));
+   FROM communications WHERE customer_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+  // MariaDB stores JSON as LONGTEXT, so the driver hands back a string.
+  (r) => ({ ...r, attachments: parseJson(r.attachments, []) || [] })));
 
 // Public origin used for media links handed to Telegram and Viber, which fetch
 // the file themselves and therefore cannot see a private host.
