@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
 import { Skeleton } from '../../components/ui.jsx';
-import { MESSAGE_CHANNELS } from '../../lib/channels.js';
+import { MESSAGE_CHANNELS, messagingSavePayload } from '../../lib/channels.js';
 
 const inp = { width: '100%', height: 40, padding: '0 10px', border: '1px solid var(--border-strong)', borderRadius: 9 };
 const chk = { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5, padding: '4px 0' };
@@ -38,16 +38,7 @@ export default function MessagingPanel() {
   const submit = async (e) => {
     e.preventDefault(); setErr(''); setMsg(''); setSaving(true);
     try {
-      const payload = {};
-      for (const ch of MESSAGE_CHANNELS) {
-        const row = { ...f[ch] };
-        delete row.configured;
-        delete row.has_smtp_pass;
-        delete row.has_api_key;
-        delete row.has_auth_token;
-        delete row.has_bot_token;
-        payload[ch.id] = row;
-      }
+      const payload = messagingSavePayload(f);
       await api.updateMessagingSettings(payload);
       qc.invalidateQueries({ queryKey: ['settings-messaging'] });
       qc.invalidateQueries({ queryKey: ['messaging-channels'] });

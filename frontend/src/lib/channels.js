@@ -35,3 +35,15 @@ export function recipientSuggestions(channelId, customer = {}, contacts = []) {
   }
   return items;
 }
+
+const STRIP_KEYS = ['configured', 'has_smtp_pass', 'has_api_key', 'has_auth_token', 'has_bot_token'];
+
+export function messagingSavePayload(form) {
+  const payload = {};
+  for (const ch of MESSAGE_CHANNELS) {
+    const row = { ...(form?.[ch.id] || {}) };
+    for (const k of STRIP_KEYS) delete row[k];
+    payload[ch.id] = row;
+  }
+  return payload;
+}
