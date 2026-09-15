@@ -14,6 +14,7 @@ export const PERMISSIONS = {
   USERS_MANAGE: 'users.manage',
   ROLES_MANAGE: 'roles.manage',
   TENANT_MANAGE: 'tenant.manage',
+  TENANTS_PLATFORM: 'tenants.platform',
 };
 
 const P = PERMISSIONS;
@@ -31,14 +32,16 @@ export const PERMISSION_CATALOG = [
   { code: P.USERS_MANAGE, label: 'Διαχείριση χρηστών', group: 'Διαχείριση' },
   { code: P.ROLES_MANAGE, label: 'Διαχείριση ρόλων & δικαιωμάτων', group: 'Διαχείριση' },
   { code: P.TENANT_MANAGE, label: 'Διαχείριση οργανισμού', group: 'Διαχείριση' },
+  { code: P.TENANTS_PLATFORM, label: 'Διαχείριση όλων των tenants (πλατφόρμα)', group: 'Πλατφόρμα' },
 ];
 
 export const ALL_PERMISSIONS = PERMISSION_CATALOG.map((p) => p.code);
+export const TENANT_PERMISSIONS = ALL_PERMISSIONS.filter((p) => p !== P.TENANTS_PLATFORM);
 
 // Default role templates cloned into every new tenant.
 export const ROLE_TEMPLATES = [
-  { key: 'owner', name: 'Ιδιοκτήτης', permissions: ALL_PERMISSIONS },
-  { key: 'admin', name: 'Διαχειριστής', permissions: ALL_PERMISSIONS.filter((p) => p !== P.TENANT_MANAGE) },
+  { key: 'owner', name: 'Ιδιοκτήτης', permissions: TENANT_PERMISSIONS },
+  { key: 'admin', name: 'Διαχειριστής', permissions: TENANT_PERMISSIONS.filter((p) => p !== P.TENANT_MANAGE) },
   {
     key: 'manager', name: 'Manager',
     permissions: [P.CUSTOMERS_READ, P.CUSTOMERS_WRITE, P.CUSTOMERS_EXPORT, P.BRANCHES_READ, P.SPACES_READ, P.REPORTS_READ],
@@ -53,4 +56,4 @@ export const ROLE_TEMPLATES = [
   },
 ];
 
-export const isValidPermission = (code) => ALL_PERMISSIONS.includes(code);
+export const isValidPermission = (code) => TENANT_PERMISSIONS.includes(code);

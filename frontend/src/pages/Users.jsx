@@ -2,84 +2,228 @@ import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api.js';
 import Icon from '../components/Icon.jsx';
-import { Avatar, Skeleton, Drawer } from '../components/ui.jsx';
+import { Avatar, Skeleton, Drawer, EmptyState } from '../components/ui.jsx';
 import { formatDateTime } from '../lib/format.js';
 import { useAuth } from '../store/auth.js';
 import { PERMS } from '../lib/perms.js';
 
 const sameSet = (set, arr) => set.size === arr.length && arr.every((x) => set.has(x));
+const inp = { width: '100%', height: 40, padding: '0 10px', border: '1px solid var(--border-strong)', borderRadius: 9 };
 
-export default function Users() {
+export default function Users({ embedded = false }) {
   const qc = useQueryClient();
   const me = useAuth((s) => s.user);
   const hasPerm = useAuth((s) => s.hasPerm);
   const canManageUsers = hasPerm(PERMS.USERS_MANAGE);
   const canManageRoles = hasPerm(PERMS.ROLES_MANAGE);
-  const [drawer, setDrawer] = useState(false);
+  const [tab, setTab] = useState(canManageUsers ? 'members' : 'roles');
+  const [q, setQ] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [editing, setEditing] = useState(null); // {} new | {user} edit | {user, removing}
 
   const usersQ = useQuery({ queryKey: ['users'], queryFn: ({ signal }) => api.users({ signal }), enabled: canManageUsers });
   const rolesQ = useQuery({ queryKey: ['roles'], queryFn: ({ signal }) => api.roles({ signal }) });
   const roles = rolesQ.data?.roles || [];
   const refreshUsers = () => qc.invalidateQueries({ queryKey: ['users'] });
 
+  const users = useMemo(() => {
+    const list = usersQ.data?.users || [];
+    const term = q.trim().toLowerCase();
+    return list.filter((u) => {
+      if (roleFilter && u.role_key !== roleFilter) return false;
+      if (!term) return true;
+      return `${u.full_name} ${u.email} ${u.role_name}`.toLowerCase().includes(term);
+    });
+  }, [usersQ.data, q, roleFilter]);
+
   return (
     <div>
-      <div className="page-head">
-        <div>
-          <h1>Χρήστες & Ρόλοι</h1>
-          <div className="sub">Διαχείριση χρηστών, ρόλων και δικαιωμάτων για «{me?.tenantName}»</div>
-        </div>
-        {canManageUsers && <button className="btn btn-accent" onClick={() => setDrawer(true)}><Icon name="plus" size={16} /> Νέος χρήστης</button>}
-      </div>
-
-      {canManageUsers && (
-        <div className="card">
-          <div className="cf-row" style={{ gridTemplateColumns: '2fr 1.2fr 1fr 1fr', background: 'var(--surface-2)', fontSize: 11.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--text-3)' }}>
-            <div>Χρήστης</div><div>Ρόλος</div><div>Τελ. σύνδεση</div><div style={{ textAlign: 'right' }}>Κατάσταση</div>
+      {!embedded && (
+        <div className="page-head">
+          <div>
+            <h1>Χρήστες & Ρόλοι</h1>
+            <div className="sub">Μέλη και δικαιώματα για «{me?.tenantName}»</div>
           </div>
-          {usersQ.isLoading ? (
-            <div style={{ padding: 16 }}><Skeleton h={40} /><Skeleton h={40} style={{ marginTop: 10 }} /></div>
-          ) : (usersQ.data?.users || []).map((u) => (
-            <div className="cf-row" style={{ gridTemplateColumns: '2fr 1.2fr 1fr 1fr' }} key={u.id}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-                <Avatar name={u.full_name} size={36} />
-                <div>
-                  <div style={{ fontWeight: 600 }}>{u.full_name} {u.id === me?.id && <span className="pill">εσείς</span>}</div>
-                  <div className="meta" style={{ fontSize: 12 }}>{u.email}</div>
-                </div>
-              </div>
-              <div>
-                <select className="filter-chip" style={{ height: 32 }} value={u.role_key}
-                  onChange={async (e) => { await api.updateUser(u.id, { roleKey: e.target.value }); refreshUsers(); }}
-                  disabled={u.id === me?.id}>
-                  {roles.map((r) => <option key={r.key} value={r.key}>{r.name}</option>)}
-                </select>
-              </div>
-              <div className="muted" style={{ fontSize: 13 }}>{u.last_login_at ? formatDateTime(u.last_login_at) : '—'}</div>
-              <div style={{ textAlign: 'right' }}>
-                <button className={`badge badge-${u.is_active ? 'active' : 'inactive'}`} style={{ border: 'none', cursor: u.id === me?.id ? 'default' : 'pointer' }}
-                  onClick={async () => { if (u.id !== me?.id) { await api.updateUser(u.id, { isActive: !u.is_active }); refreshUsers(); } }}>
-                  <span className="dot" />{u.is_active ? 'Ενεργός' : 'Ανενεργός'}
-                </button>
-              </div>
-            </div>
-          ))}
         </div>
       )}
 
-      {canManageRoles && <RolesManager />}
+      <div className="people-tabs">
+        {canManageUsers && (
+          <button type="button" className={`people-tab${tab === 'members' ? ' active' : ''}`} onClick={() => setTab('members')}>
+            <Icon name="users" size={15} /> Μέλη
+            <span className="count">{(usersQ.data?.users || []).length}</span>
+          </button>
+        )}
+        {canManageRoles && (
+          <button type="button" className={`people-tab${tab === 'roles' ? ' active' : ''}`} onClick={() => setTab('roles')}>
+            <Icon name="layers" size={15} /> Ρόλοι
+            <span className="count">{roles.length}</span>
+          </button>
+        )}
+      </div>
 
-      {drawer && <CreateUserDrawer roles={roles} onClose={() => setDrawer(false)} onCreated={() => { setDrawer(false); refreshUsers(); }} />}
+      {tab === 'members' && canManageUsers && (
+        <>
+          <div className="people-toolbar">
+            <div className="search-input" style={{ minWidth: 0, flex: 1, height: 36 }}>
+              <Icon name="search" size={15} />
+              <input placeholder="Αναζήτηση ονόματος ή email…" value={q} onChange={(e) => setQ(e.target.value)} />
+            </div>
+            <select className="filter-chip" style={{ height: 36 }} value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
+              <option value="">Όλοι οι ρόλοι</option>
+              {roles.map((r) => <option key={r.key} value={r.key}>{r.name}</option>)}
+            </select>
+            <button className="btn btn-accent" onClick={() => setEditing({})}><Icon name="plus" size={16} /> Νέος χρήστης</button>
+          </div>
+
+          <div className="card people-card">
+            {usersQ.isLoading ? (
+              <div style={{ padding: 16 }}><Skeleton h={52} /><Skeleton h={52} style={{ marginTop: 10 }} /></div>
+            ) : users.length === 0 ? (
+              <EmptyState icon="users" title="Κανένας χρήστης" hint={q || roleFilter ? 'Δοκιμάστε διαφορετικά κριτήρια.' : 'Προσθέστε το πρώτο μέλος.'} />
+            ) : users.map((u) => {
+              const isMe = u.id === me?.id;
+              return (
+                <div className={`people-row${!u.is_active ? ' dim' : ''}`} key={u.id}>
+                  <Avatar name={u.full_name} size={40} />
+                  <div className="people-id">
+                    <div className="nm">
+                      {u.full_name}
+                      {isMe && <span className="pill">εσείς</span>}
+                      {!u.is_active && <span className="pill" style={{ color: 'var(--text-3)' }}>ανενεργός</span>}
+                    </div>
+                    <div className="sub">{u.email} · {u.last_login_at ? `τελ. σύνδεση ${formatDateTime(u.last_login_at)}` : 'χωρίς σύνδεση'}</div>
+                  </div>
+                  <span className="role-pill">{u.role_name}</span>
+                  <div className="people-actions">
+                    <button className="btn btn-sm btn-ghost btn-icon" title="Επεξεργασία" onClick={() => setEditing({ user: u })}>
+                      <Icon name="edit" size={15} />
+                    </button>
+                    <button className="btn btn-sm btn-ghost btn-icon" title="Διαγραφή" disabled={isMe}
+                      onClick={() => !isMe && setEditing({ user: u, removing: true })}>
+                      <Icon name="x" size={15} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {tab === 'roles' && canManageRoles && <RolesManager />}
+
+      {editing && !editing.removing && (
+        <UserDrawer roles={roles} me={me} initial={editing.user}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); refreshUsers(); }} />
+      )}
+      {editing?.removing && (
+        <DeleteUserDrawer user={editing.user} onClose={() => setEditing(null)}
+          onDeleted={() => { setEditing(null); refreshUsers(); }} />
+      )}
     </div>
   );
 }
 
-// ---- Roles & permissions manager -----------------------------------------
+function UserDrawer({ roles, me, initial, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    firstName: initial?.first_name || '',
+    lastName: initial?.last_name || '',
+    email: initial?.email || '',
+    password: '',
+    roleKey: initial?.role_key || roles.find((r) => r.key !== 'owner')?.key || roles[0]?.key || '',
+    isActive: initial ? !!initial.is_active : true,
+  });
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
+  const isMe = initial && initial.id === me?.id;
+  const isOwnerRole = form.roleKey === 'owner';
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError(''); setSaving(true);
+    try {
+      if (initial) {
+        const payload = {
+          firstName: form.firstName, lastName: form.lastName, email: form.email,
+          roleKey: form.roleKey, isActive: form.isActive,
+        };
+        if (form.password) payload.password = form.password;
+        await api.updateUser(initial.id, payload);
+      } else {
+        await api.createUser(form);
+      }
+      onSaved();
+    } catch (ex) { setError(ex.message); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <Drawer title={initial ? 'Επεξεργασία χρήστη' : 'Νέος χρήστης'}
+      subtitle={initial ? initial.email : 'Πρόσκληση μέλους στον οργανισμό'} onClose={onClose}>
+      {error && <div className="auth-error">{error}</div>}
+      <form onSubmit={submit}>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <div className="field-group" style={{ flex: 1 }}><label>Όνομα</label><input style={inp} value={form.firstName} onChange={set('firstName')} required /></div>
+          <div className="field-group" style={{ flex: 1 }}><label>Επώνυμο</label><input style={inp} value={form.lastName} onChange={set('lastName')} /></div>
+        </div>
+        <div className="field-group"><label>Email</label><input style={inp} type="email" value={form.email} onChange={set('email')} required /></div>
+        <div className="field-group">
+          <label>{initial ? 'Νέος κωδικός (προαιρετικό)' : 'Κωδικός'}</label>
+          <input style={inp} type="password" value={form.password} onChange={set('password')} required={!initial} minLength={initial ? undefined : 6} autoComplete="new-password" />
+        </div>
+        <div className="field-group">
+          <label>Ρόλος</label>
+          <select style={inp} value={form.roleKey} onChange={set('roleKey')} disabled={isMe && isOwnerRole}>
+            {roles.map((r) => <option key={r.key} value={r.key}>{r.name}</option>)}
+          </select>
+        </div>
+        {initial && (
+          <label className="people-check">
+            <input type="checkbox" checked={form.isActive} onChange={set('isActive')} disabled={isMe} />
+            Ενεργός λογαριασμός
+          </label>
+        )}
+        <button className="btn btn-accent btn-block" disabled={saving}>
+          {saving ? <span className="spinner" /> : <Icon name="check" size={16} />} {initial ? 'Αποθήκευση' : 'Δημιουργία'}
+        </button>
+      </form>
+    </Drawer>
+  );
+}
+
+function DeleteUserDrawer({ user, onClose, onDeleted }) {
+  const [err, setErr] = useState('');
+  const [saving, setSaving] = useState(false);
+  const submit = async (e) => {
+    e.preventDefault(); setErr(''); setSaving(true);
+    try { await api.deleteUser(user.id); onDeleted(); }
+    catch (ex) { setErr(ex.message); } finally { setSaving(false); }
+  };
+  return (
+    <Drawer title="Διαγραφή χρήστη" subtitle={user.full_name} onClose={onClose}>
+      {err && <div className="auth-error">{err}</div>}
+      <p style={{ fontSize: 13.5, color: 'var(--text-2)', lineHeight: 1.5 }}>
+        Ο λογαριασμός «{user.full_name}» ({user.email}) θα διαγραφεί οριστικά και δεν θα μπορεί να συνδεθεί.
+      </p>
+      <form onSubmit={submit} style={{ display: 'flex', gap: 8 }}>
+        <button type="button" className="btn" style={{ flex: 1 }} onClick={onClose}>Άκυρο</button>
+        <button className="btn" disabled={saving} style={{ flex: 1, background: 'var(--red-soft)', color: 'var(--red)', border: 'none' }}>
+          {saving ? <span className="spinner" /> : <Icon name="x" size={16} />} Διαγραφή
+        </button>
+      </form>
+    </Drawer>
+  );
+}
+
 function RolesManager() {
   const qc = useQueryClient();
   const rolesQ = useQuery({ queryKey: ['roles'], queryFn: ({ signal }) => api.roles({ signal }) });
   const permsQ = useQuery({ queryKey: ['permissions'], queryFn: ({ signal }) => api.permissions({ signal }) });
   const [creating, setCreating] = useState(false);
+  const [openId, setOpenId] = useState(null);
 
   const groups = useMemo(() => {
     const g = {};
@@ -90,14 +234,17 @@ function RolesManager() {
   const refresh = () => qc.invalidateQueries({ queryKey: ['roles'] });
 
   return (
-    <div style={{ marginTop: 20 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <div className="section-title" style={{ margin: 0 }}><Icon name="settings" /> Ρόλοι & δικαιώματα</div>
-        <button className="btn btn-sm btn-accent" onClick={() => setCreating(true)}><Icon name="plus" size={15} /> Νέος ρόλος</button>
+    <div>
+      <div className="people-toolbar">
+        <div className="muted" style={{ fontSize: 13, flex: 1 }}>Ορίστε τι μπορεί να κάνει κάθε ρόλος στον οργανισμό.</div>
+        <button className="btn btn-accent" onClick={() => setCreating(true)}><Icon name="plus" size={16} /> Νέος ρόλος</button>
       </div>
       {(rolesQ.isLoading || permsQ.isLoading) ? <div className="card card-pad"><Skeleton h={60} /></div> : (
-        <div style={{ display: 'grid', gap: 14 }}>
-          {rolesQ.data.roles.map((r) => <RoleCard key={r.id} role={r} groups={groups} onChanged={refresh} />)}
+        <div className="role-stack">
+          {(rolesQ.data?.roles || []).map((r) => (
+            <RoleCard key={r.id} role={r} groups={groups} open={openId === r.id}
+              onToggle={() => setOpenId((id) => id === r.id ? null : r.id)} onChanged={refresh} />
+          ))}
         </div>
       )}
       {creating && <RoleDrawer groups={groups} onClose={() => setCreating(false)} onSaved={() => { setCreating(false); refresh(); }} />}
@@ -105,7 +252,7 @@ function RolesManager() {
   );
 }
 
-function RoleCard({ role, groups, onChanged }) {
+function RoleCard({ role, groups, open, onToggle, onChanged }) {
   const isOwner = role.key === 'owner';
   const [name, setName] = useState(role.name);
   const [perms, setPerms] = useState(() => new Set(role.permissions));
@@ -117,6 +264,16 @@ function RoleCard({ role, groups, onChanged }) {
     if (isOwner) return;
     setPerms((prev) => { const n = new Set(prev); n.has(code) ? n.delete(code) : n.add(code); return n; });
   };
+  const toggleGroup = (list) => {
+    if (isOwner) return;
+    const codes = list.map((p) => p.code);
+    const allOn = codes.every((c) => perms.has(c));
+    setPerms((prev) => {
+      const n = new Set(prev);
+      for (const c of codes) { if (allOn) n.delete(c); else n.add(c); }
+      return n;
+    });
+  };
   const save = async () => {
     setSaving(true); setErr('');
     try { await api.updateRole(role.id, { name, permissions: [...perms] }); onChanged(); }
@@ -127,37 +284,54 @@ function RoleCard({ role, groups, onChanged }) {
     if (!confirm(`Διαγραφή ρόλου «${role.name}»;`)) return;
     try { await api.deleteRole(role.id); onChanged(); } catch (e) { setErr(e.message); }
   };
+  const nPerms = isOwner ? 'Όλα' : `${perms.size}`;
 
   return (
-    <div className="card card-pad">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-        {isOwner || role.is_system ? (
-          <span className="role-pill" style={{ fontSize: 13 }}>{name}</span>
-        ) : (
-          <input value={name} onChange={(e) => setName(e.target.value)} style={{ height: 32, padding: '0 10px', border: '1px solid var(--border-strong)', borderRadius: 8, fontWeight: 600 }} />
-        )}
-        <span className="pill">{role.key}</span>
-        <span className="muted" style={{ fontSize: 12 }}>{role.user_count} χρήστες</span>
-        {isOwner && <span className="pill" style={{ color: 'var(--gold)', background: 'var(--gold-soft)', border: 'none' }}>όλα τα δικαιώματα</span>}
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-          {!isOwner && role.user_count === 0 && <button className="btn btn-sm btn-ghost" onClick={remove}><Icon name="x" size={14} /> Διαγραφή</button>}
-          <button className="btn btn-sm btn-accent" disabled={!dirty || saving} onClick={save}>{saving ? <span className="spinner" /> : <Icon name="check" size={14} />} Αποθήκευση</button>
-        </div>
-      </div>
-      {err && <div className="auth-error">{err}</div>}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
-        {Object.entries(groups).map(([group, list]) => (
-          <div key={group}>
-            <div style={{ fontSize: 11.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--text-3)', marginBottom: 6 }}>{group}</div>
-            {list.map((p) => (
-              <label key={p.code} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', fontSize: 13, opacity: isOwner ? 0.7 : 1 }}>
-                <input type="checkbox" checked={isOwner || perms.has(p.code)} disabled={isOwner} onChange={() => toggle(p.code)} />
-                {p.label}
-              </label>
-            ))}
+    <div className={`card role-card${open ? ' open' : ''}`}>
+      <button type="button" className="role-head" onClick={onToggle}>
+        <div>
+          <div className="nm">
+            {role.name}
+            {isOwner && <span className="pill" style={{ color: 'var(--gold)', background: 'var(--gold-soft)', border: 'none' }}>πλήρης πρόσβαση</span>}
           </div>
-        ))}
-      </div>
+          <div className="sub">{role.user_count} χρήστες · {nPerms} δικαιώματα · {role.key}</div>
+        </div>
+        <Icon name={open ? 'chevronUp' : 'chevronDown'} size={16} />
+      </button>
+      {open && (
+        <div className="role-body">
+          {err && <div className="auth-error">{err}</div>}
+          {!isOwner && (
+            <div className="field-group"><label>Όνομα ρόλου</label>
+              <input style={{ ...inp, maxWidth: 320 }} value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+          )}
+          <div className="perm-grid">
+            {Object.entries(groups).map(([group, list]) => {
+              const allOn = isOwner || list.every((p) => perms.has(p.code));
+              return (
+                <div className="perm-group" key={group}>
+                  <button type="button" className="perm-group-h" onClick={() => toggleGroup(list)} disabled={isOwner}>
+                    {group} {allOn ? '· όλα' : ''}
+                  </button>
+                  {list.map((p) => (
+                    <label key={p.code} className="people-check">
+                      <input type="checkbox" checked={isOwner || perms.has(p.code)} disabled={isOwner} onChange={() => toggle(p.code)} />
+                      {p.label}
+                    </label>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+          <div className="role-foot">
+            {!isOwner && role.user_count === 0 && <button className="btn btn-sm btn-ghost" onClick={remove}><Icon name="x" size={14} /> Διαγραφή ρόλου</button>}
+            <button className="btn btn-sm btn-accent" disabled={!dirty || saving} onClick={save} style={{ marginLeft: 'auto' }}>
+              {saving ? <span className="spinner" /> : <Icon name="check" size={14} />} Αποθήκευση
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -179,52 +353,18 @@ function RoleDrawer({ groups, onClose, onSaved }) {
     <Drawer title="Νέος ρόλος" subtitle="Ορίστε όνομα και δικαιώματα" onClose={onClose}>
       {err && <div className="auth-error">{err}</div>}
       <form onSubmit={submit}>
-        <div className="field-group"><label>Όνομα ρόλου</label><input value={name} onChange={(e) => setName(e.target.value)} required /></div>
+        <div className="field-group"><label>Όνομα ρόλου</label><input style={inp} value={name} onChange={(e) => setName(e.target.value)} required /></div>
         {Object.entries(groups).map(([group, list]) => (
           <div key={group} style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 11.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--text-3)', marginBottom: 6 }}>{group}</div>
+            <div className="perm-group-h">{group}</div>
             {list.map((p) => (
-              <label key={p.code} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', fontSize: 13 }}>
+              <label key={p.code} className="people-check">
                 <input type="checkbox" checked={perms.has(p.code)} onChange={() => toggle(p.code)} /> {p.label}
               </label>
             ))}
           </div>
         ))}
         <button className="btn btn-accent btn-block" disabled={saving}>{saving ? <span className="spinner" /> : <Icon name="check" size={16} />} Δημιουργία ρόλου</button>
-      </form>
-    </Drawer>
-  );
-}
-
-function CreateUserDrawer({ roles, onClose, onCreated }) {
-  const [form, setForm] = useState({ firstName: '', lastName: '', email: '', password: '', roleKey: roles[0]?.key || '' });
-  const [error, setError] = useState('');
-  const [saving, setSaving] = useState(false);
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
-  const submit = async (e) => {
-    e.preventDefault();
-    setError(''); setSaving(true);
-    try { await api.createUser(form); onCreated(); }
-    catch (ex) { setError(ex.message); }
-    finally { setSaving(false); }
-  };
-  return (
-    <Drawer title="Νέος χρήστης" subtitle="Πρόσκληση μέλους στον οργανισμό" onClose={onClose}>
-      {error && <div className="auth-error">{error}</div>}
-      <form onSubmit={submit}>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <div className="field-group" style={{ flex: 1 }}><label>Όνομα</label><input value={form.firstName} onChange={set('firstName')} required /></div>
-          <div className="field-group" style={{ flex: 1 }}><label>Επώνυμο</label><input value={form.lastName} onChange={set('lastName')} /></div>
-        </div>
-        <div className="field-group"><label>Email</label><input type="email" value={form.email} onChange={set('email')} required /></div>
-        <div className="field-group"><label>Κωδικός</label><input type="password" value={form.password} onChange={set('password')} required /></div>
-        <div className="field-group">
-          <label>Ρόλος</label>
-          <select className="filter-chip" style={{ width: '100%', height: 40 }} value={form.roleKey} onChange={set('roleKey')}>
-            {roles.map((r) => <option key={r.key} value={r.key}>{r.name}</option>)}
-          </select>
-        </div>
-        <button className="btn btn-accent btn-block" disabled={saving}>{saving ? <span className="spinner" /> : <Icon name="check" size={16} />} Δημιουργία</button>
       </form>
     </Drawer>
   );

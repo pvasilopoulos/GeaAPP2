@@ -34,7 +34,12 @@ export const useAuth = create((set, get) => ({
     // Reset the workspace so tabs don't leak across sessions/tenants.
     useTabs.setState({ tabs: [{ id: 'customers', type: 'customers', title: 'Πελάτες', icon: 'users' }], activeId: 'customers' });
   },
-  hasPerm: (code) => !!get().user?.permissions?.includes(code),
+  hasPerm: (code) => {
+    const u = get().user;
+    if (!u) return false;
+    if (code === 'tenants.platform' && u.isPlatformAdmin) return true;
+    return !!u.permissions?.includes(code);
+  },
 }));
 
 // A 401 from any request forces logout.

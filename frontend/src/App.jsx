@@ -10,7 +10,6 @@ import Dashboard from './pages/Dashboard.jsx';
 import Customers from './pages/Customers.jsx';
 import CustomerProfile from './pages/CustomerProfile.jsx';
 import Settings from './pages/Settings.jsx';
-import Users from './pages/Users.jsx';
 import Placeholder from './pages/Placeholder.jsx';
 
 // Sidebar entries → open (or activate) a workspace tab. `perm` gates visibility.
@@ -24,8 +23,7 @@ const NAV = [
   { id: 'reports', type: 'reports', label: 'Αναφορές', icon: 'chart' },
   { id: 'communications', type: 'communications', label: 'Επικοινωνίες', icon: 'message' },
   { id: 'documents', type: 'documents', label: 'Έγγραφα', icon: 'file' },
-  { id: 'users', type: 'users', label: 'Χρήστες & Ρόλοι', icon: 'users', perms: [PERMS.USERS_MANAGE, PERMS.ROLES_MANAGE] },
-  { id: 'settings', type: 'settings', label: 'Ρυθμίσεις', icon: 'settings', perms: [PERMS.SETTINGS_MANAGE] },
+  { id: 'settings', type: 'settings', label: 'Ρυθμίσεις', icon: 'settings', perms: [PERMS.SETTINGS_MANAGE, PERMS.USERS_MANAGE, PERMS.ROLES_MANAGE, PERMS.TENANT_MANAGE, PERMS.TENANTS_PLATFORM] },
 ];
 
 function UserMenu() {
@@ -71,7 +69,7 @@ function TabContent({ tab }) {
     case 'customers': return <Customers onOpenCustomer={openCustomer} />;
     case 'customer': return <CustomerProfile customerId={tab.customerId} tabId={tab.id} onBack={() => activateTab('customers')} />;
     case 'settings': return <Settings />;
-    case 'users': return <Users />;
+    case 'users': return <Settings initialCat="users" />;
     default: return <Placeholder title={tab.title} icon={tab.icon} />;
   }
 }

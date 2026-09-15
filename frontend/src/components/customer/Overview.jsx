@@ -123,7 +123,7 @@ export default function Overview({ customerId, data, onOpenTab, onEditCustomer }
           ) : branchesQ.data.branches.slice(0, 2).map((b) => (
             <div key={b.id} style={{ marginBottom: 16 }}>
               <div style={{ display: 'flex', gap: 11, alignItems: 'center', marginBottom: 8 }}>
-                <BranchThumb src={b.image_url} name={b.name} size={44} />
+                {b.image_url ? <BranchThumb src={b.image_url} name={b.name} size={44} /> : null}
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 7 }}>
                     {b.name} {b.is_primary && <span className="pill" style={{ color: 'var(--accent)', background: 'var(--accent-soft)', border: 'none' }}>Κύριο</span>}
@@ -134,7 +134,7 @@ export default function Overview({ customerId, data, onOpenTab, onEditCustomer }
               <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 6 }}>Χώροι που χρησιμοποιεί ({b.spaces.length})</div>
               {b.spaces.slice(0, 3).map((s) => (
                 <div key={s.id} className="search-row" style={{ padding: '7px 8px' }}>
-                  <BranchThumb src={s.image_url} name={s.name} size={34} radius={7} placeholder={false} />
+                  {s.image_url ? <BranchThumb src={s.image_url} name={s.name} size={34} radius={7} /> : null}
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 600, fontSize: 13 }}>{s.name}</div>
                     <div className="meta" style={{ fontSize: 11.5 }}>{formatNumber(s.bookings_count)} κρατήσεις</div>

@@ -15,10 +15,24 @@ async function roleByKey(tenantId, key) {
   const { rows } = await query('SELECT id, `key` FROM roles WHERE tenant_id = ? AND `key` = ?', [tenantId, key]);
   return rows[0] || null;
 }
+async function ownerCount(tenantId) {
+  const { rows } = await query(
+    `SELECT COUNT(*) AS c FROM users u JOIN roles r ON r.id = u.role_id
+     WHERE u.tenant_id = ? AND r.\`key\` = 'owner'`, [tenantId]);
+  return Number(rows[0].c);
+}
+
+async function loadUserRow(id, tenantId) {
+  const { rows } = await query(
+    `SELECT u.id, u.tenant_id, u.email, u.first_name, u.last_name, u.is_active, r.\`key\` AS role_key
+     FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = ? AND u.tenant_id = ?`,
+    [id, tenantId]);
+  return rows[0] || null;
+}
 
 // ---- Permission catalog ----------------------------------------------------
 usersRouter.get('/permissions', authorize(PERMISSIONS.ROLES_MANAGE), (_req, res) => {
-  res.json({ permissions: PERMISSION_CATALOG });
+  res.json({ permissions: PERMISSION_CATALOG.filter((p) => p.code !== PERMISSIONS.TENANTS_PLATFORM) });
 });
 
 // ---- Roles (tenant-scoped) -------------------------------------------------
@@ -119,17 +133,40 @@ usersRouter.post('/users', authorize(PERMISSIONS.USERS_MANAGE), async (req, res,
 usersRouter.patch('/users/:id', authorize(PERMISSIONS.USERS_MANAGE), async (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    const target = await query('SELECT id, tenant_id FROM users WHERE id = ?', [id]);
-    if (!target.rows.length || target.rows[0].tenant_id !== req.user.tenantId) {
-      return res.status(404).json({ error: 'Ο χρήστης δεν βρέθηκε' });
-    }
+    const target = await loadUserRow(id, req.user.tenantId);
+    if (!target) return res.status(404).json({ error: 'Ο χρήστης δεν βρέθηκε' });
     const sets = [];
     const params = [];
+    if (req.body.firstName !== undefined) {
+      const v = String(req.body.firstName || '').trim();
+      if (!v) return res.status(400).json({ error: 'Το όνομα είναι υποχρεωτικό' });
+      sets.push('first_name = ?'); params.push(v);
+    }
+    if (req.body.lastName !== undefined) {
+      sets.push('last_name = ?'); params.push(String(req.body.lastName || '').trim());
+    }
+    if (req.body.email !== undefined) {
+      const email = String(req.body.email).trim().toLowerCase();
+      if (!email) return res.status(400).json({ error: 'Το email είναι υποχρεωτικό' });
+      const exists = await query('SELECT id FROM users WHERE email = ? AND id <> ?', [email, id]);
+      if (exists.rows.length) return res.status(409).json({ error: 'Το email χρησιμοποιείται ήδη' });
+      sets.push('email = ?'); params.push(email);
+    }
+    if (req.body.password) {
+      if (String(req.body.password).length < 6) return res.status(400).json({ error: 'Ο κωδικός πρέπει να έχει τουλάχιστον 6 χαρακτήρες' });
+      sets.push('password_hash = ?'); params.push(await hashPassword(String(req.body.password)));
+    }
     if (req.body.roleKey) {
       const role = await roleByKey(req.user.tenantId, req.body.roleKey);
       if (!role) return res.status(400).json({ error: 'Άγνωστος ρόλος' });
       if (req.body.roleKey === 'owner' && req.user.roleKey !== 'owner') {
         return res.status(403).json({ error: 'Μόνο ο ιδιοκτήτης μπορεί να ορίσει ρόλο ιδιοκτήτη' });
+      }
+      if (target.role_key === 'owner' && req.body.roleKey !== 'owner' && (await ownerCount(req.user.tenantId)) <= 1) {
+        return res.status(400).json({ error: 'Δεν μπορεί να μείνει ο οργανισμός χωρίς ιδιοκτήτη' });
+      }
+      if (id === req.user.id && req.body.roleKey !== target.role_key && target.role_key === 'owner') {
+        return res.status(400).json({ error: 'Δεν μπορείτε να αλλάξετε τον δικό σας ρόλο ιδιοκτήτη' });
       }
       sets.push('role_id = ?'); params.push(role.id);
     }
@@ -140,6 +177,20 @@ usersRouter.patch('/users/:id', authorize(PERMISSIONS.USERS_MANAGE), async (req,
     if (!sets.length) return res.status(400).json({ error: 'Καμία αλλαγή' });
     params.push(id);
     await query(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`, params);
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+usersRouter.delete('/users/:id', authorize(PERMISSIONS.USERS_MANAGE), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (id === req.user.id) return res.status(400).json({ error: 'Δεν μπορείτε να διαγράψετε τον εαυτό σας' });
+    const target = await loadUserRow(id, req.user.tenantId);
+    if (!target) return res.status(404).json({ error: 'Ο χρήστης δεν βρέθηκε' });
+    if (target.role_key === 'owner' && (await ownerCount(req.user.tenantId)) <= 1) {
+      return res.status(400).json({ error: 'Δεν μπορεί να μείνει ο οργανισμός χωρίς ιδιοκτήτη' });
+    }
+    await query('DELETE FROM users WHERE id = ? AND tenant_id = ?', [id, req.user.tenantId]);
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

@@ -84,7 +84,7 @@ export default function BranchesSpaces({ customerId }) {
             <div className="branch-list">
               {filtered.map((b) => (
                 <div key={b.id} className={`branch-item${selected?.id === b.id ? ' active' : ''}`} onClick={() => setSelectedId(b.id)}>
-                  <BranchThumb src={b.image_url} name={b.name} size={56} />
+                  {b.image_url ? <BranchThumb src={b.image_url} name={b.name} size={56} /> : null}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div className="nm">{b.name} {b.is_primary && <span className="pill" style={{ color: 'var(--accent)', background: 'var(--accent-soft)', border: 'none' }}>Κύριο</span>}</div>
                     <div className="ad">{b.address_line}, {b.city}</div>
@@ -115,7 +115,7 @@ export default function BranchesSpaces({ customerId }) {
         <div className="card card-pad branch-detail">
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
             <div className="hero">
-              <BranchThumb src={selected.image_url} name={selected.name} size={92} radius={11} />
+              {selected.image_url ? <BranchThumb src={selected.image_url} name={selected.name} size={92} radius={11} /> : null}
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
                   <h2 style={{ margin: 0, fontSize: 20 }}>{selected.name}</h2>

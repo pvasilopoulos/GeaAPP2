@@ -33,7 +33,8 @@ const CONFIG = {
   },
 };
 
-const CHANNEL_LABELS = { email: 'Email', sms: 'SMS', call: 'Κλήση' };
+const CHANNEL_LABELS = { email: 'Email', sms: 'SMS', call: 'Κλήση', viber: 'Viber', telegram: 'Telegram' };
+const DELIVERY_LABELS = { sent: 'Στάλθηκε', logged: 'Καταχωρήθηκε', failed: 'Αποτυχία' };
 const ACT_LABELS = {
   booking_created: 'Νέα κράτηση', booking_completed: 'Ολοκληρωμένη κράτηση',
   payment_received: 'Πληρωμή', message_sent: 'Μήνυμα', note_added: 'Σημείωση',
@@ -96,9 +97,10 @@ function Item({ kind, r }) {
     );
   }
   if (kind === 'communications') {
+    const delivery = DELIVERY_LABELS[r.delivery_status];
     return (
-      <Line icon="message" title={r.subject || CHANNEL_LABELS[r.channel]}
-        sub={`${CHANNEL_LABELS[r.channel]} · ${r.direction === 'inbound' ? 'Εισερχόμενο' : 'Εξερχόμενο'} · ${formatDateTime(r.created_at)}`} />
+      <Line icon="message" title={r.subject || CHANNEL_LABELS[r.channel] || r.channel}
+        sub={[CHANNEL_LABELS[r.channel] || r.channel, r.recipient, r.direction === 'inbound' ? 'Εισερχόμενο' : 'Εξερχόμενο', delivery, formatDateTime(r.created_at)].filter(Boolean).join(' · ')} />
     );
   }
   if (kind === 'documents') {

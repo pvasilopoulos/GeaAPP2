@@ -48,8 +48,8 @@ function loadLang() {
   }
 }
 
-export default function VoiceFill({ onApply }) {
-  const [lang, setLang] = useState(loadLang);
+export default function VoiceFill({ onApply, defaultLang }) {
+  const [lang, setLang] = useState(() => defaultLang || loadLang());
   const [listening, setListening] = useState(false);
   const [heard, setHeard] = useState('');
   const [msg, setMsg] = useState('');
@@ -60,6 +60,11 @@ export default function VoiceFill({ onApply }) {
 
   useEffect(() => () => { try { recRef.current?.stop(); } catch { /* ignore */ } }, []);
   useEffect(() => { try { sessionStorage.setItem('voice-fill-lang', lang); } catch { /* ignore */ } }, [lang]);
+  useEffect(() => {
+    if (defaultLang && (defaultLang === 'el-GR' || defaultLang === 'en-US')) {
+      try { if (!sessionStorage.getItem('voice-fill-lang')) setLang(defaultLang); } catch { setLang(defaultLang); }
+    }
+  }, [defaultLang]);
 
   const start = () => {
     const copy = COPY[lang] || COPY['el-GR'];

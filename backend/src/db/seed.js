@@ -258,7 +258,9 @@ async function main() {
   const q = async (sql, params) => { const [rows] = await conn.query(sql, params); return { rows }; };
 
   // Tenants
-  await conn.query('INSERT INTO tenants (id, name, slug) VALUES ?', [[[1, 'Demo Α.Ε.', 'demo'], [2, 'Acme Ε.Π.Ε.', 'acme']]]);
+  await conn.query('INSERT INTO tenants (id, name, slug, status, plan, locale, timezone, currency) VALUES ?',
+    [[[1, 'Demo Α.Ε.', 'demo', 'active', 'business', 'el', 'Europe/Athens', 'EUR'],
+      [2, 'Acme Ε.Π.Ε.', 'acme', 'active', 'standard', 'el', 'Europe/Athens', 'EUR']]]);
 
   // Default roles cloned per tenant.
   const roleMap = { 1: await insertTenantRoles(q, 1), 2: await insertTenantRoles(q, 2) };
@@ -266,14 +268,14 @@ async function main() {
   // Users (bcrypt). Same demo password for all accounts.
   const hash = await bcrypt.hash(DEMO_PASSWORD, 10);
   const users = [
-    [1, roleMap[1].owner, 'owner@demo.gr', hash, 'Αναστασία', 'Κωνσταντίνου'],
-    [1, roleMap[1].admin, 'admin@demo.gr', hash, 'Νίκος', 'Παπαδόπουλος'],
-    [1, roleMap[1].manager, 'manager@demo.gr', hash, 'Ελένη', 'Γεωργίου'],
-    [1, roleMap[1].agent, 'agent@demo.gr', hash, 'Γιώργος', 'Δημητρίου'],
-    [1, roleMap[1].viewer, 'viewer@demo.gr', hash, 'Μαρία', 'Νικολάου'],
-    [2, roleMap[2].owner, 'owner@acme.gr', hash, 'Κώστας', 'Βασιλείου'],
+    [1, roleMap[1].owner, 'owner@demo.gr', hash, 'Αναστασία', 'Κωνσταντίνου', 1],
+    [1, roleMap[1].admin, 'admin@demo.gr', hash, 'Νίκος', 'Παπαδόπουλος', 0],
+    [1, roleMap[1].manager, 'manager@demo.gr', hash, 'Ελένη', 'Γεωργίου', 0],
+    [1, roleMap[1].agent, 'agent@demo.gr', hash, 'Γιώργος', 'Δημητρίου', 0],
+    [1, roleMap[1].viewer, 'viewer@demo.gr', hash, 'Μαρία', 'Νικολάου', 0],
+    [2, roleMap[2].owner, 'owner@acme.gr', hash, 'Κώστας', 'Βασιλείου', 0],
   ];
-  await conn.query('INSERT INTO users (tenant_id, role_id, email, password_hash, first_name, last_name) VALUES ?', [users]);
+  await conn.query('INSERT INTO users (tenant_id, role_id, email, password_hash, first_name, last_name, is_platform_admin) VALUES ?', [users]);
 
   console.log('2/4 Employees, tags, custom fields…');
   // Employees per tenant
