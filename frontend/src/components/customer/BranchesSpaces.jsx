@@ -201,7 +201,7 @@ function BranchDetail({ selected, canWrite, mapProvider, mapsApiKey, branchVisit
   const href = mapUrl(selected, mapProvider);
   const embed = mapEmbedUrl(selected, mapProvider, mapsApiKey);
   const providerName = mapProviderLabel(mapProvider);
-  const address = [selected.address_line, selected.city, selected.postal_code].filter(Boolean).join(', ');
+  const address = [selected.address_line, selected.postal_code || selected.area, selected.city].filter(Boolean).join(', ');
 
   return (
     <div className="card branch-detail">

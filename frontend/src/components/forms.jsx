@@ -267,7 +267,7 @@ export function BranchFormDrawer({ customerId, initial, onClose, onSaved }) {
   }, [cfQ.data]);
 
   const geocode = async () => {
-    const q = [f.address_line, f.city, f.postal_code, 'Ελλάδα'].filter(Boolean).join(', ');
+    const q = [f.address_line, f.postal_code || f.area, f.city, 'Ελλάδα'].filter(Boolean).join(', ');
     setGeoBusy(true); setErr('');
     try {
       const r = await api.geoLookup(q);
