@@ -12,6 +12,7 @@ import { useTabs } from '../store/tabs.js';
 import { useAuth } from '../store/auth.js';
 import { PERMS } from '../lib/perms.js';
 import { CustomerFormDrawer } from '../components/forms.jsx';
+import SendMessageMenu from '../components/message/SendMessageMenu.jsx';
 
 const TABS = [
   { key: 'overview', label: 'Σύνοψη', icon: 'home' },
@@ -101,7 +102,14 @@ export default function CustomerProfile({ customerId, tabId, onBack }) {
           </div>
 
           <div className="ph-actions">
-            <button className="btn"><Icon name="message" size={16} /> Αποστολή μηνύματος</button>
+            <SendMessageMenu
+              customer={c}
+              contacts={data.contacts || []}
+              onSent={() => {
+                qc.invalidateQueries({ queryKey: ['history', 'communications', id] });
+                qc.invalidateQueries({ queryKey: ['history', 'activity', id] });
+              }}
+            />
             {canWrite && <button className="btn btn-primary" onClick={() => setShowEdit(true)}><Icon name="edit" size={16} /> Επεξεργασία</button>}
             {canDelete && <button className="btn btn-icon" title="Διαγραφή" onClick={onDelete}><Icon name="x" /></button>}
           </div>

@@ -134,7 +134,7 @@ export default function Overview({ customerId, data, onOpenTab, onEditCustomer }
               <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 6 }}>Χώροι που χρησιμοποιεί ({b.spaces.length})</div>
               {b.spaces.slice(0, 3).map((s) => (
                 <div key={s.id} className="search-row" style={{ padding: '7px 8px' }}>
-                  <BranchThumb src={s.image_url} name={s.name} size={34} radius={7} placeholder={false} />
+                  <BranchThumb src={s.image_url} name={s.name} size={34} radius={7} />
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 600, fontSize: 13 }}>{s.name}</div>
                     <div className="meta" style={{ fontSize: 11.5 }}>{formatNumber(s.bookings_count)} κρατήσεις</div>

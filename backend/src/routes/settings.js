@@ -3,7 +3,8 @@ import { query } from '../db.js';
 import { authorize } from '../middleware/auth.js';
 import { PERMISSIONS } from '../lib/permissions.js';
 import { loadTenant, getPlatformSettings, setPlatformSetting } from '../lib/tenants.js';
-import { mergeTenantSettings, parseJson, DEFAULT_PLATFORM_SETTINGS } from '../lib/tenantSettings.js';
+import { mergeTenantSettings, parseJson, DEFAULT_PLATFORM_SETTINGS, APP_SETTING_KEYS, publicAppSettings } from '../lib/tenantSettings.js';
+import { applyMessagingPatch, channelStatuses, publicMessaging } from '../lib/messaging.js';
 
 export const settingsRouter = Router();
 
@@ -37,17 +38,52 @@ settingsRouter.patch('/organization', authorize(PERMISSIONS.TENANT_MANAGE), asyn
 settingsRouter.get('/app', authorize(PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.TENANT_MANAGE), async (req, res, next) => {
   try {
     const { rows } = await query('SELECT settings FROM tenants WHERE id = ?', [req.user.tenantId]);
-    res.json({ settings: mergeTenantSettings(rows[0]?.settings) });
+    res.json({ settings: publicAppSettings(rows[0]?.settings) });
   } catch (err) { next(err); }
 });
 
 settingsRouter.patch('/app', authorize(PERMISSIONS.SETTINGS_MANAGE), async (req, res, next) => {
   try {
     const { rows } = await query('SELECT settings FROM tenants WHERE id = ?', [req.user.tenantId]);
-    const nextSettings = mergeTenantSettings({ ...parseJson(rows[0]?.settings, {}), ...(req.body || {}) });
+    const current = parseJson(rows[0]?.settings, {}) || {};
+    const patch = {};
+    for (const k of APP_SETTING_KEYS) {
+      if (req.body?.[k] !== undefined) patch[k] = req.body[k];
+    }
+    const nextSettings = mergeTenantSettings({ ...current, ...patch });
     await query('UPDATE tenants SET settings = ?, updated_at = NOW() WHERE id = ?',
       [JSON.stringify(nextSettings), req.user.tenantId]);
-    res.json({ settings: nextSettings });
+    res.json({ settings: publicAppSettings(nextSettings) });
+  } catch (err) { next(err); }
+});
+
+settingsRouter.get('/messaging/channels', authorize(PERMISSIONS.CUSTOMERS_READ, PERMISSIONS.SETTINGS_MANAGE), async (req, res, next) => {
+  try {
+    const { rows } = await query('SELECT settings FROM tenants WHERE id = ?', [req.user.tenantId]);
+    const settings = mergeTenantSettings(rows[0]?.settings);
+    res.json({ channels: channelStatuses(settings.messaging) });
+  } catch (err) { next(err); }
+});
+
+settingsRouter.get('/messaging', authorize(PERMISSIONS.SETTINGS_MANAGE), async (req, res, next) => {
+  try {
+    const { rows } = await query('SELECT settings FROM tenants WHERE id = ?', [req.user.tenantId]);
+    const settings = mergeTenantSettings(rows[0]?.settings);
+    res.json({ messaging: publicMessaging(settings.messaging) });
+  } catch (err) { next(err); }
+});
+
+settingsRouter.patch('/messaging', authorize(PERMISSIONS.SETTINGS_MANAGE), async (req, res, next) => {
+  try {
+    const { rows } = await query('SELECT settings FROM tenants WHERE id = ?', [req.user.tenantId]);
+    const current = parseJson(rows[0]?.settings, {}) || {};
+    const nextSettings = mergeTenantSettings({
+      ...current,
+      messaging: applyMessagingPatch(current.messaging, req.body || {}),
+    });
+    await query('UPDATE tenants SET settings = ?, updated_at = NOW() WHERE id = ?',
+      [JSON.stringify(nextSettings), req.user.tenantId]);
+    res.json({ messaging: publicMessaging(nextSettings.messaging) });
   } catch (err) { next(err); }
 });
 

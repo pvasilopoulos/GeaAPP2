@@ -329,6 +329,8 @@ CREATE TABLE communications (
   direction   VARCHAR(20) NOT NULL DEFAULT 'outbound',
   subject     VARCHAR(255),
   body        TEXT,
+  recipient   VARCHAR(255),
+  delivery_status VARCHAR(20) NOT NULL DEFAULT 'logged',
   employee_id BIGINT NULL,
   created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY idx_comm_customer_time (customer_id, created_at),

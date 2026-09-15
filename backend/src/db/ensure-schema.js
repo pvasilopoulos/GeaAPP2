@@ -34,6 +34,8 @@ export async function ensureSchema() {
   await addColumn('tenants', 'settings', "JSON NULL");
   await addColumn('tenants', 'updated_at', 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP');
   await addColumn('users', 'is_platform_admin', 'TINYINT(1) NOT NULL DEFAULT 0');
+  await addColumn('communications', 'recipient', 'VARCHAR(255) NULL');
+  await addColumn('communications', 'delivery_status', "VARCHAR(20) NOT NULL DEFAULT 'logged'");
 
   if (!(await tableExists('platform_settings'))) {
     await query(`CREATE TABLE platform_settings (

@@ -56,11 +56,11 @@ export function EmptyState({ icon = 'grid', title, hint }) {
   );
 }
 
-export function Drawer({ title, subtitle, onClose, children }) {
+export function Drawer({ title, subtitle, onClose, children, wide = false }) {
   return (
     <>
       <div className="drawer-backdrop" onClick={onClose} />
-      <aside className="drawer">
+      <aside className={`drawer${wide ? ' drawer-wide' : ''}`}>
         <div className="drawer-head">
           <div>
             <div style={{ fontSize: 16, fontWeight: 700 }}>{title}</div>
@@ -76,7 +76,7 @@ export function Drawer({ title, subtitle, onClose, children }) {
   );
 }
 
-export function BranchThumb({ src, name, size = 56, radius = 9, placeholder = true }) {
+export function BranchThumb({ src, name, size = 56, radius = 9, placeholder = false }) {
   if (src) {
     return (
       <img className="branch-thumb" src={src} alt={name}

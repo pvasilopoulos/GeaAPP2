@@ -1,3 +1,11 @@
+import { mergeMessaging } from './messaging.js';
+
+export const APP_SETTING_KEYS = [
+  'default_country', 'date_format', 'week_starts_on',
+  'default_customer_status', 'require_email', 'strict_duplicates',
+  'voice_lang', 'allow_vip',
+];
+
 export const DEFAULT_TENANT_SETTINGS = {
   default_country: 'Ελλάδα',
   date_format: 'DD/MM/YYYY',
@@ -26,7 +34,19 @@ export function parseJson(v, fallback) {
 }
 
 export function mergeTenantSettings(raw) {
-  return { ...DEFAULT_TENANT_SETTINGS, ...parseJson(raw, {}) };
+  const parsed = parseJson(raw, {}) || {};
+  return {
+    ...DEFAULT_TENANT_SETTINGS,
+    ...parsed,
+    messaging: mergeMessaging(parsed.messaging),
+  };
+}
+
+export function publicAppSettings(raw) {
+  const merged = mergeTenantSettings(raw);
+  const out = {};
+  for (const k of APP_SETTING_KEYS) out[k] = merged[k];
+  return out;
 }
 
 export function slugify(name) {

@@ -11,7 +11,7 @@
     "db:schema": "node src/db/apply-schema.js",
     "db:seed": "node src/db/seed.js",
     "db:reset": "node src/db/apply-schema.js && node src/db/seed.js",
-    "test": "node src/lib/tenantSettings.test.mjs"
+    "test": "node src/lib/tenantSettings.test.mjs && node src/lib/messaging.test.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -22,6 +22,7 @@
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
     "mysql2": "^3.11.0",
+    "nodemailer": "^6.9.16",
     "pdfkit": "^0.15.0"
   }
 }
