@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../api.js';
-import Icon from './Icon.jsx';
-import { Avatar, EmptyState, Drawer, Skeleton } from './ui.jsx';
-import { CONTACT_ROLES } from '../lib/format.js';
-import { useAuth } from '../store/auth.js';
-import { PERMS } from '../lib/perms.js';
+import { api } from '../../api.js';
+import Icon from '../Icon.jsx';
+import { Avatar, EmptyState, Drawer, Skeleton } from '../ui.jsx';
+import { CONTACT_ROLES } from '../../lib/format.js';
+import { useAuth } from '../../store/auth.js';
+import { PERMS } from '../../lib/perms.js';
 
 function blank() {
   return { first_name: '', last_name: '', role: 'Κύρια επαφή', email: '', phone: '', mobile: '', is_primary: false, notes: '' };
