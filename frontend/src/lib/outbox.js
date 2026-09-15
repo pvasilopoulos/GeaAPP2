@@ -129,12 +129,11 @@ export async function retryItem(id, { force } = {}) {
 }
 
 /**
- * Replay queued items oldest first. Stops early when the network is still
- * down so the queue order is preserved; per-item server errors are recorded
- * and skipped so one bad row cannot block the rest.
+ * Replay items oldest first. Stops early when the network is still down so the
+ * queue order is preserved; per-item server errors are recorded and skipped so
+ * one bad row cannot block the rest.
  */
-export async function flushOutbox(scopeId) {
-  const items = (await listOutbox(scopeId)).filter(isRetryable);
+export async function replayItems(items) {
   const summary = { sent: 0, conflicts: 0, failed: 0, stopped: false, customerIds: [] };
 
   for (const item of items) {
@@ -173,6 +172,11 @@ export async function flushOutbox(scopeId) {
     }
   }
   return summary;
+}
+
+export async function flushOutbox(scopeId) {
+  const items = (await listOutbox(scopeId)).filter(isRetryable);
+  return replayItems(items);
 }
 
 /** Pending customer creates rendered as list rows before they reach the server. */
