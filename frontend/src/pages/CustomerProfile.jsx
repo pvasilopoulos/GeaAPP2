@@ -11,6 +11,7 @@ import ContactsPanel from '../components/customer/ContactsPanel.jsx';
 import { useTabs } from '../store/tabs.js';
 import { useAuth } from '../store/auth.js';
 import { PERMS } from '../lib/perms.js';
+import { offlineFirst } from '../lib/offlineCache.js';
 import { CustomerFormDrawer } from '../components/forms.jsx';
 import SendMessageMenu from '../components/message/SendMessageMenu.jsx';
 
@@ -45,7 +46,11 @@ export default function CustomerProfile({ customerId, tabId, onBack }) {
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['customer', id],
-    queryFn: ({ signal }) => api.customer(id, { signal }),
+    queryFn: offlineFirst(
+      `customer:${id}`,
+      ({ signal }) => api.customer(id, { signal }),
+      { keep: { prefix: 'customer:', max: 30 } },
+    ),
     retry: false,
   });
 

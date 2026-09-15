@@ -6,15 +6,34 @@ import App from './App.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import { useAuth } from './store/auth.js';
+import { installOfflineWatchers } from './store/offline.js';
 import { captureInstallPrompt, installReloadGuard, registerServiceWorker } from './lib/pwa.js';
 import './styles.css';
 
 captureInstallPrompt();
 registerServiceWorker();
 installReloadGuard();
+installOfflineWatchers();
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 30000, refetchOnWindowFocus: false, retry: 1 } },
+  defaultOptions: {
+    queries: {
+      staleTime: 30000,
+      refetchOnWindowFocus: false,
+      // Retrying an offline request only delays the cached fallback.
+      retry: (count, err) => !err?.offline && count < 1,
+    },
+  },
+});
+
+// Queued writes that reached the server invalidate the lists they touched.
+window.addEventListener('spacehub:synced', (e) => {
+  queryClient.invalidateQueries({ queryKey: ['customers'] });
+  queryClient.invalidateQueries({ queryKey: ['meta'] });
+  for (const id of e.detail?.customerIds || []) {
+    queryClient.invalidateQueries({ queryKey: ['customer', id] });
+    queryClient.invalidateQueries({ queryKey: ['contacts', id] });
+  }
 });
 
 function Splash() {

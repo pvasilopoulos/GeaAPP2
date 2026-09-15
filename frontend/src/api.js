@@ -17,20 +17,43 @@ async function handle(res) {
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Request failed: ${res.status}`);
+    const err = new Error(body.error || `Request failed: ${res.status}`);
+    err.status = res.status;
+    throw err;
   }
   return res.json();
 }
 
+// A failed fetch (no response at all) means the device is offline or the API is
+// unreachable. The flag lets the outbox keep the request queued instead of
+// treating it as a rejected write.
+function offlineError(cause) {
+  const err = new Error('Χωρίς σύνδεση — η ενέργεια δεν στάλθηκε');
+  err.offline = true;
+  err.cause = cause;
+  return err;
+}
+
+async function request(path, init) {
+  let res;
+  try {
+    res = await fetch(`/api${path}`, init);
+  } catch (err) {
+    if (err?.name === 'AbortError') throw err;
+    throw offlineError(err);
+  }
+  return handle(res);
+}
+
 async function get(path, { signal } = {}) {
-  return handle(await fetch(`/api${path}`, { signal, headers: authHeaders() }));
+  return request(path, { signal, headers: authHeaders() });
 }
 async function send(method, path, body) {
-  return handle(await fetch(`/api${path}`, {
+  return request(path, {
     method,
     headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: body ? JSON.stringify(body) : undefined,
-  }));
+  });
 }
 
 function qs(params) {
