@@ -39,6 +39,7 @@ export default function BranchesSpaces({ customerId }) {
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['c-branches', customerId] });
     qc.invalidateQueries({ queryKey: ['customer', customerId] });
+    qc.invalidateQueries({ queryKey: ['history', 'activity', customerId] });
   };
 
   if (isLoading) return <div className="card card-pad"><Skeleton h={200} /></div>;

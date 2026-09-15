@@ -23,6 +23,7 @@ export default function ContactsPanel({ customerId, customerType }) {
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['contacts', customerId] });
     qc.invalidateQueries({ queryKey: ['customer', customerId] });
+    qc.invalidateQueries({ queryKey: ['history', 'activity', customerId] });
   };
 
   if (isLoading) return <div className="card card-pad"><Skeleton h={120} /></div>;

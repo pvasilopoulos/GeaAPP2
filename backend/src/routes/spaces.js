@@ -8,6 +8,7 @@ import { PERMISSIONS } from '../lib/permissions.js';
 import { logActivity } from '../lib/activity.js';
 import { isSpaceStatus, parseJson, sanitizeAmenities } from '../lib/masterData.js';
 import { loadEntityCustomFields, saveEntityCustomFields } from '../lib/customFields.js';
+import { diffRecords, snapshotFields, packDetails, changeSummary } from '../lib/activityDiff.js';
 
 export const spacesRouter = Router();
 spacesRouter.use(authorize(PERMISSIONS.SPACES_READ));
@@ -76,6 +77,12 @@ spacesRouter.post('/', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, 
     await logActivity({
       tenantId: req.user.tenantId, customerId: branch.customer_id, type: 'space_created',
       description: `Νέος χώρος: ${b.name}`, branchId, spaceId: id,
+      details: packDetails(req, {
+        fields: snapshotFields({
+          name: b.name, space_type: b.space_type, capacity: b.capacity, floor: b.floor,
+          hourly_price: b.hourly_price, daily_price: b.daily_price, status: b.status,
+        }, ['name', 'space_type', 'capacity', 'floor', 'hourly_price', 'daily_price', 'status']),
+      }),
     });
     res.status(201).json({ id, code });
   } catch (err) { next(err); }
@@ -145,9 +152,24 @@ spacesRouter.patch('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, r
     sets.push('search_norm = ?'); params.push(normalizeFields(merged.name, merged.space_type, cur.code, cur.branch_name));
     params.push(id);
     await query(`UPDATE spaces SET ${sets.join(', ')} WHERE id = ?`, params);
+    const patch = {};
+    for (const f of FIELDS) {
+      if (b[f] !== undefined) {
+        const numeric = ['capacity', 'hourly_price', 'daily_price', 'weekend_hourly_price'].includes(f);
+        patch[f] = numeric ? numOrNull(b[f]) : (b[f] === '' ? null : b[f]);
+      }
+    }
+    if (b.status !== undefined) patch.status = b.status;
+    if (b.amenities !== undefined) patch.amenities = sanitizeAmenities(b.amenities);
+    for (const f of ['min_duration_minutes', 'slot_step_minutes', 'buffer_minutes']) {
+      if (b[f] !== undefined) patch[f] = Number(b[f]) || 0;
+    }
+    const changes = diffRecords(cur, patch);
     await logActivity({
       tenantId: req.user.tenantId, customerId: cur.customer_id, type: 'space_updated',
-      description: `Ενημέρωση χώρου: ${merged.name || cur.name}`, branchId: cur.branch_id, spaceId: id,
+      description: changeSummary(`Ενημέρωση χώρου: ${merged.name || cur.name}`, changes, `Ενημέρωση χώρου: ${merged.name || cur.name}`),
+      branchId: cur.branch_id, spaceId: id,
+      details: packDetails(req, { changes }),
     });
     res.json({ ok: true });
   } catch (err) { next(err); }
@@ -165,6 +187,7 @@ spacesRouter.delete('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, 
     await logActivity({
       tenantId: req.user.tenantId, customerId: cur.customer_id, type: 'space_deleted',
       description: `Διαγραφή χώρου: ${cur.name}`, branchId: cur.branch_id,
+      details: packDetails(req, { fields: snapshotFields(cur, ['name']) }),
     });
     res.json({ ok: true });
   } catch (err) { next(err); }

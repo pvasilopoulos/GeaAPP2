@@ -40,10 +40,16 @@ const ACT_LABELS = {
   payment_received: 'Πληρωμή', message_sent: 'Μήνυμα', note_added: 'Σημείωση',
   visit: 'Επίσκεψη', document_uploaded: 'Έγγραφο',
   customer_created: 'Δημιουργία πελάτη', customer_updated: 'Ενημέρωση πελάτη',
-  contact_added: 'Νέα επαφή', contact_removed: 'Διαγραφή επαφής',
+  contact_added: 'Νέα επαφή', contact_updated: 'Ενημέρωση επαφής', contact_removed: 'Διαγραφή επαφής',
   branch_created: 'Νέο υποκατάστημα', branch_updated: 'Ενημέρωση υποκαταστήματος', branch_deleted: 'Διαγραφή υποκαταστήματος',
   space_created: 'Νέος χώρος', space_updated: 'Ενημέρωση χώρου', space_deleted: 'Διαγραφή χώρου',
 };
+
+function deliveryClass(st) {
+  if (st === 'sent') return 'badge-completed';
+  if (st === 'failed') return 'badge-inactive';
+  return 'badge-prospect';
+}
 
 export default function HistoryList({ kind, customerId }) {
   const cfg = CONFIG[kind];
@@ -99,8 +105,12 @@ function Item({ kind, r }) {
   if (kind === 'communications') {
     const delivery = DELIVERY_LABELS[r.delivery_status];
     return (
-      <Line icon="message" title={r.subject || CHANNEL_LABELS[r.channel] || r.channel}
-        sub={[CHANNEL_LABELS[r.channel] || r.channel, r.recipient, r.direction === 'inbound' ? 'Εισερχόμενο' : 'Εξερχόμενο', delivery, formatDateTime(r.created_at)].filter(Boolean).join(' · ')} />
+      <div className="hist-item">
+        <Line icon="message" title={r.subject || CHANNEL_LABELS[r.channel] || r.channel}
+          sub={[CHANNEL_LABELS[r.channel] || r.channel, r.recipient, r.direction === 'inbound' ? 'Εισερχόμενο' : 'Εξερχόμενο', delivery, formatDateTime(r.created_at)].filter(Boolean).join(' · ')}
+          right={r.delivery_status ? <span className={`badge ${deliveryClass(r.delivery_status)}`}>{delivery}</span> : null} />
+        {r.body && <div className="hist-msg">{r.body}</div>}
+      </div>
     );
   }
   if (kind === 'documents') {
@@ -114,9 +124,58 @@ function Item({ kind, r }) {
     return <Line icon="note" iconBg="var(--amber-soft)" iconFg="var(--amber)" title={r.body} sub={formatDateTime(r.created_at)} />;
   }
   // activity
+  const d = r.details || {};
+  const actor = d.actor?.name;
+  const msg = d.message;
+  const delivery = msg?.delivery_status;
   return (
-    <Line icon="activity" title={r.description || ACT_LABELS[r.type]}
-      sub={[ACT_LABELS[r.type], r.branch_name, formatDateTime(r.created_at)].filter(Boolean).join(' · ')} />
+    <div className="hist-item">
+      <Line icon="activity" title={r.description || ACT_LABELS[r.type]}
+        sub={[ACT_LABELS[r.type], r.branch_name, r.space_name, actor, formatDateTime(r.created_at)].filter(Boolean).join(' · ')}
+        right={delivery ? <span className={`badge ${deliveryClass(delivery)}`}>{DELIVERY_LABELS[delivery] || delivery}</span> : null} />
+      <ActivityDetails details={d} />
+    </div>
+  );
+}
+
+function ActivityDetails({ details }) {
+  if (!details) return null;
+  const changes = details.changes || [];
+  const fields = details.fields || [];
+  const msg = details.message;
+  return (
+    <>
+      {changes.length > 0 && (
+        <ul className="hist-diffs">
+          {changes.map((c) => (
+            <li key={c.field}>
+              <span className="k">{c.label}</span>
+              <span className="from">{c.from}</span>
+              <span className="arrow">→</span>
+              <span className="to">{c.to}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {fields.length > 0 && (
+        <ul className="hist-diffs snap">
+          {fields.map((c) => (
+            <li key={c.field}>
+              <span className="k">{c.label}</span>
+              <span className="to">{c.to}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {msg && (
+        <div className="hist-msg">
+          <div className="hist-msg-h">
+            {[msg.channel_label || CHANNEL_LABELS[msg.channel], msg.to, msg.subject, msg.delivery_detail].filter(Boolean).join(' · ')}
+          </div>
+          {msg.body}
+        </div>
+      )}
+    </>
   );
 }
 
