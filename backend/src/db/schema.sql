@@ -33,6 +33,7 @@ DROP TABLE IF EXISTS customers;
 DROP TABLE IF EXISTS employees;
 DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS roles;
+DROP TABLE IF EXISTS platform_settings;
 DROP TABLE IF EXISTS tenants;
 SET FOREIGN_KEY_CHECKS = 1;
 
@@ -40,10 +41,26 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- Multi-tenancy + authentication
 -- ---------------------------------------------------------------------------
 CREATE TABLE tenants (
-  id         BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  name       VARCHAR(160) NOT NULL,
-  slug       VARCHAR(160) NOT NULL UNIQUE,
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  id             BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  name           VARCHAR(160) NOT NULL,
+  slug           VARCHAR(160) NOT NULL UNIQUE,
+  status         VARCHAR(20) NOT NULL DEFAULT 'active',
+  locale         VARCHAR(10) NOT NULL DEFAULT 'el',
+  timezone       VARCHAR(60) NOT NULL DEFAULT 'Europe/Athens',
+  currency       VARCHAR(8) NOT NULL DEFAULT 'EUR',
+  plan           VARCHAR(40) NOT NULL DEFAULT 'standard',
+  contact_email  VARCHAR(255) NULL,
+  contact_phone  VARCHAR(40) NULL,
+  notes          TEXT NULL,
+  settings       JSON NULL,
+  created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE platform_settings (
+  skey       VARCHAR(80) NOT NULL PRIMARY KEY,
+  svalue     TEXT NOT NULL,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE roles (
@@ -69,6 +86,7 @@ CREATE TABLE users (
   full_name     VARCHAR(255) GENERATED ALWAYS AS (CONCAT(first_name, ' ', last_name)) STORED,
   is_active     TINYINT(1) NOT NULL DEFAULT 1,
   last_login_at DATETIME NULL,
+  is_platform_admin TINYINT(1) NOT NULL DEFAULT 0,
   created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY idx_users_tenant (tenant_id),
   CONSTRAINT fk_users_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,

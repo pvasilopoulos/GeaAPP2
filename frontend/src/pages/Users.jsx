@@ -9,7 +9,7 @@ import { PERMS } from '../lib/perms.js';
 
 const sameSet = (set, arr) => set.size === arr.length && arr.every((x) => set.has(x));
 
-export default function Users() {
+export default function Users({ embedded = false }) {
   const qc = useQueryClient();
   const me = useAuth((s) => s.user);
   const hasPerm = useAuth((s) => s.hasPerm);
@@ -24,6 +24,7 @@ export default function Users() {
 
   return (
     <div>
+      {!embedded ? (
       <div className="page-head">
         <div>
           <h1>Χρήστες & Ρόλοι</h1>
@@ -31,6 +32,11 @@ export default function Users() {
         </div>
         {canManageUsers && <button className="btn btn-accent" onClick={() => setDrawer(true)}><Icon name="plus" size={16} /> Νέος χρήστης</button>}
       </div>
+      ) : (
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
+        {canManageUsers && <button className="btn btn-accent" onClick={() => setDrawer(true)}><Icon name="plus" size={16} /> Νέος χρήστης</button>}
+      </div>
+      )}
 
       {canManageUsers && (
         <div className="card">

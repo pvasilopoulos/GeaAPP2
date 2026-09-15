@@ -18,7 +18,7 @@ async function roleByKey(tenantId, key) {
 
 // ---- Permission catalog ----------------------------------------------------
 usersRouter.get('/permissions', authorize(PERMISSIONS.ROLES_MANAGE), (_req, res) => {
-  res.json({ permissions: PERMISSION_CATALOG });
+  res.json({ permissions: PERMISSION_CATALOG.filter((p) => p.code !== PERMISSIONS.TENANTS_PLATFORM) });
 });
 
 // ---- Roles (tenant-scoped) -------------------------------------------------

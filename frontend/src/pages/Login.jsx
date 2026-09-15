@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../store/auth.js';
+import { api } from '../api.js';
 import Icon from '../components/Icon.jsx';
 
 const DEMO = [
@@ -12,6 +14,7 @@ const DEMO = [
 export default function Login() {
   const navigate = useNavigate();
   const login = useAuth((s) => s.login);
+  const pub = useQuery({ queryKey: ['public-settings'], queryFn: ({ signal }) => api.publicSettings({ signal }) });
   const [email, setEmail] = useState('owner@demo.gr');
   const [password, setPassword] = useState('password123');
   const [error, setError] = useState('');
@@ -44,7 +47,9 @@ export default function Login() {
             {loading ? <span className="spinner" /> : <Icon name="check" size={16} />} Σύνδεση
           </button>
         </form>
-        <div className="auth-hint">Δεν έχετε λογαριασμό; <Link to="/register" style={{ color: 'var(--accent)', fontWeight: 600 }}>Εγγραφή</Link></div>
+        {pub.data?.allow_self_register !== false && (
+          <div className="auth-hint">Δεν έχετε λογαριασμό; <Link to="/register" style={{ color: 'var(--accent)', fontWeight: 600 }}>Εγγραφή</Link></div>
+        )}
         <div className="demo-box">
           <b>Demo λογαριασμοί</b> (κωδικός: <code>password123</code>)
           {DEMO.map(([role, mail]) => (

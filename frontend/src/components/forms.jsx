@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api.js';
 import Icon from './Icon.jsx';
@@ -112,6 +112,18 @@ export function CustomerFormDrawer({ initial, onClose, onSaved, onOpenExisting }
   const [err, setErr] = useState('');
   const [dups, setDups] = useState([]);
   const [force, setForce] = useState(false);
+  const tset = meta?.tenant?.settings || {};
+  const appliedDefaults = useRef(false);
+  useEffect(() => {
+    if (initial || appliedDefaults.current || !meta?.tenant?.settings) return;
+    appliedDefaults.current = true;
+    const s = meta.tenant.settings;
+    setF((prev) => ({
+      ...prev,
+      country: s.default_country || prev.country,
+      status: s.default_customer_status || prev.status,
+    }));
+  }, [meta, initial]);
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
 
   const cfQ = useQuery({
@@ -152,7 +164,10 @@ export function CustomerFormDrawer({ initial, onClose, onSaved, onOpenExisting }
     try {
       if (!force) {
         const matches = await checkDups();
-        if (matches.length) { setForce(true); setSaving(false); return; }
+        if (matches.length) {
+          if (tset.strict_duplicates) { setErr('Υπάρχει ήδη πελάτης με ίδια στοιχεία.'); setSaving(false); return; }
+          setForce(true); setSaving(false); return;
+        }
       }
       const res = initial ? (await api.updateCustomer(initial.id, f), { id: initial.id }) : await api.createCustomer(f);
       if (visibleCf.length) {
@@ -167,7 +182,7 @@ export function CustomerFormDrawer({ initial, onClose, onSaved, onOpenExisting }
     <Drawer title={initial ? 'Επεξεργασία πελάτη' : 'Νέος πελάτης'} subtitle={initial ? `#${initial.code}` : 'Δημιουργία εγγραφής πελάτη'} onClose={onClose}>
       {err && <div className="auth-error">{err}</div>}
       <form onSubmit={submit}>
-        <VoiceFill onApply={applyVoice} />
+        <VoiceFill onApply={applyVoice} defaultLang={tset.voice_lang} />
         <ImageUpload value={f.avatar_url} onChange={(url) => setF((s) => ({ ...s, avatar_url: url }))} label="Φωτογραφία" />
         <Row>
           <Field label="Όνομα"><Text value={f.first_name} onChange={set('first_name')} required /></Field>
@@ -184,7 +199,7 @@ export function CustomerFormDrawer({ initial, onClose, onSaved, onOpenExisting }
           </Row>
         )}
         <Row>
-          <Field label="Email"><Text type="email" value={f.email} onChange={(e) => { set('email')(e); setForce(false); }} onBlur={checkDups} /></Field>
+          <Field label="Email"><Text type="email" value={f.email} onChange={(e) => { set('email')(e); setForce(false); }} onBlur={checkDups} required={!!tset.require_email} /></Field>
           <Field label="Τηλέφωνο"><Text value={f.phone} onChange={(e) => { set('phone')(e); setForce(false); }} onBlur={checkDups} /></Field>
         </Row>
         <Row>
@@ -204,9 +219,11 @@ export function CustomerFormDrawer({ initial, onClose, onSaved, onOpenExisting }
           </select>
         </Field>
         <Field label="Σημείωση"><textarea value={f.profile_note} onChange={set('profile_note')} rows={2} style={ta} /></Field>
+        {tset.allow_vip !== false && (
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 14px' }}>
           <input type="checkbox" checked={f.is_vip} onChange={set('is_vip')} /> VIP πελάτης
         </label>
+        )}
         <DuplicateBox matches={dups} onOpen={onOpenExisting ? (m) => { onClose(); onOpenExisting(m); } : undefined} />
         <CustomFieldsSection fields={visibleCf} values={cfValues} onChange={setCfValues} base={f} />
         <button className="btn btn-accent btn-block" disabled={saving}>

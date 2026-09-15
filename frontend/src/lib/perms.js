@@ -11,4 +11,5 @@ export const PERMS = {
   USERS_MANAGE: 'users.manage',
   ROLES_MANAGE: 'roles.manage',
   TENANT_MANAGE: 'tenant.manage',
+  TENANTS_PLATFORM: 'tenants.platform',
 };

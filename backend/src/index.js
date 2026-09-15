@@ -19,6 +19,9 @@ import { usersRouter } from './routes/users.js';
 import { uploadsRouter, UPLOADS_DIR } from './routes/uploads.js';
 import { geoRouter } from './routes/geo.js';
 import { authenticate } from './middleware/auth.js';
+import { ensureSchema } from './db/ensure-schema.js';
+import { tenantsRouter } from './routes/tenants.js';
+import { settingsRouter } from './routes/settings.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -59,6 +62,8 @@ app.use('/api/custom-fields', customFieldsRouter);
 app.use('/api/stats', statsRouter);
 app.use('/api/uploads', uploadsRouter);
 app.use('/api/geo', geoRouter);
+app.use('/api/tenants', tenantsRouter);
+app.use('/api/settings', settingsRouter);
 app.use('/api', usersRouter);
 
 // Unknown API routes return JSON 404 (never the SPA shell).
@@ -78,9 +83,17 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: 'Internal server error', detail: err.message });
 });
 
-const server = app.listen(config.port, () => {
-  console.log(`SpaceHub API listening on port ${config.port} (${config.nodeEnv})`);
-});
+let server;
+ensureSchema()
+  .then(() => {
+    server = app.listen(config.port, () => {
+      console.log(`SpaceHub API listening on port ${config.port} (${config.nodeEnv})`);
+    });
+  })
+  .catch((err) => {
+    console.error('Failed to ensure schema:', err);
+    process.exit(1);
+  });
 
-process.on('SIGTERM', () => server.close(() => pool.end()));
-process.on('SIGINT', () => server.close(() => pool.end()));
+process.on('SIGTERM', () => server?.close(() => pool.end()));
+process.on('SIGINT', () => server?.close(() => pool.end()));
