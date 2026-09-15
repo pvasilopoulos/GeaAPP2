@@ -8,7 +8,12 @@ import { normalizeFields } from '../lib/normalize.js';
 import { loadEntityCustomFields, saveEntityCustomFields } from '../lib/customFields.js';
 import { logActivity } from '../lib/activity.js';
 import { parseJson } from '../lib/masterData.js';
-import { CHANNELS, CHANNEL_META, deliverMessage, mergeMessaging } from '../lib/messaging.js';
+import {
+  CHANNELS, CHANNEL_META, buildDeliveryPayload, channelCaps, deliverMessage,
+  mergeMessaging, validateMessage,
+} from '../lib/messaging.js';
+import { renderBody, sanitizeHtml } from '../lib/richText.js';
+import { buildTemplateContext, resolveTemplate } from '../lib/messageTemplates.js';
 import { mergeTenantSettings } from '../lib/tenantSettings.js';
 import { diffRecords, snapshotFields, packDetails, changeSummary, parseDetails } from '../lib/activityDiff.js';
 
@@ -383,33 +388,104 @@ customersRouter.get('/:id/payments', subResource(
    WHERE customer_id = ? ORDER BY paid_at DESC LIMIT ? OFFSET ?`));
 
 customersRouter.get('/:id/communications', subResource(
-  `SELECT id, channel, direction, subject, body, recipient, delivery_status, created_at FROM communications
-   WHERE customer_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`));
+  `SELECT id, channel, direction, subject, body, body_format, attachments, recipient, delivery_status, created_at
+   FROM communications WHERE customer_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`));
+
+// Public origin used for media links handed to Telegram and Viber, which fetch
+// the file themselves and therefore cannot see a private host.
+function publicBaseUrl(req) {
+  const configured = String(process.env.PUBLIC_BASE_URL || '').trim();
+  if (configured) return configured.replace(/\/+$/, '');
+  const proto = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+  return `${proto}://${req.headers.host}`;
+}
+
+async function templateContext(req, customerId) {
+  const [{ rows: customerRows }, { rows: branchRows }, { rows: tenantRows }] = await Promise.all([
+    query('SELECT * FROM customers WHERE id = ? AND tenant_id = ?', [customerId, req.user.tenantId]),
+    query(`SELECT name, address_line, postal_code, area, city, phone FROM branches
+           WHERE customer_id = ? ORDER BY is_primary DESC, id LIMIT 1`, [customerId]),
+    query('SELECT name, contact_email, contact_phone FROM tenants WHERE id = ?', [req.user.tenantId]),
+  ]);
+  const customer = customerRows[0];
+  if (!customer) return null;
+
+  const defs = await loadEntityCustomFields(query, {
+    tenantId: req.user.tenantId, entityType: 'customer', entityId: customerId,
+  });
+  const customFields = {};
+  for (const d of defs) {
+    const v = d.text_value ?? d.number_value ?? d.date_value
+      ?? (d.boolean_value == null ? null : (d.boolean_value ? 'Ναι' : 'Όχι'))
+      ?? (Array.isArray(d.json_value) ? d.json_value.join(', ') : null);
+    customFields[d.key] = v == null ? '' : v;
+  }
+
+  return buildTemplateContext({
+    customer, branch: branchRows[0], tenant: tenantRows[0], user: req.user, customFields,
+  });
+}
+
+// POST /api/customers/:id/messages/preview — resolve a template for this
+// customer so the composer shows the final wording before anything is sent.
+customersRouter.post('/:id/messages/preview', authorize(PERMISSIONS.CUSTOMERS_READ), async (req, res, next) => {
+  try {
+    const ctx = await templateContext(req, Number(req.params.id));
+    if (!ctx) return res.status(404).json({ error: 'Ο πελάτης δεν βρέθηκε' });
+    res.json({
+      subject: resolveTemplate(req.body?.subject || '', ctx),
+      body: resolveTemplate(req.body?.body || '', ctx),
+    });
+  } catch (err) { next(err); }
+});
 
 customersRouter.post('/:id/messages', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
   try {
     const customerId = Number(req.params.id);
     const channel = String(req.body?.channel || '').trim();
     const to = String(req.body?.to || '').trim();
-    const subject = String(req.body?.subject || '').trim().slice(0, 255);
-    const body = String(req.body?.body || '').trim();
     if (!CHANNELS.includes(channel)) return res.status(400).json({ error: 'Μη έγκυρο κανάλι' });
     if (!to) return res.status(400).json({ error: 'Απαιτείται παραλήπτης' });
-    if (!body) return res.status(400).json({ error: 'Απαιτείται κείμενο μηνύματος' });
+
+    const caps = channelCaps(channel);
+    const ctx = await templateContext(req, customerId);
+    if (!ctx) return res.status(404).json({ error: 'Ο πελάτης δεν βρέθηκε' });
+
+    // Resolve again here: the composer already did it on insert, but a stale
+    // client must never put raw {{placeholder}} in front of a customer.
+    const bodyFormat = req.body?.bodyFormat === 'html' && caps.richText ? 'html' : 'text';
+    const rawBody = resolveTemplate(String(req.body?.body || ''), ctx);
+    const body = bodyFormat === 'html' ? sanitizeHtml(rawBody) : rawBody.trim();
+    const subject = caps.subject
+      ? resolveTemplate(String(req.body?.subject || ''), ctx).trim().slice(0, 255)
+      : '';
+    const attachments = Array.isArray(req.body?.attachments) ? req.body.attachments : [];
+    const button = caps.button && req.body?.button?.url ? req.body.button : null;
+
+    const invalid = validateMessage(channel, { body, bodyFormat, attachments });
+    if (invalid) return res.status(400).json({ error: invalid });
 
     const { rows: tenantRows } = await query('SELECT settings FROM tenants WHERE id = ?', [req.user.tenantId]);
     const messaging = mergeMessaging(mergeTenantSettings(tenantRows[0]?.settings).messaging);
     const cfg = messaging[channel];
     if (!cfg?.enabled) return res.status(400).json({ error: `Το κανάλι ${CHANNEL_META[channel].label} είναι απενεργοποιημένο στις ρυθμίσεις` });
 
-    const delivery = await deliverMessage(channel, cfg, { to, subject, body });
+    const payload = buildDeliveryPayload(channel, {
+      to, subject, body, bodyFormat, attachments, button,
+    }, { baseUrl: publicBaseUrl(req) });
+
+    const delivery = await deliverMessage(channel, cfg, payload);
     const channelLabel = CHANNEL_META[channel].label;
     const subjectLine = subject || `${channelLabel} προς ${to}`;
+    // The history stores what the customer actually received, not the markup.
+    const plain = renderBody(body, bodyFormat, 'text');
 
     const ins = await query(
-      `INSERT INTO communications (customer_id, channel, direction, subject, body, recipient, delivery_status, employee_id)
-       VALUES (?,?,?,?,?,?,?,?)`,
-      [customerId, channel, 'outbound', subjectLine, body, to, delivery.status, req.user.id]);
+      `INSERT INTO communications
+        (customer_id, channel, direction, subject, body, body_format, attachments, recipient, delivery_status, employee_id)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      [customerId, channel, 'outbound', subjectLine, body, bodyFormat,
+        attachments.length ? JSON.stringify(attachments) : null, to, delivery.status, req.user.id]);
 
     await logActivity({
       tenantId: req.user.tenantId,
@@ -422,7 +498,8 @@ customersRouter.post('/:id/messages', authorize(PERMISSIONS.CUSTOMERS_WRITE), as
           channel_label: channelLabel,
           to,
           subject: subject || null,
-          body,
+          body: plain,
+          attachments: attachments.map((a) => a.name).filter(Boolean),
           delivery_status: delivery.status,
           delivery_detail: delivery.detail || null,
         },
@@ -434,7 +511,7 @@ customersRouter.post('/:id/messages', authorize(PERMISSIONS.CUSTOMERS_WRITE), as
       channel,
       to,
       subject: subjectLine,
-      body,
+      body: plain,
       delivery,
     });
   } catch (err) { next(err); }

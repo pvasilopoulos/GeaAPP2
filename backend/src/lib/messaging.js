@@ -1,3 +1,5 @@
+import { renderBody } from './richText.js';
+
 export const CHANNELS = ['email', 'viber', 'viber_routee', 'sms', 'telegram'];
 
 export const CHANNEL_META = {
@@ -7,6 +9,122 @@ export const CHANNEL_META = {
   sms: { label: 'SMS', recipientKind: 'phone' },
   telegram: { label: 'Telegram', recipientKind: 'telegram' },
 };
+
+export const IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+export const DOC_MIMES = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/plain',
+  'text/csv',
+];
+
+/**
+ * What each provider can actually carry. The composer is built from this, so a
+ * channel never offers a control the API behind it would reject.
+ *
+ * transport: 'inline' attaches bytes, 'url' hands the provider a public link —
+ * which means media on Viber and Telegram needs the app on a reachable host.
+ */
+export const CHANNEL_CAPS = {
+  email: {
+    richText: true,
+    subject: true,
+    maxLength: 0,
+    encoding: 'unicode',
+    attachments: { max: 5, accept: [...IMAGE_MIMES, ...DOC_MIMES], transport: 'inline' },
+    button: false,
+  },
+  viber: {
+    richText: false,
+    subject: false,
+    maxLength: 7000,
+    encoding: 'unicode',
+    attachments: { max: 1, accept: IMAGE_MIMES, transport: 'url' },
+    button: false,
+  },
+  viber_routee: {
+    richText: false,
+    subject: false,
+    maxLength: 1000,
+    encoding: 'unicode',
+    attachments: { max: 1, accept: IMAGE_MIMES, transport: 'url' },
+    button: true,
+  },
+  sms: {
+    richText: false,
+    subject: false,
+    maxLength: 1530,
+    encoding: 'gsm',
+    attachments: null,
+    button: false,
+  },
+  telegram: {
+    richText: true,
+    subject: false,
+    maxLength: 4096,
+    encoding: 'unicode',
+    attachments: { max: 1, accept: [...IMAGE_MIMES, ...DOC_MIMES], transport: 'url' },
+    button: false,
+  },
+};
+
+export function channelCaps(channel) {
+  return CHANNEL_CAPS[channel] || CHANNEL_CAPS.sms;
+}
+
+function absoluteUrl(url, baseUrl) {
+  const u = String(url || '').trim();
+  if (!u) return '';
+  if (/^https?:\/\//i.test(u)) return u;
+  return `${String(baseUrl || '').replace(/\/+$/, '')}${u.startsWith('/') ? '' : '/'}${u}`;
+}
+
+/**
+ * Turns the stored message into exactly what one provider accepts: the right
+ * text flavour, only the attachments it can carry, and nothing it would reject.
+ */
+export function buildDeliveryPayload(channel, msg, { baseUrl } = {}) {
+  const caps = channelCaps(channel);
+  const format = msg.bodyFormat === 'html' ? 'html' : 'text';
+  const attachments = (caps.attachments ? msg.attachments || [] : [])
+    .slice(0, caps.attachments?.max || 0)
+    .map((a) => ({ ...a, absoluteUrl: absoluteUrl(a.url, baseUrl) }));
+
+  return {
+    to: msg.to,
+    subject: caps.subject ? msg.subject : undefined,
+    text: renderBody(msg.body, format, channel === 'telegram' ? 'telegram' : 'text'),
+    html: channel === 'email' ? renderBody(msg.body, format, 'html') : undefined,
+    attachments,
+    button: caps.button && msg.button?.url ? msg.button : undefined,
+  };
+}
+
+/** Server-side guard so a stale or scripted client cannot bypass the composer. */
+export function validateMessage(channel, msg) {
+  const caps = channelCaps(channel);
+  const text = renderBody(msg.body, msg.bodyFormat === 'html' ? 'html' : 'text', 'text');
+  if (!text.trim()) return 'Απαιτείται κείμενο μηνύματος';
+  if (caps.maxLength && text.length > caps.maxLength) {
+    return `Το μήνυμα ξεπερνά το όριο των ${caps.maxLength} χαρακτήρων για ${CHANNEL_META[channel]?.label || channel}`;
+  }
+  const files = msg.attachments || [];
+  if (files.length && !caps.attachments) {
+    return `Το κανάλι ${CHANNEL_META[channel]?.label || channel} δεν υποστηρίζει συνημμένα`;
+  }
+  if (caps.attachments && files.length > caps.attachments.max) {
+    return `Έως ${caps.attachments.max} συνημμένα για ${CHANNEL_META[channel]?.label || channel}`;
+  }
+  for (const f of files) {
+    if (caps.attachments && !caps.attachments.accept.includes(String(f.mime || '').toLowerCase())) {
+      return `Ο τύπος αρχείου ${f.mime || '—'} δεν υποστηρίζεται σε ${CHANNEL_META[channel]?.label || channel}`;
+    }
+  }
+  return null;
+}
 
 const SECRET_FIELDS = {
   email: ['smtp_pass'],
@@ -132,6 +250,7 @@ export function channelStatuses(raw) {
     recipientKind: CHANNEL_META[id].recipientKind,
     enabled: m[id].enabled !== false,
     configured: isConfigured(id, m[id]),
+    caps: CHANNEL_CAPS[id],
   }));
 }
 
@@ -210,10 +329,17 @@ async function routeeAccessToken(applicationId, applicationSecret, { force } = {
 
 async function sendViberRoutee(cfg, payload) {
   const to = toE164(payload.to);
+  const image = (payload.attachments || []).find((a) => IMAGE_MIMES.includes(String(a.mime || '').toLowerCase()));
   const body = {
     senderInfoTrackingId: String(cfg.sender_info_tracking_id || '').trim(),
     to,
-    body: { text: String(payload.body || '').slice(0, 1000) },
+    body: {
+      text: String(payload.text || '').slice(0, 1000),
+      ...(image ? { imageURL: image.absoluteUrl } : {}),
+      ...(payload.button?.url ? {
+        action: { caption: payload.button.caption || 'Άνοιγμα', targetUrl: payload.button.url },
+      } : {}),
+    },
   };
   const sendOnce = async (token) => {
     const ac = new AbortController();
@@ -245,7 +371,7 @@ async function sendViberRoutee(cfg, payload) {
   if (!res.ok) throw new Error(routeeErrorMessage(text, res.status));
 }
 
-async function sendEmail(cfg, { to, subject, body }) {
+async function sendEmail(cfg, { to, subject, html, text, attachments }) {
   const nodemailer = (await import('nodemailer')).default;
   const transporter = nodemailer.createTransport({
     host: cfg.smtp_host,
@@ -260,8 +386,51 @@ async function sendEmail(cfg, { to, subject, body }) {
     from: cfg.from_name ? `"${cfg.from_name.replace(/"/g, '')}" <${cfg.from_email}>` : cfg.from_email,
     to,
     subject: subject || '(χωρίς θέμα)',
-    text: body,
+    // Always ship a plain-text alternative alongside HTML: clients that cannot
+    // render it still get the message, and it scores better against spam.
+    text,
+    html: html || undefined,
+    attachments: (attachments || []).map((a) => ({ filename: a.name, path: a.absoluteUrl })),
   });
+}
+
+function isImage(att) {
+  return IMAGE_MIMES.includes(String(att?.mime || '').toLowerCase());
+}
+
+async function sendTelegram(cfg, { to, text, attachments }) {
+  const chatId = String(to || '').replace(/^@/, '').trim();
+  const base = `https://api.telegram.org/bot${cfg.bot_token}`;
+  const file = attachments?.[0];
+  if (!file) {
+    await postJson(`${base}/sendMessage`, { chat_id: chatId, text, parse_mode: 'HTML' });
+    return;
+  }
+  // A caption tops out well below a message body, so long text is sent
+  // separately and the media follows it.
+  const caption = text.length <= 1024 ? text : '';
+  if (isImage(file)) {
+    if (!caption && text) await postJson(`${base}/sendMessage`, { chat_id: chatId, text, parse_mode: 'HTML' });
+    await postJson(`${base}/sendPhoto`, { chat_id: chatId, photo: file.absoluteUrl, caption, parse_mode: 'HTML' });
+    return;
+  }
+  if (!caption && text) await postJson(`${base}/sendMessage`, { chat_id: chatId, text, parse_mode: 'HTML' });
+  await postJson(`${base}/sendDocument`, { chat_id: chatId, document: file.absoluteUrl, caption, parse_mode: 'HTML' });
+}
+
+async function sendViberBot(cfg, { to, text, attachments }) {
+  const receiver = String(to || '').replace(/\s+/g, '');
+  const sender = { name: cfg.sender_name || 'SpaceHub' };
+  const file = attachments?.[0];
+  if (file && isImage(file)) {
+    await postJson('https://chatapi.viber.com/pa/send_message', {
+      receiver, type: 'picture', text, media: file.absoluteUrl, sender,
+    }, { 'X-Viber-Auth-Token': cfg.auth_token });
+    return;
+  }
+  await postJson('https://chatapi.viber.com/pa/send_message', {
+    receiver, type: 'text', text, sender,
+  }, { 'X-Viber-Auth-Token': cfg.auth_token });
 }
 
 export async function deliverMessage(channel, cfg, payload) {
@@ -275,20 +444,11 @@ export async function deliverMessage(channel, cfg, payload) {
       return { status: 'sent' };
     }
     if (channel === 'telegram') {
-      const chatId = String(payload.to || '').replace(/^@/, '').trim();
-      await postJson(`https://api.telegram.org/bot${c.bot_token}/sendMessage`, {
-        chat_id: chatId,
-        text: payload.body,
-      });
+      await sendTelegram(c, payload);
       return { status: 'sent' };
     }
     if (channel === 'viber') {
-      await postJson('https://chatapi.viber.com/pa/send_message', {
-        receiver: String(payload.to || '').replace(/\s+/g, ''),
-        type: 'text',
-        text: payload.body,
-        sender: { name: c.sender_name || 'SpaceHub' },
-      }, { 'X-Viber-Auth-Token': c.auth_token });
+      await sendViberBot(c, payload);
       return { status: 'sent' };
     }
     if (channel === 'viber_routee') {
@@ -300,7 +460,7 @@ export async function deliverMessage(channel, cfg, payload) {
       await postJson(c.api_url, {
         to: payload.to,
         from: c.sender_id || undefined,
-        body: payload.body,
+        body: payload.text,
       }, headers);
       return { status: 'sent' };
     }
