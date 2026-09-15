@@ -40,9 +40,10 @@ export default function CustomerProfile({ customerId, tabId, onBack }) {
     if (tabId) closeTab(tabId); else if (onBack) onBack();
   };
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['customer', id],
     queryFn: ({ signal }) => api.customer(id, { signal }),
+    retry: false,
   });
 
   // Keep the tab title in sync with the loaded customer name.
@@ -51,7 +52,16 @@ export default function CustomerProfile({ customerId, tabId, onBack }) {
   }, [data, tabId, renameTab]);
 
   if (isLoading) return <ProfileSkeleton />;
-  if (!data) return null;
+  if (isError || !data) {
+    return (
+      <div className="card card-pad" style={{ textAlign: 'center', padding: 48 }}>
+        <Icon name="users" size={34} style={{ color: 'var(--text-3)' }} />
+        <div style={{ fontWeight: 600, marginTop: 10 }}>Ο πελάτης δεν βρέθηκε</div>
+        <div className="muted" style={{ marginBottom: 16 }}>Ενδέχεται να έχει διαγραφεί.</div>
+        <button className="btn" onClick={() => (tabId ? closeTab(tabId) : onBack?.())}>Κλείσιμο καρτέλας</button>
+      </div>
+    );
+  }
   const c = data.customer;
   const joined = new Date(c.registered_at);
 
