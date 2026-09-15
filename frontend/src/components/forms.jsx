@@ -4,6 +4,7 @@ import { api } from '../api.js';
 import Icon from './Icon.jsx';
 import { Drawer } from './ui.jsx';
 import { ImageUpload, HoursEditor, AmenitiesPicker } from './formBits.jsx';
+import VoiceFill from './VoiceFill.jsx';
 import { defaultOpeningHours, BRANCH_STATUS_LABELS, SPACE_STATUS_LABELS } from '../lib/format.js';
 
 const SPACE_TYPES = ['Αίθουσα συνεδριάσεων', 'Ιδιωτικό γραφείο', 'Co-working', 'Lounge', 'Αίθουσα εκδηλώσεων', 'Studio', 'Αίθουσα εκπαίδευσης'];
@@ -129,6 +130,13 @@ export function CustomerFormDrawer({ initial, onClose, onSaved, onOpenExisting }
   }, [cfQ.data, initial]);
   const visibleCf = cfFields.filter((fld) => cfVisible(fld, f));
 
+  const applyVoice = (patches) => {
+    setF((s) => ({ ...s, ...patches }));
+    if (patches.email != null || patches.phone != null || patches.mobile != null || patches.tax_id != null) {
+      setForce(false);
+    }
+  };
+
   const checkDups = async () => {
     try {
       const res = await api.checkDuplicates({
@@ -159,6 +167,7 @@ export function CustomerFormDrawer({ initial, onClose, onSaved, onOpenExisting }
     <Drawer title={initial ? 'Επεξεργασία πελάτη' : 'Νέος πελάτης'} subtitle={initial ? `#${initial.code}` : 'Δημιουργία εγγραφής πελάτη'} onClose={onClose}>
       {err && <div className="auth-error">{err}</div>}
       <form onSubmit={submit}>
+        <VoiceFill onApply={applyVoice} />
         <ImageUpload value={f.avatar_url} onChange={(url) => setF((s) => ({ ...s, avatar_url: url }))} label="Φωτογραφία" />
         <Row>
           <Field label="Όνομα"><Text value={f.first_name} onChange={set('first_name')} required /></Field>
