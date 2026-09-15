@@ -1,55 +1,81 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api.js';
 import Icon from '../Icon.jsx';
 import { Skeleton, EmptyState, Drawer, BranchThumb } from '../ui.jsx';
-import {
-  formatCurrency, formatNumber, formatDate, BOOKING_STATUS,
-} from '../../lib/format.js';
+import { formatCurrency, formatNumber, formatDate, BOOKING_STATUS } from '../../lib/format.js';
+import { useAuth } from '../../store/auth.js';
+import { PERMS } from '../../lib/perms.js';
+import { BranchFormDrawer, SpaceFormDrawer } from '../forms.jsx';
 
 export default function BranchesSpaces({ customerId }) {
-  const [selected, setSelected] = useState(null);
+  const qc = useQueryClient();
+  const canWrite = useAuth((s) => s.hasPerm(PERMS.CUSTOMERS_WRITE));
+  const [selectedId, setSelectedId] = useState(null);
   const [term, setTerm] = useState('');
   const [drawerSpace, setDrawerSpace] = useState(null);
+  const [branchForm, setBranchForm] = useState(null); // {branch?}
+  const [spaceForm, setSpaceForm] = useState(null);    // {branchId, space?}
 
   const { data, isLoading } = useQuery({
     queryKey: ['c-branches', customerId],
     queryFn: ({ signal }) => api.customerBranches(customerId, { signal }),
   });
-
   const visitsQ = useQuery({
     queryKey: ['c-visits', customerId, 'bs'],
     queryFn: ({ signal }) => api.customerVisits(customerId, { limit: 50 }, { signal }),
   });
 
   const branches = data?.branches || [];
-  useEffect(() => {
-    if (branches.length && !selected) setSelected(branches[0]);
-  }, [branches, selected]);
-
+  const selected = branches.find((b) => b.id === selectedId) || branches[0] || null;
   const filtered = useMemo(
     () => branches.filter((b) => b.name.toLowerCase().includes(term.toLowerCase())),
     [branches, term],
   );
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ['c-branches', customerId] });
+    qc.invalidateQueries({ queryKey: ['customer', customerId] });
+  };
 
   if (isLoading) return <div className="card card-pad"><Skeleton h={200} /></div>;
-  if (!branches.length) return <div className="card card-pad"><EmptyState icon="building" title="Χωρίς υποκαταστήματα" /></div>;
+
+  if (!branches.length) {
+    return (
+      <div className="card card-pad">
+        <EmptyState icon="building" title="Χωρίς υποκαταστήματα"
+          hint={canWrite ? 'Προσθέστε το πρώτο υποκατάστημα του πελάτη.' : undefined} />
+        {canWrite && (
+          <div style={{ textAlign: 'center' }}>
+            <button className="btn btn-accent" onClick={() => setBranchForm({})}><Icon name="plus" size={16} /> Προσθήκη υποκαταστήματος</button>
+          </div>
+        )}
+        {branchForm && <BranchFormDrawer customerId={customerId} initial={branchForm.branch}
+          onClose={() => setBranchForm(null)} onSaved={() => { setBranchForm(null); refresh(); }} />}
+      </div>
+    );
+  }
 
   const totals = branches.reduce((acc, b) => ({
-    branches: acc.branches + 1,
-    spaces: acc.spaces + b.spaces.length,
-    visits: acc.visits + (b.visits_count || 0),
-    value: acc.value + Number(b.total_value || 0),
+    branches: acc.branches + 1, spaces: acc.spaces + b.spaces.length,
+    visits: acc.visits + (b.visits_count || 0), value: acc.value + Number(b.total_value || 0),
   }), { branches: 0, spaces: 0, visits: 0, value: 0 });
 
   const branchVisits = (visitsQ.data?.results || []).filter((v) => !selected || v.branch_name === selected.name);
+
+  const deleteBranch = async () => {
+    if (!confirm(`Διαγραφή υποκαταστήματος «${selected.name}» και των χώρων του;`)) return;
+    await api.deleteBranch(selected.id); setSelectedId(null); refresh();
+  };
 
   return (
     <div className="bs-layout">
       {/* LEFT PANEL */}
       <div className="stack">
         <div className="card">
-          <div className="card-head"><h3><Icon name="building" /> Υποκαταστήματα πελάτη</h3><a className="link"><Icon name="plus" size={13} /> Προσθήκη</a></div>
+          <div className="card-head">
+            <h3><Icon name="building" /> Υποκαταστήματα πελάτη</h3>
+            {canWrite && <a className="link" onClick={() => setBranchForm({})}><Icon name="plus" size={13} /> Προσθήκη</a>}
+          </div>
           <div className="card-pad" style={{ paddingBottom: 10 }}>
             <div className="search-input" style={{ minWidth: 0, height: 34, marginBottom: 10 }}>
               <Icon name="search" size={15} />
@@ -57,7 +83,7 @@ export default function BranchesSpaces({ customerId }) {
             </div>
             <div className="branch-list">
               {filtered.map((b) => (
-                <div key={b.id} className={`branch-item${selected?.id === b.id ? ' active' : ''}`} onClick={() => setSelected(b)}>
+                <div key={b.id} className={`branch-item${selected?.id === b.id ? ' active' : ''}`} onClick={() => setSelectedId(b.id)}>
                   <BranchThumb src={b.image_url} name={b.name} size={56} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div className="nm">{b.name} {b.is_primary && <span className="pill" style={{ color: 'var(--accent)', background: 'var(--accent-soft)', border: 'none' }}>Κύριο</span>}</div>
@@ -113,38 +139,40 @@ export default function BranchesSpaces({ customerId }) {
 
           <div style={{ display: 'flex', gap: 9, marginTop: 14 }}>
             <button className="btn btn-sm"><Icon name="map" size={15} /> Προβολή στον χάρτη</button>
-            <button className="btn btn-sm"><Icon name="calendar" size={15} /> Νέα κράτηση</button>
-            <button className="btn btn-sm btn-icon"><Icon name="more" /></button>
+            {canWrite && <button className="btn btn-sm" onClick={() => setBranchForm({ branch: selected })}><Icon name="edit" size={15} /> Επεξεργασία</button>}
+            {canWrite && <button className="btn btn-sm" onClick={deleteBranch}><Icon name="x" size={15} /> Διαγραφή</button>}
           </div>
 
           <div className="divider" />
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <div className="section-title" style={{ margin: 0 }}>Χώροι που χρησιμοποιεί ο πελάτης ({selected.spaces.length})</div>
-            <button className="btn btn-sm"><Icon name="plus" size={14} /> Νέα κράτηση</button>
+            {canWrite && <button className="btn btn-sm btn-accent" onClick={() => setSpaceForm({ branchId: selected.id })}><Icon name="plus" size={14} /> Προσθήκη χώρου</button>}
           </div>
-          <div className="space-cards">
-            {selected.spaces.map((s) => (
-              <div key={s.id} className="space-card" onClick={() => setDrawerSpace(s)}>
-                {s.image_url
-                  ? <img className="img" src={s.image_url} alt={s.name} onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }} />
-                  : <div className="img" />}
-                <div className="body">
-                  <div className="nm">{s.name}</div>
-                  <div className="st">{formatNumber(s.visits_count)} επισκέψεις · {formatNumber(s.bookings_count)} κρατήσεις</div>
-                  <div style={{ marginTop: 6 }}><span className="pill">{s.space_type}</span></div>
+          {selected.spaces.length === 0 ? (
+            <div className="muted" style={{ padding: '8px 0' }}>Χωρίς χώρους σε αυτό το υποκατάστημα.</div>
+          ) : (
+            <div className="space-cards">
+              {selected.spaces.map((s) => (
+                <div key={s.id} className="space-card" onClick={() => setDrawerSpace(s)}>
+                  {s.image_url
+                    ? <img className="img" src={s.image_url} alt={s.name} onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }} />
+                    : <div className="img" />}
+                  <div className="body">
+                    <div className="nm">{s.name}</div>
+                    <div className="st">{formatNumber(s.visits_count)} επισκέψεις · {formatNumber(s.bookings_count)} κρατήσεις</div>
+                    <div style={{ marginTop: 6 }}><span className="pill">{s.space_type}</span></div>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
 
           <div className="divider" />
 
           <div className="section-title">Ιστορικό επισκέψεων ανά χώρο</div>
           <table className="data-table">
-            <thead>
-              <tr><th>Ημερομηνία</th><th>Χώρος</th><th>Τύπος</th><th>Διάρκεια</th><th>Κατάσταση</th></tr>
-            </thead>
+            <thead><tr><th>Ημερομηνία</th><th>Χώρος</th><th>Τύπος</th><th>Διάρκεια</th><th>Κατάσταση</th></tr></thead>
             <tbody>
               {branchVisits.slice(0, 6).map((v) => (
                 <tr key={v.id}>
@@ -162,8 +190,15 @@ export default function BranchesSpaces({ customerId }) {
       )}
 
       {drawerSpace && (
-        <SpaceDrawer customerId={customerId} space={drawerSpace} onClose={() => setDrawerSpace(null)} />
+        <SpaceDrawer customerId={customerId} space={drawerSpace} canWrite={canWrite}
+          onClose={() => setDrawerSpace(null)}
+          onEdit={(full) => { setDrawerSpace(null); setSpaceForm({ branchId: full.branch_id, space: full }); }}
+          onDeleted={() => { setDrawerSpace(null); refresh(); }} />
       )}
+      {branchForm && <BranchFormDrawer customerId={customerId} initial={branchForm.branch}
+        onClose={() => setBranchForm(null)} onSaved={() => { setBranchForm(null); refresh(); }} />}
+      {spaceForm && <SpaceFormDrawer branchId={spaceForm.branchId} initial={spaceForm.space}
+        onClose={() => setSpaceForm(null)} onSaved={() => { setSpaceForm(null); refresh(); }} />}
     </div>
   );
 }
@@ -177,16 +212,25 @@ function MiniOverview({ icon, v, l }) {
   );
 }
 
-function SpaceDrawer({ customerId, space, onClose }) {
+function SpaceDrawer({ customerId, space, canWrite, onClose, onEdit, onDeleted }) {
   const { data, isLoading } = useQuery({
     queryKey: ['space-usage', customerId, space.id],
     queryFn: ({ signal }) => api.spaceUsage(customerId, space.id, { signal }),
   });
-
+  const remove = async () => {
+    if (!confirm(`Διαγραφή χώρου «${space.name}»;`)) return;
+    await api.deleteSpace(space.id); onDeleted();
+  };
   return (
     <Drawer title={space.name} subtitle={space.space_type} onClose={onClose}>
       {isLoading ? <Skeleton h={200} /> : (
         <>
+          {canWrite && (
+            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+              <button className="btn btn-sm" onClick={() => onEdit(data.space)}><Icon name="edit" size={14} /> Επεξεργασία</button>
+              <button className="btn btn-sm" onClick={remove}><Icon name="x" size={14} /> Διαγραφή</button>
+            </div>
+          )}
           {data.space.image_url && (
             <img src={data.space.image_url} alt={space.name}
               style={{ width: '100%', height: 160, objectFit: 'cover', borderRadius: 11, marginBottom: 16 }}

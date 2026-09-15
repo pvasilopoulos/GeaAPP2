@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api.js';
 import Icon from '../components/Icon.jsx';
 import { Avatar, VipBadge, Tag, Skeleton } from '../components/ui.jsx';
@@ -8,6 +8,9 @@ import Overview from '../components/customer/Overview.jsx';
 import BranchesSpaces from '../components/customer/BranchesSpaces.jsx';
 import HistoryList from '../components/customer/HistoryList.jsx';
 import { useTabs } from '../store/tabs.js';
+import { useAuth } from '../store/auth.js';
+import { PERMS } from '../lib/perms.js';
+import { CustomerFormDrawer } from '../components/forms.jsx';
 
 const TABS = [
   { key: 'overview', label: 'Σύνοψη', icon: 'home' },
@@ -23,7 +26,19 @@ const TABS = [
 export default function CustomerProfile({ customerId, tabId, onBack }) {
   const id = customerId;
   const [tab, setTab] = useState('overview');
+  const [showEdit, setShowEdit] = useState(false);
   const renameTab = useTabs((s) => s.renameTab);
+  const closeTab = useTabs((s) => s.closeTab);
+  const qc = useQueryClient();
+  const canWrite = useAuth((s) => s.hasPerm(PERMS.CUSTOMERS_WRITE));
+  const canDelete = useAuth((s) => s.hasPerm(PERMS.CUSTOMERS_DELETE));
+
+  const onDelete = async () => {
+    if (!confirm('Διαγραφή πελάτη και όλων των δεδομένων του;')) return;
+    await api.deleteCustomer(id);
+    qc.invalidateQueries({ queryKey: ['customers'] });
+    if (tabId) closeTab(tabId); else if (onBack) onBack();
+  };
 
   const { data, isLoading } = useQuery({
     queryKey: ['customer', id],
@@ -73,9 +88,8 @@ export default function CustomerProfile({ customerId, tabId, onBack }) {
 
           <div className="ph-actions">
             <button className="btn"><Icon name="message" size={16} /> Αποστολή μηνύματος</button>
-            <button className="btn"><Icon name="calendar" size={16} /> Νέα κράτηση</button>
-            <button className="btn btn-primary"><Icon name="edit" size={16} /> Επεξεργασία</button>
-            <button className="btn btn-icon"><Icon name="more" /></button>
+            {canWrite && <button className="btn btn-primary" onClick={() => setShowEdit(true)}><Icon name="edit" size={16} /> Επεξεργασία</button>}
+            {canDelete && <button className="btn btn-icon" title="Διαγραφή" onClick={onDelete}><Icon name="x" /></button>}
           </div>
         </div>
 
@@ -105,6 +119,14 @@ export default function CustomerProfile({ customerId, tabId, onBack }) {
         {tab === 'notes' && <HistoryList kind="notes" customerId={id} />}
         {tab === 'activity' && <HistoryList kind="activity" customerId={id} />}
       </div>
+
+      {showEdit && (
+        <CustomerFormDrawer
+          initial={c}
+          onClose={() => setShowEdit(false)}
+          onSaved={() => { setShowEdit(false); qc.invalidateQueries({ queryKey: ['customer', id] }); qc.invalidateQueries({ queryKey: ['customers'] }); }}
+        />
+      )}
     </div>
   );
 }

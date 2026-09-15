@@ -80,11 +80,14 @@ export default function App() {
   const user = useAuth((s) => s.user);
   const hasPerm = useAuth((s) => s.hasPerm);
   const { tabs, activeId, openTab } = useTabs();
+  const [navOpen, setNavOpen] = useState(false);
 
   const nav = NAV.filter((n) => !n.perms || n.perms.some((p) => hasPerm(p)));
+  const openNavTab = (n) => { openTab({ id: n.id, type: n.type, title: n.label, icon: n.icon }); setNavOpen(false); };
 
   return (
-    <div className="app">
+    <div className={`app${navOpen ? ' nav-open' : ''}`}>
+      <div className="nav-backdrop" onClick={() => setNavOpen(false)} />
       <nav className="sidebar">
         <div className="brand">
           <span className="logo"><Icon name="layers" size={17} /></span>
@@ -93,7 +96,7 @@ export default function App() {
         <div className="nav-group">
           {nav.map((n) => (
             <button key={n.id} className={`nav-item${activeId === n.id ? ' active' : ''}`}
-              onClick={() => openTab({ id: n.id, type: n.type, title: n.label, icon: n.icon })}>
+              onClick={() => openNavTab(n)}>
               <Icon name={n.icon} />
               {n.label}
             </button>
@@ -110,6 +113,9 @@ export default function App() {
 
       <div className="main">
         <header className="topbar">
+          <button className="btn btn-icon btn-ghost menu-btn" onClick={() => setNavOpen((o) => !o)} aria-label="Μενού">
+            <Icon name="grid" />
+          </button>
           <GlobalSearch />
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
             <button className="btn btn-icon btn-ghost" aria-label="Ειδοποιήσεις"><Icon name="bell" /></button>

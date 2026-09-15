@@ -4,6 +4,15 @@ import { encodeCursor, decodeCursor, clampLimit } from '../lib/cursor.js';
 import { SORTS, buildFilters } from '../lib/customerFilters.js';
 import { authorize } from '../middleware/auth.js';
 import { PERMISSIONS } from '../lib/permissions.js';
+import { normalizeFields } from '../lib/normalize.js';
+
+const CUSTOMER_FIELDS = ['first_name', 'last_name', 'email', 'phone', 'mobile', 'company',
+  'tax_id', 'customer_type', 'status', 'is_vip', 'date_of_birth', 'address_line', 'city',
+  'postal_code', 'profile_note', 'assigned_employee_id'];
+
+function customerSearchNorm(r) {
+  return normalizeFields(r.first_name, r.last_name, r.email, r.phone, r.mobile, r.company, r.tax_id, r.code);
+}
 
 export const customersRouter = Router();
 
@@ -104,6 +113,64 @@ customersRouter.get('/count', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+// POST /api/customers — create a customer in the caller's tenant.
+customersRouter.post('/', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    if (!b.first_name || !b.last_name) return res.status(400).json({ error: 'Συμπληρώστε όνομα και επώνυμο' });
+    const tmpCode = `TMP-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+    const vals = {
+      tenant_id: req.user.tenantId, code: tmpCode,
+      first_name: b.first_name, last_name: b.last_name, email: b.email || null,
+      phone: b.phone || null, mobile: b.mobile || null, company: b.company || null,
+      tax_id: b.tax_id || null, customer_type: b.customer_type || 'individual',
+      status: b.status || 'active', is_vip: b.is_vip ? 1 : 0, date_of_birth: b.date_of_birth || null,
+      address_line: b.address_line || null, city: b.city || null, postal_code: b.postal_code || null,
+      profile_note: b.profile_note || null, assigned_employee_id: b.assigned_employee_id || null,
+      search_norm: '',
+    };
+    const cols = Object.keys(vals);
+    const r = await query(`INSERT INTO customers (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`,
+      cols.map((c) => vals[c]));
+    const id = r.rows.insertId;
+    const code = `C-${100000 + id}`;
+    await query('UPDATE customers SET code = ?, search_norm = ? WHERE id = ?',
+      [code, customerSearchNorm({ ...vals, code }), id]);
+    res.status(201).json({ id, code });
+  } catch (err) { next(err); }
+});
+
+// PATCH /api/customers/:id — edit a customer (tenant verified by param).
+customersRouter.patch('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const cur = (await query('SELECT * FROM customers WHERE id = ?', [id])).rows[0];
+    const b = req.body || {};
+    const sets = [];
+    const params = [];
+    for (const f of CUSTOMER_FIELDS) {
+      if (b[f] !== undefined) {
+        sets.push(`${f} = ?`);
+        params.push(f === 'is_vip' ? (b[f] ? 1 : 0) : (b[f] === '' ? null : b[f]));
+      }
+    }
+    const merged = { ...cur, ...b, code: cur.code };
+    sets.push('search_norm = ?'); params.push(customerSearchNorm(merged));
+    sets.push('updated_at = NOW()');
+    params.push(id);
+    await query(`UPDATE customers SET ${sets.join(', ')} WHERE id = ?`, params);
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/customers/:id — remove a customer and all its data (cascade).
+customersRouter.delete('/:id', authorize(PERMISSIONS.CUSTOMERS_DELETE), async (req, res, next) => {
+  try {
+    await query('DELETE FROM customers WHERE id = ? AND tenant_id = ?', [Number(req.params.id), req.user.tenantId]);
+    res.json({ ok: true });
+  } catch (err) { next(err); }
 });
 
 // GET /api/customers/:id — Customer 360 header + stats + tags.

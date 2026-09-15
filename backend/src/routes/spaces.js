@@ -1,13 +1,15 @@
 import { Router } from 'express';
 import { query } from '../db.js';
 import { clampLimit } from '../lib/cursor.js';
-import { normalize } from '../lib/normalize.js';
+import { normalize, normalizeFields } from '../lib/normalize.js';
 import { searchClause } from '../lib/search.js';
 import { authorize } from '../middleware/auth.js';
 import { PERMISSIONS } from '../lib/permissions.js';
 
 export const spacesRouter = Router();
 spacesRouter.use(authorize(PERMISSIONS.SPACES_READ));
+
+const FIELDS = ['name', 'space_type', 'capacity', 'floor', 'hourly_price', 'description'];
 
 // GET /api/spaces?q=&branchId=&limit= — spaces within the tenant.
 spacesRouter.get('/', async (req, res, next) => {
@@ -24,9 +26,32 @@ spacesRouter.get('/', async (req, res, next) => {
        FROM spaces s JOIN branches b ON b.id = s.branch_id
        WHERE ${where.join(' AND ')} ORDER BY b.city, s.name LIMIT ${limit}`, params);
     res.json({ results: rows });
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
+});
+
+// POST /api/spaces — create a space under a branch.
+spacesRouter.post('/', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const branchId = Number(b.branchId);
+    if (!branchId || !b.name) return res.status(400).json({ error: 'Απαιτούνται υποκατάστημα και όνομα' });
+    const branch = (await query('SELECT id, customer_id, name FROM branches WHERE id = ? AND tenant_id = ?', [branchId, req.user.tenantId])).rows[0];
+    if (!branch) return res.status(404).json({ error: 'Branch not found' });
+
+    const tmp = `TMP-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+    const r = await query(
+      `INSERT INTO spaces (tenant_id, customer_id, branch_id, code, name, space_type, capacity, floor, hourly_price, description, search_norm)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+      [req.user.tenantId, branch.customer_id, branchId, tmp, b.name, b.space_type || null,
+        b.capacity || null, b.floor || null, b.hourly_price || null, b.description || null, '']);
+    const id = r.rows.insertId;
+    const code = `S-${1000000 + id}`;
+    await query('UPDATE spaces SET code = ?, search_norm = ? WHERE id = ?',
+      [code, normalizeFields(b.name, b.space_type, code, branch.name), id]);
+    await query('UPDATE branches SET spaces_count = spaces_count + 1 WHERE id = ?', [branchId]);
+    await query('UPDATE customers SET spaces_count = spaces_count + 1 WHERE id = ?', [branch.customer_id]);
+    res.status(201).json({ id, code });
+  } catch (err) { next(err); }
 });
 
 spacesRouter.get('/:id', async (req, res, next) => {
@@ -37,7 +62,37 @@ spacesRouter.get('/:id', async (req, res, next) => {
       [Number(req.params.id), req.user.tenantId]);
     if (!rows.length) return res.status(404).json({ error: 'Space not found' });
     res.json({ space: rows[0] });
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
+});
+
+// PATCH /api/spaces/:id — edit a space.
+spacesRouter.patch('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const cur = (await query(`SELECT s.*, b.name AS branch_name FROM spaces s JOIN branches b ON b.id = s.branch_id
+      WHERE s.id = ? AND s.tenant_id = ?`, [id, req.user.tenantId])).rows[0];
+    if (!cur) return res.status(404).json({ error: 'Space not found' });
+    const b = req.body || {};
+    const sets = [];
+    const params = [];
+    for (const f of FIELDS) if (b[f] !== undefined) { sets.push(`${f} = ?`); params.push(b[f] === '' ? null : b[f]); }
+    const merged = { ...cur, ...b };
+    sets.push('search_norm = ?'); params.push(normalizeFields(merged.name, merged.space_type, cur.code, cur.branch_name));
+    params.push(id);
+    await query(`UPDATE spaces SET ${sets.join(', ')} WHERE id = ?`, params);
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/spaces/:id — remove a space.
+spacesRouter.delete('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const cur = (await query('SELECT customer_id, branch_id FROM spaces WHERE id = ? AND tenant_id = ?', [id, req.user.tenantId])).rows[0];
+    if (!cur) return res.status(404).json({ error: 'Space not found' });
+    await query('DELETE FROM spaces WHERE id = ?', [id]);
+    await query('UPDATE branches SET spaces_count = GREATEST(spaces_count - 1, 0) WHERE id = ?', [cur.branch_id]);
+    await query('UPDATE customers SET spaces_count = GREATEST(spaces_count - 1, 0) WHERE id = ?', [cur.customer_id]);
+    res.json({ ok: true });
+  } catch (err) { next(err); }
 });

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { api } from '../api.js';
 import Icon from '../components/Icon.jsx';
 import { Avatar, StatusBadge, EmptyState, Skeleton } from '../components/ui.jsx';
 import { formatCurrency, formatNumber, formatDate, TYPE_LABELS } from '../lib/format.js';
 import { useAuth } from '../store/auth.js';
 import { PERMS } from '../lib/perms.js';
+import { CustomerFormDrawer } from '../components/forms.jsx';
 
 const COLUMNS = [
   { key: 'name', label: 'Πελάτης', sort: 'name' },
@@ -109,7 +110,10 @@ export default function Customers({ onOpenCustomer }) {
   const [pageSize, setPageSize] = useState(50);
 
   const { data: meta } = useQuery({ queryKey: ['meta'], queryFn: ({ signal }) => api.meta({ signal }) });
-  const canExport = useAuthCanExport();
+  const canExport = useAuth((s) => s.hasPerm(PERMS.CUSTOMERS_EXPORT));
+  const canWrite = useAuth((s) => s.hasPerm(PERMS.CUSTOMERS_WRITE));
+  const qc = useQueryClient();
+  const [showCreate, setShowCreate] = useState(false);
 
   const filterParams = useMemo(() => ({
     q: q.trim() || undefined,
@@ -148,9 +152,16 @@ export default function Customers({ onOpenCustomer }) {
         </div>
         <div style={{ display: 'flex', gap: 9 }}>
           <ExportMenu params={filterParams} canExport={canExport} />
-          <button className="btn btn-primary"><Icon name="plus" size={16} /> Νέος πελάτης</button>
+          {canWrite && <button className="btn btn-primary" onClick={() => setShowCreate(true)}><Icon name="plus" size={16} /> Νέος πελάτης</button>}
         </div>
       </div>
+
+      {showCreate && (
+        <CustomerFormDrawer
+          onClose={() => setShowCreate(false)}
+          onSaved={(c) => { setShowCreate(false); qc.invalidateQueries({ queryKey: ['customers'] }); qc.invalidateQueries({ queryKey: ['meta'] }); onOpenCustomer(c); }}
+        />
+      )}
 
       <div className="toolbar">
         <div className="search-input">
@@ -268,9 +279,4 @@ export default function Customers({ onOpenCustomer }) {
 
 function sortLabel(key) {
   return { last_visit: 'Τελ. επίσκεψη', name: 'Όνομα', value: 'Αξία', created: 'Ημ. εγγραφής' }[key] || key;
-}
-
-// Gate the export button by permission.
-function useAuthCanExport() {
-  return useAuth((s) => s.hasPerm(PERMS.CUSTOMERS_EXPORT));
 }
