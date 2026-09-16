@@ -18,9 +18,10 @@ const COPY = {
     unsupported: 'Ο browser δεν υποστηρίζει υπαγόρευση. Δοκιμάστε Chrome ή Safari.',
     micDenied: 'Επιτρέψτε το μικρόφωνο για υπαγόρευση.',
     failed: 'Η υπαγόρευση απέτυχε. Ξαναδοκιμάστε.',
-    hint: 'π.χ. «επώνυμο Βασιλόπουλος όνομα Γιώργος» · «όνομα πελάτη Παπαδόπουλος» · «email maria παπάκι gmail τελεία com»',
+    hint: 'π.χ. «επώνυμο Βασιλόπουλος όνομα Γιώργος» · «ημερομηνία γέννησης 12 Μαρτίου 1985» · «email maria παπάκι gmail τελεία com»',
     heardNone: (text) => `Άκουσα «${text}» — πείτε π.χ. «επώνυμο Βασιλόπουλος» ή “last name Smith”.`,
     filled: (labels) => `Συμπληρώθηκε: ${labels}`,
+    skipped: (labels) => `Δεν αναγνωρίστηκε: ${labels}. Για ημερομηνία πείτε π.χ. «12 Μαρτίου 1985» ή «12/3/1985».`,
   },
   'en-US': {
     listen: 'Listening…',
@@ -32,9 +33,10 @@ const COPY = {
     unsupported: 'This browser does not support dictation. Try Chrome or Safari.',
     micDenied: 'Allow the microphone to dictate.',
     failed: 'Dictation failed. Try again.',
-    hint: 'e.g. “last name Smith first name George” · “customer name Vasilopoulos” · “email john at gmail dot com”',
+    hint: 'e.g. “last name Smith first name George” · “date of birth 12 March 1985” · “email john at gmail dot com”',
     heardNone: (text) => `Heard “${text}” — try e.g. “last name Smith” or «επώνυμο Βασιλόπουλος».`,
     filled: (labels) => `Filled: ${labels}`,
+    skipped: (labels) => `Not recognised: ${labels}. For a date try “12 March 1985” or “12/3/1985”.`,
   },
 };
 
@@ -115,15 +117,18 @@ export default function VoiceFill({ onApply, defaultLang }) {
       const shown = (finalText || interim).trim();
       if (shown) setHeard(shown);
       if (!finalText.trim()) return;
-      const { patches, labels, labelsEn } = parseVoiceFill(finalText);
-      if (!Object.keys(patches).length) {
-        setMsg(copy.heardNone(finalText.trim()));
+      const parsed = parseVoiceFill(finalText);
+      const en = langRef.current.startsWith('en');
+      const missed = en ? parsed.unresolvedLabelsEn : parsed.unresolvedLabels;
+      if (!Object.keys(parsed.patches).length) {
+        setMsg(missed.length ? copy.skipped(missed.join(', ')) : copy.heardNone(finalText.trim()));
         setOk(false);
         return;
       }
-      applyRef.current?.(patches);
-      setOk(true);
-      setMsg(copy.filled((langRef.current.startsWith('en') ? labelsEn : labels).join(', ')));
+      applyRef.current?.(parsed.patches);
+      const filled = copy.filled((en ? parsed.labelsEn : parsed.labels).join(', '));
+      setOk(!missed.length);
+      setMsg(missed.length ? `${filled}. ${copy.skipped(missed.join(', '))}` : filled);
     };
     recRef.current = rec;
     return rec;

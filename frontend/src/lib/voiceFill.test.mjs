@@ -29,6 +29,23 @@ const cases = [
   ['ιδιώτης', { customer_type: 'individual' }],
   ['εταιρεία', { customer_type: 'company' }],
   ['is a company company name Aegean Systems', { customer_type: 'company', company: 'Aegean Systems' }],
+  // Dictation returns a spoken date in several shapes; the form field only
+  // accepts yyyy-MM-dd, so anything else used to be dropped silently.
+  ['ημερομηνία γέννησης 12/3/1985', { date_of_birth: '1985-03-12' }],
+  ['ημερομηνία γέννησης 12 Μαρτίου 1985', { date_of_birth: '1985-03-12' }],
+  ['ημερομηνια γεννησης 12 Μαρτιου 1985', { date_of_birth: '1985-03-12' }],
+  ['ημερομηνία γέννησης 3 Μάιος 1985', { date_of_birth: '1985-05-03' }],
+  ['ημερομηνία γέννησης 9 Μαΐου 1985', { date_of_birth: '1985-05-09' }],
+  ['ημερομηνία γέννησης 12 3 1985', { date_of_birth: '1985-03-12' }],
+  ['ημερομηνία γέννησης 12 του 3 1985', { date_of_birth: '1985-03-12' }],
+  ['ημερομηνία γέννησης 12-03-1985', { date_of_birth: '1985-03-12' }],
+  ['ημερομηνία γέννησης 12.3.85', { date_of_birth: '1985-03-12' }],
+  ['ημερομηνία γέννησης 1985-03-12', { date_of_birth: '1985-03-12' }],
+  ['ημερομηνία γέννησης 12031985', { date_of_birth: '1985-03-12' }],
+  ['date of birth 12 March 1985', { date_of_birth: '1985-03-12' }],
+  ['birthday 1 December 2000', { date_of_birth: '2000-12-01' }],
+  ['επώνυμο Παπαδόπουλος ημερομηνία γέννησης 12 Μαρτίου 1985 πόλη Βόλος',
+    { last_name: 'Παπαδόπουλος', date_of_birth: '1985-03-12', city: 'Βόλος' }],
 ];
 
 let failed = 0;
@@ -41,8 +58,39 @@ for (const [input, expected] of cases) {
     }
   }
 }
+// An impossible or unreadable date must not reach the date input, which would
+// discard it without a word. It is reported back instead.
+const rejected = [
+  'ημερομηνία γέννησης 31 Φεβρουαρίου 1985',
+  'ημερομηνία γέννησης 45/13/1985',
+  'ημερομηνία γέννησης 12 Μαρτίου 2099',
+  'ημερομηνία γέννησης χθες',
+];
+for (const input of rejected) {
+  const { patches, unresolved } = parseVoiceFill(input);
+  if (patches.date_of_birth !== undefined) {
+    failed += 1;
+    console.error(`FAIL "${input}" should not set a date, got ${JSON.stringify(patches.date_of_birth)}`);
+  }
+  if (!unresolved.includes('date_of_birth')) {
+    failed += 1;
+    console.error(`FAIL "${input}" should report date_of_birth as unresolved, got ${JSON.stringify(unresolved)}`);
+  }
+}
+
+// A field that parsed fine is never reported as unresolved.
+const clean = parseVoiceFill('ημερομηνία γέννησης 12 Μαρτίου 1985');
+if (clean.unresolved.length) {
+  failed += 1;
+  console.error(`FAIL a readable date should not be unresolved, got ${JSON.stringify(clean.unresolved)}`);
+}
+if (!clean.unresolvedLabels || clean.unresolvedLabels.length) {
+  failed += 1;
+  console.error('FAIL unresolvedLabels should be an empty array for a readable date');
+}
+
 if (failed) {
   console.error(`${failed} assertion(s) failed`);
   process.exit(1);
 }
-console.log(`voiceFill parser: ${cases.length} cases ok`);
+console.log(`voiceFill parser: ${cases.length + rejected.length + 1} cases ok`);
