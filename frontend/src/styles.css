@@ -805,9 +805,18 @@ body.drawer-open .content { overflow: hidden; }
   }
   .drawer-grip {
     display: block; flex: none;
-    width: 38px; height: 4px; margin: 8px auto 2px;
-    border-radius: 999px; background: var(--border-strong);
+    padding: 11px 0 7px;
+    /* The browser must not steal the gesture to scroll while dragging. */
+    touch-action: none;
+    cursor: grab;
   }
+  .drawer-grip::before {
+    content: ''; display: block;
+    width: 44px; height: 5px; margin: 0 auto;
+    border-radius: 999px; background: #c4cad6;
+  }
+  .drawer-grip:active { cursor: grabbing; }
+  .drawer { transition: transform .22s ease; }
   .drawer-head { padding: 10px 16px 14px; }
   .drawer-body {
     padding: 16px;

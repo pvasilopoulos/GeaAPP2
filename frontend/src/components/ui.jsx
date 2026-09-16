@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { initials, avatarColor, STATUS_LABELS, BRANCH_STATUS_LABELS, SPACE_STATUS_LABELS } from '../lib/format.js';
 import Icon from './Icon.jsx';
 
@@ -61,7 +61,12 @@ export function EmptyState({ icon = 'grid', title, hint }) {
 // closes. Without this the page behind keeps scrolling under the sheet.
 let openDrawers = 0;
 
+const DISMISS_AFTER_PX = 110;
+
 export function Drawer({ title, subtitle, onClose, children, wide = false }) {
+  const sheetRef = useRef(null);
+  const dragRef = useRef(null);
+
   useEffect(() => {
     openDrawers += 1;
     document.body.classList.add('drawer-open');
@@ -77,11 +82,41 @@ export function Drawer({ title, subtitle, onClose, children, wide = false }) {
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  // Swipe down to dismiss. Bound to the grip alone, so it can never fight with
+  // scrolling the form inside the sheet. The grip is hidden on desktop.
+  const startDrag = (e) => {
+    dragRef.current = { y: e.clientY };
+    if (sheetRef.current) sheetRef.current.style.transition = 'none';
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
+  const moveDrag = (e) => {
+    if (!dragRef.current || !sheetRef.current) return;
+    const dy = Math.max(0, e.clientY - dragRef.current.y);
+    sheetRef.current.style.transform = dy ? `translateY(${dy}px)` : '';
+  };
+  const endDrag = (e) => {
+    const drag = dragRef.current;
+    dragRef.current = null;
+    if (!drag || !sheetRef.current) return;
+    const dy = Math.max(0, e.clientY - drag.y);
+    sheetRef.current.style.transition = '';
+    sheetRef.current.style.transform = '';
+    if (dy > DISMISS_AFTER_PX) onClose?.();
+  };
+
   return (
     <>
       <div className="drawer-backdrop" onClick={onClose} />
-      <aside className={`drawer${wide ? ' drawer-wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
-        <div className="drawer-grip" aria-hidden="true" />
+      <aside ref={sheetRef} className={`drawer${wide ? ' drawer-wide' : ''}`}
+        role="dialog" aria-modal="true" aria-label={title}>
+        <div
+          className="drawer-grip"
+          aria-hidden="true"
+          onPointerDown={startDrag}
+          onPointerMove={moveDrag}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+        />
         <div className="drawer-head">
           <div>
             <div style={{ fontSize: 16, fontWeight: 700 }}>{title}</div>
