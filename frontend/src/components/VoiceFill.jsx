@@ -18,6 +18,7 @@ const COPY = {
     unsupported: 'Ο browser δεν υποστηρίζει υπαγόρευση. Δοκιμάστε Chrome ή Safari.',
     micDenied: 'Επιτρέψτε το μικρόφωνο για υπαγόρευση.',
     failed: 'Η υπαγόρευση απέτυχε. Ξαναδοκιμάστε.',
+    nothingHeard: 'Δεν ακούστηκε κάτι. Πατήστε ξανά και μιλήστε μετά τον ήχο.',
     hint: 'π.χ. «επώνυμο Βασιλόπουλος όνομα Γιώργος» · «ημερομηνία γέννησης 12 Μαρτίου 1985» · «email maria παπάκι gmail τελεία com»',
     heardNone: (text) => `Άκουσα «${text}» — πείτε π.χ. «επώνυμο Βασιλόπουλος» ή “last name Smith”.`,
     filled: (labels) => `Συμπληρώθηκε: ${labels}`,
@@ -33,6 +34,7 @@ const COPY = {
     unsupported: 'This browser does not support dictation. Try Chrome or Safari.',
     micDenied: 'Allow the microphone to dictate.',
     failed: 'Dictation failed. Try again.',
+    nothingHeard: 'Nothing was picked up. Press again and speak after the tone.',
     hint: 'e.g. “last name Smith first name George” · “date of birth 12 March 1985” · “email john at gmail dot com”',
     heardNone: (text) => `Heard “${text}” — try e.g. “last name Smith” or «επώνυμο Βασιλόπουλος».`,
     filled: (labels) => `Filled: ${labels}`,
@@ -49,10 +51,11 @@ function loadLang() {
 }
 
 // Chrome will not reliably restart a recognizer that has already produced a
-// result, so every take gets a fresh one. The previous instance is torn down
-// first — handlers detached and aborted — because Chrome keeps the microphone
-// attached to whichever object opened it, and a leftover instance that still
-// fires events was what used to lock up the form.
+// result, so every take gets a fresh one. Two rules keep that from breaking:
+// a recognizer that is still running is detached and aborted before the next
+// one opens (otherwise both hold the microphone and their events fight over
+// the state), and one that has already ended is simply dropped — aborting it
+// makes Chrome answer the following start() with 'aborted' and no session.
 const MAX_SESSION_MS = 20000;
 
 export default function VoiceFill({ onApply, defaultLang }) {
@@ -61,17 +64,20 @@ export default function VoiceFill({ onApply, defaultLang }) {
   const [heard, setHeard] = useState('');
   const [msg, setMsg] = useState('');
   const [ok, setOk] = useState(false);
+  // Holds a recognizer only while its session may still be running; `onend`
+  // clears it, so a finished take is never aborted.
   const recRef = useRef(null);
   const watchdogRef = useRef(null);
   // Bumped for every take, so events from a previous recognizer are ignored
   // instead of overwriting the state of the one that is running now.
   const takeRef = useRef(0);
+  const userStoppedRef = useRef(false);
   const applyRef = useRef(onApply);
   applyRef.current = onApply;
   const supported = speechSupported();
   const t = COPY[lang] || COPY['el-GR'];
 
-  const release = () => {
+  const abortRunning = () => {
     const rec = recRef.current;
     recRef.current = null;
     if (!rec) return;
@@ -82,7 +88,7 @@ export default function VoiceFill({ onApply, defaultLang }) {
   useEffect(() => () => {
     clearTimeout(watchdogRef.current);
     takeRef.current += 1;
-    release();
+    abortRunning();
   }, []);
   useEffect(() => { try { sessionStorage.setItem('voice-fill-lang', lang); } catch { /* ignore */ } }, [lang]);
   useEffect(() => {
@@ -105,23 +111,34 @@ export default function VoiceFill({ onApply, defaultLang }) {
       return;
     }
 
-    // Hand the microphone back before asking for it again.
+    // Only a session that is still open needs the microphone handed back.
     clearTimeout(watchdogRef.current);
-    release();
+    abortRunning();
     const take = (takeRef.current += 1);
     const live = () => takeRef.current === take;
+    userStoppedRef.current = false;
+    let picked = false;
+    let errored = false;
 
     const rec = new SR();
     rec.lang = lang;
     rec.interimResults = true;
     rec.continuous = false;
     rec.maxAlternatives = 1;
-    rec.onend = () => { if (live()) finish(); };
+    rec.onend = () => {
+      if (!live()) return;
+      recRef.current = null;
+      finish();
+      // Otherwise a take that captured nothing looks like a dead button.
+      if (!picked && !errored && !userStoppedRef.current) setMsg(copy.nothingHeard);
+    };
     rec.onerror = (e) => {
       if (!live()) return;
-      finish();
+      errored = true;
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') setMsg(copy.micDenied);
-      else if (e.error !== 'aborted' && e.error !== 'no-speech') setMsg(copy.failed);
+      else if (e.error === 'no-speech') setMsg(copy.nothingHeard);
+      else if (e.error === 'aborted' && userStoppedRef.current) errored = false;
+      else setMsg(copy.failed);
     };
     rec.onresult = (ev) => {
       if (!live()) return;
@@ -133,7 +150,7 @@ export default function VoiceFill({ onApply, defaultLang }) {
         else interim += tx;
       }
       const shown = (finalText || interim).trim();
-      if (shown) setHeard(shown);
+      if (shown) { picked = true; setHeard(shown); }
       if (!finalText.trim()) return;
       const parsed = parseVoiceFill(finalText);
       const en = lang.startsWith('en');
@@ -153,12 +170,13 @@ export default function VoiceFill({ onApply, defaultLang }) {
     // Flip the button to "stop" before the engine answers, so a second click
     // always ends the take instead of opening a competing session.
     setListening(true);
-    watchdogRef.current = setTimeout(() => { if (live()) { finish(); release(); } }, MAX_SESSION_MS);
+    watchdogRef.current = setTimeout(() => { if (live()) { finish(); abortRunning(); } }, MAX_SESSION_MS);
     try {
       rec.start();
     } catch {
+      recRef.current = null;
+      rec.onstart = null; rec.onend = null; rec.onerror = null; rec.onresult = null;
       finish();
-      release();
       setMsg(copy.failed);
     }
   };
@@ -166,10 +184,11 @@ export default function VoiceFill({ onApply, defaultLang }) {
   const stop = () => {
     // The engine may still deliver a final result after stop(), and that take
     // is still the live one, so the words the user just said still land.
+    userStoppedRef.current = true;
     finish();
     const rec = recRef.current;
     if (!rec) return;
-    try { rec.stop(); } catch { release(); }
+    try { rec.stop(); } catch { abortRunning(); }
   };
 
   return (
