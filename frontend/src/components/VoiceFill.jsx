@@ -19,6 +19,8 @@ const COPY = {
     micDenied: 'Επιτρέψτε το μικρόφωνο για υπαγόρευση.',
     failed: 'Η υπαγόρευση απέτυχε. Ξαναδοκιμάστε.',
     nothingHeard: 'Δεν ακούστηκε κάτι. Πατήστε ξανά και μιλήστε μετά τον ήχο.',
+    noEngine: 'Το μικρόφωνο δεν απάντησε. Πατήστε ξανά.',
+    code: (c) => ` (${c})`,
     hint: 'π.χ. «επώνυμο Βασιλόπουλος όνομα Γιώργος» · «ημερομηνία γέννησης 12 Μαρτίου 1985» · «email maria παπάκι gmail τελεία com»',
     heardNone: (text) => `Άκουσα «${text}» — πείτε π.χ. «επώνυμο Βασιλόπουλος» ή “last name Smith”.`,
     filled: (labels) => `Συμπληρώθηκε: ${labels}`,
@@ -35,6 +37,8 @@ const COPY = {
     micDenied: 'Allow the microphone to dictate.',
     failed: 'Dictation failed. Try again.',
     nothingHeard: 'Nothing was picked up. Press again and speak after the tone.',
+    noEngine: 'The microphone did not respond. Press again.',
+    code: (c) => ` (${c})`,
     hint: 'e.g. “last name Smith first name George” · “date of birth 12 March 1985” · “email john at gmail dot com”',
     heardNone: (text) => `Heard “${text}” — try e.g. “last name Smith” or «επώνυμο Βασιλόπουλος».`,
     filled: (labels) => `Filled: ${labels}`,
@@ -57,6 +61,13 @@ function loadLang() {
 // the state), and one that has already ended is simply dropped — aborting it
 // makes Chrome answer the following start() with 'aborted' and no session.
 const MAX_SESSION_MS = 20000;
+// Mobile browsers sometimes swallow a second start(): no onstart, no error,
+// no end. Without this the button would sit on "listening" over a dead engine,
+// and the microphone the refused call still holds would block every retry.
+// Only armed once the engine has started at least once, because before that a
+// pending permission prompt legitimately delays onstart for as long as the
+// user takes to answer it.
+const START_TIMEOUT_MS = 3500;
 
 export default function VoiceFill({ onApply, defaultLang }) {
   const [lang, setLang] = useState(() => defaultLang || loadLang());
@@ -68,10 +79,14 @@ export default function VoiceFill({ onApply, defaultLang }) {
   // clears it, so a finished take is never aborted.
   const recRef = useRef(null);
   const watchdogRef = useRef(null);
+  const startTimerRef = useRef(null);
   // Bumped for every take, so events from a previous recognizer are ignored
   // instead of overwriting the state of the one that is running now.
   const takeRef = useRef(0);
   const userStoppedRef = useRef(false);
+  // True once the engine has actually started, which also means the microphone
+  // permission is settled and no prompt can delay the next take.
+  const engineReadyRef = useRef(false);
   const applyRef = useRef(onApply);
   applyRef.current = onApply;
   const supported = speechSupported();
@@ -87,6 +102,7 @@ export default function VoiceFill({ onApply, defaultLang }) {
 
   useEffect(() => () => {
     clearTimeout(watchdogRef.current);
+    clearTimeout(startTimerRef.current);
     takeRef.current += 1;
     abortRunning();
   }, []);
@@ -99,6 +115,7 @@ export default function VoiceFill({ onApply, defaultLang }) {
 
   const finish = () => {
     clearTimeout(watchdogRef.current);
+    clearTimeout(startTimerRef.current);
     setListening(false);
   };
 
@@ -113,6 +130,7 @@ export default function VoiceFill({ onApply, defaultLang }) {
 
     // Only a session that is still open needs the microphone handed back.
     clearTimeout(watchdogRef.current);
+    clearTimeout(startTimerRef.current);
     abortRunning();
     const take = (takeRef.current += 1);
     const live = () => takeRef.current === take;
@@ -125,6 +143,11 @@ export default function VoiceFill({ onApply, defaultLang }) {
     rec.interimResults = true;
     rec.continuous = false;
     rec.maxAlternatives = 1;
+    rec.onstart = () => {
+      if (!live()) return;
+      engineReadyRef.current = true;
+      clearTimeout(startTimerRef.current);
+    };
     rec.onend = () => {
       if (!live()) return;
       recRef.current = null;
@@ -138,7 +161,8 @@ export default function VoiceFill({ onApply, defaultLang }) {
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') setMsg(copy.micDenied);
       else if (e.error === 'no-speech') setMsg(copy.nothingHeard);
       else if (e.error === 'aborted' && userStoppedRef.current) errored = false;
-      else setMsg(copy.failed);
+      // The raw code is the only clue when this misbehaves on a phone.
+      else setMsg(copy.failed + copy.code(e.error || 'unknown'));
     };
     rec.onresult = (ev) => {
       if (!live()) return;
@@ -171,13 +195,24 @@ export default function VoiceFill({ onApply, defaultLang }) {
     // always ends the take instead of opening a competing session.
     setListening(true);
     watchdogRef.current = setTimeout(() => { if (live()) { finish(); abortRunning(); } }, MAX_SESSION_MS);
+    // Releases the microphone the refused call is holding, so the next press
+    // starts from a clean engine instead of being swallowed as well.
+    if (engineReadyRef.current) {
+      startTimerRef.current = setTimeout(() => {
+        if (!live()) return;
+        errored = true;
+        finish();
+        abortRunning();
+        setMsg(copy.noEngine);
+      }, START_TIMEOUT_MS);
+    }
     try {
       rec.start();
-    } catch {
+    } catch (e) {
       recRef.current = null;
       rec.onstart = null; rec.onend = null; rec.onerror = null; rec.onresult = null;
       finish();
-      setMsg(copy.failed);
+      setMsg(copy.failed + copy.code(e?.name || 'start'));
     }
   };
 
