@@ -2,7 +2,14 @@
 <html lang="el">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+    <!-- interactive-widget keeps the layout above the on-screen keyboard.
+         maximum-scale is deliberately absent: iOS ignores it, it blocks pinch
+         zoom for everyone else, and the 16px form fields already stop the
+         auto-zoom it was there to prevent. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+    />
     <meta name="theme-color" content="#4f46e5" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />

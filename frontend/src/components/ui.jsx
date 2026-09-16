@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { initials, avatarColor, STATUS_LABELS, BRANCH_STATUS_LABELS, SPACE_STATUS_LABELS } from '../lib/format.js';
 import Icon from './Icon.jsx';
 
@@ -56,11 +57,31 @@ export function EmptyState({ icon = 'grid', title, hint }) {
   );
 }
 
+// Drawers can stack, so the background is only released once the last one
+// closes. Without this the page behind keeps scrolling under the sheet.
+let openDrawers = 0;
+
 export function Drawer({ title, subtitle, onClose, children, wide = false }) {
+  useEffect(() => {
+    openDrawers += 1;
+    document.body.classList.add('drawer-open');
+    return () => {
+      openDrawers = Math.max(0, openDrawers - 1);
+      if (!openDrawers) document.body.classList.remove('drawer-open');
+    };
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   return (
     <>
       <div className="drawer-backdrop" onClick={onClose} />
-      <aside className={`drawer${wide ? ' drawer-wide' : ''}`}>
+      <aside className={`drawer${wide ? ' drawer-wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
+        <div className="drawer-grip" aria-hidden="true" />
         <div className="drawer-head">
           <div>
             <div style={{ fontSize: 16, fontWeight: 700 }}>{title}</div>
