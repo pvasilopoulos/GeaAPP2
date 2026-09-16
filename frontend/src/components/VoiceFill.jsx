@@ -48,9 +48,11 @@ function loadLang() {
   }
 }
 
-// Chrome keeps a speech session attached to the object that opened it, so a new
-// recognizer per click leaves the previous one holding the microphone and still
-// firing events. One instance is created per mount and reused for every take.
+// Chrome will not reliably restart a recognizer that has already produced a
+// result, so every take gets a fresh one. The previous instance is torn down
+// first — handlers detached and aborted — because Chrome keeps the microphone
+// attached to whichever object opened it, and a leftover instance that still
+// fires events was what used to lock up the form.
 const MAX_SESSION_MS = 20000;
 
 export default function VoiceFill({ onApply, defaultLang }) {
@@ -61,22 +63,26 @@ export default function VoiceFill({ onApply, defaultLang }) {
   const [ok, setOk] = useState(false);
   const recRef = useRef(null);
   const watchdogRef = useRef(null);
-  // Handlers are attached once, so they read the live language and callback
-  // through refs instead of closing over the values of the first render.
-  const langRef = useRef(lang);
+  // Bumped for every take, so events from a previous recognizer are ignored
+  // instead of overwriting the state of the one that is running now.
+  const takeRef = useRef(0);
   const applyRef = useRef(onApply);
-  langRef.current = lang;
   applyRef.current = onApply;
   const supported = speechSupported();
   const t = COPY[lang] || COPY['el-GR'];
 
-  useEffect(() => () => {
-    clearTimeout(watchdogRef.current);
+  const release = () => {
     const rec = recRef.current;
     recRef.current = null;
     if (!rec) return;
     rec.onstart = null; rec.onend = null; rec.onerror = null; rec.onresult = null;
     try { rec.abort(); } catch { /* already gone */ }
+  };
+
+  useEffect(() => () => {
+    clearTimeout(watchdogRef.current);
+    takeRef.current += 1;
+    release();
   }, []);
   useEffect(() => { try { sessionStorage.setItem('voice-fill-lang', lang); } catch { /* ignore */ } }, [lang]);
   useEffect(() => {
@@ -90,23 +96,35 @@ export default function VoiceFill({ onApply, defaultLang }) {
     setListening(false);
   };
 
-  const getRecognition = () => {
-    if (recRef.current) return recRef.current;
+  const start = () => {
+    const copy = COPY[lang] || COPY['el-GR'];
+    setMsg(''); setOk(false); setHeard('');
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) return null;
+    if (!SR) {
+      setMsg(copy.unsupported);
+      return;
+    }
+
+    // Hand the microphone back before asking for it again.
+    clearTimeout(watchdogRef.current);
+    release();
+    const take = (takeRef.current += 1);
+    const live = () => takeRef.current === take;
+
     const rec = new SR();
+    rec.lang = lang;
     rec.interimResults = true;
     rec.continuous = false;
     rec.maxAlternatives = 1;
-    rec.onend = finish;
+    rec.onend = () => { if (live()) finish(); };
     rec.onerror = (e) => {
+      if (!live()) return;
       finish();
-      const copy = COPY[langRef.current] || COPY['el-GR'];
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') setMsg(copy.micDenied);
       else if (e.error !== 'aborted' && e.error !== 'no-speech') setMsg(copy.failed);
     };
     rec.onresult = (ev) => {
-      const copy = COPY[langRef.current] || COPY['el-GR'];
+      if (!live()) return;
       let finalText = '';
       let interim = '';
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
@@ -118,7 +136,7 @@ export default function VoiceFill({ onApply, defaultLang }) {
       if (shown) setHeard(shown);
       if (!finalText.trim()) return;
       const parsed = parseVoiceFill(finalText);
-      const en = langRef.current.startsWith('en');
+      const en = lang.startsWith('en');
       const missed = en ? parsed.unresolvedLabelsEn : parsed.unresolvedLabels;
       if (!Object.keys(parsed.patches).length) {
         setMsg(missed.length ? copy.skipped(missed.join(', ')) : copy.heardNone(finalText.trim()));
@@ -131,42 +149,27 @@ export default function VoiceFill({ onApply, defaultLang }) {
       setMsg(missed.length ? `${filled}. ${copy.skipped(missed.join(', '))}` : filled);
     };
     recRef.current = rec;
-    return rec;
-  };
 
-  const start = () => {
-    const copy = COPY[lang] || COPY['el-GR'];
-    setMsg(''); setOk(false); setHeard('');
-    const rec = getRecognition();
-    if (!rec) {
-      setMsg(copy.unsupported);
-      return;
-    }
-    rec.lang = lang;
     // Flip the button to "stop" before the engine answers, so a second click
     // always ends the take instead of opening a competing session.
     setListening(true);
-    clearTimeout(watchdogRef.current);
-    watchdogRef.current = setTimeout(() => {
-      finish();
-      try { rec.abort(); } catch { /* already gone */ }
-    }, MAX_SESSION_MS);
+    watchdogRef.current = setTimeout(() => { if (live()) { finish(); release(); } }, MAX_SESSION_MS);
     try {
       rec.start();
     } catch {
-      // The engine still had a session open: close it so the next click is clean.
       finish();
-      try { rec.abort(); } catch { /* already gone */ }
+      release();
       setMsg(copy.failed);
     }
   };
 
   const stop = () => {
+    // The engine may still deliver a final result after stop(), and that take
+    // is still the live one, so the words the user just said still land.
     finish();
     const rec = recRef.current;
     if (!rec) return;
-    // stop() keeps whatever was already recognised; abort() is the fallback.
-    try { rec.stop(); } catch { try { rec.abort(); } catch { /* already gone */ } }
+    try { rec.stop(); } catch { release(); }
   };
 
   return (
