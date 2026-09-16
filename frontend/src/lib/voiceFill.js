@@ -120,15 +120,65 @@ function statusValue(value) {
   return null;
 }
 
+// Matched by stem so both nominative and genitive forms work ("Μάρτιος",
+// "Μαρτίου"), which is what dictation actually returns for a spoken date.
+const MONTH_STEMS = [
+  ['ιανουαρ', 1], ['φεβρουαρ', 2], ['μαρτ', 3], ['απριλ', 4], ['μαι', 5], ['ιουν', 6],
+  ['ιουλ', 7], ['αυγουστ', 8], ['σεπτεμβρ', 9], ['οκτωβρ', 10], ['νοεμβρ', 11], ['δεκεμβρ', 12],
+  ['jan', 1], ['feb', 2], ['mar', 3], ['apr', 4], ['may', 5], ['jun', 6],
+  ['jul', 7], ['aug', 8], ['sep', 9], ['oct', 10], ['nov', 11], ['dec', 12],
+];
+
+function deaccent(s) {
+  return String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+function monthFromWord(word) {
+  const w = deaccent(word);
+  for (const [stem, n] of MONTH_STEMS) {
+    if (w.startsWith(stem)) return n;
+  }
+  return null;
+}
+
+/** Builds the yyyy-MM-dd the date input needs, or null if the date is not real. */
+function isoDate(year, month, day) {
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+  const y = year < 100 ? (year > 30 ? 1900 + year : 2000 + year) : year;
+  if (y < 1900 || y > new Date().getFullYear()) return null;
+  const dt = new Date(Date.UTC(y, month - 1, day));
+  // Round-tripping rejects 31/02 and month 13, which the input would drop silently.
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== month - 1 || dt.getUTCDate() !== day) return null;
+  return `${String(y).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
 function birthValue(value) {
-  const s = String(value).trim();
-  const m = s.match(/(\d{1,2})[./\-](\d{1,2})[./\-](\d{2,4})/);
-  if (!m) return s;
-  const d = m[1].padStart(2, '0');
-  const mo = m[2].padStart(2, '0');
-  let y = m[3];
-  if (y.length === 2) y = Number(y) > 30 ? `19${y}` : `20${y}`;
-  return `${y}-${mo}-${d}`;
+  // Dictation spells dates out in several shapes: "12/3/1985", "12 3 1985",
+  // "12 Μαρτίου 1985", "12 του 3 1985". Drop the connecting words first.
+  // \b is ASCII-only in JavaScript, so Greek words need explicit boundaries.
+  const s = String(value)
+    .replace(/(?:^|\s)(?:του|της|στις|στη|στον|of|on|the)(?=\s|$)/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!s) return null;
+
+  let m = s.match(/(\d{4})\s*[-./]\s*(\d{1,2})\s*[-./]\s*(\d{1,2})/);
+  if (m) return isoDate(Number(m[1]), Number(m[2]), Number(m[3]));
+
+  m = s.match(/(\d{1,2})\s+([^\s\d]+)\s+(\d{2,4})/);
+  if (m) {
+    const month = monthFromWord(m[2]);
+    if (month) return isoDate(Number(m[3]), month, Number(m[1]));
+  }
+
+  m = s.match(/(\d{1,2})\s*[-./\s]\s*(\d{1,2})\s*[-./\s]\s*(\d{2,4})/);
+  if (m) return isoDate(Number(m[3]), Number(m[2]), Number(m[1]));
+
+  const bare = s.replace(/\D/g, '');
+  if (bare.length === 8 || bare.length === 6) {
+    return isoDate(Number(bare.slice(4)), Number(bare.slice(2, 4)), Number(bare.slice(0, 2)));
+  }
+  return null;
 }
 
 function formatValue(key, raw) {
@@ -202,12 +252,20 @@ function applyStandaloneTypeStatus(text, patches) {
 
 /**
  * @param {string} transcript
- * @returns {{ patches: Record<string, any>, labels: string[], labelsEn: string[] }}
+ * @returns {{
+ *   patches: Record<string, any>, labels: string[], labelsEn: string[],
+ *   unresolved: string[], unresolvedLabels: string[], unresolvedLabelsEn: string[],
+ * }}
  */
 export function parseVoiceFill(transcript) {
   const patches = {};
+  // Fields the speaker clearly asked for but whose value could not be read,
+  // so the UI can say so instead of leaving the form silently untouched.
+  const unresolved = [];
   const original = stripFillers(String(transcript || ''));
-  if (!original) return { patches, labels: [] };
+  if (!original) {
+    return { patches, labels: [], labelsEn: [], unresolved, unresolvedLabels: [], unresolvedLabelsEn: [] };
+  }
 
   applyVip(original, patches);
 
@@ -237,6 +295,7 @@ export function parseVoiceFill(transcript) {
       }
       const formatted = formatValue(spans[i].key, raw);
       if (formatted != null && formatted !== '') patches[spans[i].key] = formatted;
+      else if (raw.trim() && !unresolved.includes(spans[i].key)) unresolved.push(spans[i].key);
     }
   }
 
@@ -244,7 +303,15 @@ export function parseVoiceFill(transcript) {
 
   const labels = Object.keys(patches).map((k) => FIELD_LABELS[k] || k);
   const labelsEn = Object.keys(patches).map((k) => FIELD_LABELS_EN[k] || k);
-  return { patches, labels, labelsEn };
+  const stillMissing = unresolved.filter((k) => patches[k] == null);
+  return {
+    patches,
+    labels,
+    labelsEn,
+    unresolved: stillMissing,
+    unresolvedLabels: stillMissing.map((k) => FIELD_LABELS[k] || k),
+    unresolvedLabelsEn: stillMissing.map((k) => FIELD_LABELS_EN[k] || k),
+  };
 }
 
 export function speechSupported() {

@@ -18,10 +18,13 @@ const COPY = {
     unsupported: 'Ο browser δεν υποστηρίζει υπαγόρευση. Δοκιμάστε Chrome ή Safari.',
     micDenied: 'Επιτρέψτε το μικρόφωνο για υπαγόρευση.',
     failed: 'Η υπαγόρευση απέτυχε. Ξαναδοκιμάστε.',
-    already: 'Η υπαγόρευση είναι ήδη ενεργή.',
-    hint: 'π.χ. «επώνυμο Βασιλόπουλος όνομα Γιώργος» · «όνομα πελάτη Παπαδόπουλος» · «email maria παπάκι gmail τελεία com»',
+    nothingHeard: 'Δεν ακούστηκε κάτι. Πατήστε ξανά και μιλήστε μετά τον ήχο.',
+    noEngine: 'Το μικρόφωνο δεν απάντησε. Πατήστε ξανά.',
+    code: (c) => ` (${c})`,
+    hint: 'π.χ. «επώνυμο Βασιλόπουλος όνομα Γιώργος» · «ημερομηνία γέννησης 12 Μαρτίου 1985» · «email maria παπάκι gmail τελεία com»',
     heardNone: (text) => `Άκουσα «${text}» — πείτε π.χ. «επώνυμο Βασιλόπουλος» ή “last name Smith”.`,
     filled: (labels) => `Συμπληρώθηκε: ${labels}`,
+    skipped: (labels) => `Δεν αναγνωρίστηκε: ${labels}. Για ημερομηνία πείτε π.χ. «12 Μαρτίου 1985» ή «12/3/1985».`,
   },
   'en-US': {
     listen: 'Listening…',
@@ -33,10 +36,13 @@ const COPY = {
     unsupported: 'This browser does not support dictation. Try Chrome or Safari.',
     micDenied: 'Allow the microphone to dictate.',
     failed: 'Dictation failed. Try again.',
-    already: 'Dictation is already running.',
-    hint: 'e.g. “last name Smith first name George” · “customer name Vasilopoulos” · “email john at gmail dot com”',
+    nothingHeard: 'Nothing was picked up. Press again and speak after the tone.',
+    noEngine: 'The microphone did not respond. Press again.',
+    code: (c) => ` (${c})`,
+    hint: 'e.g. “last name Smith first name George” · “date of birth 12 March 1985” · “email john at gmail dot com”',
     heardNone: (text) => `Heard “${text}” — try e.g. “last name Smith” or «επώνυμο Βασιλόπουλος».`,
     filled: (labels) => `Filled: ${labels}`,
+    skipped: (labels) => `Not recognised: ${labels}. For a date try “12 March 1985” or “12/3/1985”.`,
   },
 };
 
@@ -48,23 +54,70 @@ function loadLang() {
   }
 }
 
+// Chrome will not reliably restart a recognizer that has already produced a
+// result, so every take gets a fresh one. Two rules keep that from breaking:
+// a recognizer that is still running is detached and aborted before the next
+// one opens (otherwise both hold the microphone and their events fight over
+// the state), and one that has already ended is simply dropped — aborting it
+// makes Chrome answer the following start() with 'aborted' and no session.
+const MAX_SESSION_MS = 20000;
+// Mobile browsers sometimes swallow a second start(): no onstart, no error,
+// no end. Without this the button would sit on "listening" over a dead engine,
+// and the microphone the refused call still holds would block every retry.
+// Only armed once the engine has started at least once, because before that a
+// pending permission prompt legitimately delays onstart for as long as the
+// user takes to answer it.
+const START_TIMEOUT_MS = 3500;
+
 export default function VoiceFill({ onApply, defaultLang }) {
   const [lang, setLang] = useState(() => defaultLang || loadLang());
   const [listening, setListening] = useState(false);
   const [heard, setHeard] = useState('');
   const [msg, setMsg] = useState('');
   const [ok, setOk] = useState(false);
+  // Holds a recognizer only while its session may still be running; `onend`
+  // clears it, so a finished take is never aborted.
   const recRef = useRef(null);
+  const watchdogRef = useRef(null);
+  const startTimerRef = useRef(null);
+  // Bumped for every take, so events from a previous recognizer are ignored
+  // instead of overwriting the state of the one that is running now.
+  const takeRef = useRef(0);
+  const userStoppedRef = useRef(false);
+  // True once the engine has actually started, which also means the microphone
+  // permission is settled and no prompt can delay the next take.
+  const engineReadyRef = useRef(false);
+  const applyRef = useRef(onApply);
+  applyRef.current = onApply;
   const supported = speechSupported();
   const t = COPY[lang] || COPY['el-GR'];
 
-  useEffect(() => () => { try { recRef.current?.stop(); } catch { /* ignore */ } }, []);
+  const abortRunning = () => {
+    const rec = recRef.current;
+    recRef.current = null;
+    if (!rec) return;
+    rec.onstart = null; rec.onend = null; rec.onerror = null; rec.onresult = null;
+    try { rec.abort(); } catch { /* already gone */ }
+  };
+
+  useEffect(() => () => {
+    clearTimeout(watchdogRef.current);
+    clearTimeout(startTimerRef.current);
+    takeRef.current += 1;
+    abortRunning();
+  }, []);
   useEffect(() => { try { sessionStorage.setItem('voice-fill-lang', lang); } catch { /* ignore */ } }, [lang]);
   useEffect(() => {
     if (defaultLang && (defaultLang === 'el-GR' || defaultLang === 'en-US')) {
       try { if (!sessionStorage.getItem('voice-fill-lang')) setLang(defaultLang); } catch { setLang(defaultLang); }
     }
   }, [defaultLang]);
+
+  const finish = () => {
+    clearTimeout(watchdogRef.current);
+    clearTimeout(startTimerRef.current);
+    setListening(false);
+  };
 
   const start = () => {
     const copy = COPY[lang] || COPY['el-GR'];
@@ -74,20 +127,45 @@ export default function VoiceFill({ onApply, defaultLang }) {
       setMsg(copy.unsupported);
       return;
     }
+
+    // Only a session that is still open needs the microphone handed back.
+    clearTimeout(watchdogRef.current);
+    clearTimeout(startTimerRef.current);
+    abortRunning();
+    const take = (takeRef.current += 1);
+    const live = () => takeRef.current === take;
+    userStoppedRef.current = false;
+    let picked = false;
+    let errored = false;
+
     const rec = new SR();
-    recRef.current = rec;
     rec.lang = lang;
     rec.interimResults = true;
     rec.continuous = false;
     rec.maxAlternatives = 1;
-    rec.onstart = () => setListening(true);
-    rec.onend = () => { setListening(false); recRef.current = null; };
+    rec.onstart = () => {
+      if (!live()) return;
+      engineReadyRef.current = true;
+      clearTimeout(startTimerRef.current);
+    };
+    rec.onend = () => {
+      if (!live()) return;
+      recRef.current = null;
+      finish();
+      // Otherwise a take that captured nothing looks like a dead button.
+      if (!picked && !errored && !userStoppedRef.current) setMsg(copy.nothingHeard);
+    };
     rec.onerror = (e) => {
-      setListening(false);
-      if (e.error === 'not-allowed') setMsg(copy.micDenied);
-      else if (e.error !== 'aborted' && e.error !== 'no-speech') setMsg(copy.failed);
+      if (!live()) return;
+      errored = true;
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') setMsg(copy.micDenied);
+      else if (e.error === 'no-speech') setMsg(copy.nothingHeard);
+      else if (e.error === 'aborted' && userStoppedRef.current) errored = false;
+      // The raw code is the only clue when this misbehaves on a phone.
+      else setMsg(copy.failed + copy.code(e.error || 'unknown'));
     };
     rec.onresult = (ev) => {
+      if (!live()) return;
       let finalText = '';
       let interim = '';
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
@@ -96,22 +174,57 @@ export default function VoiceFill({ onApply, defaultLang }) {
         else interim += tx;
       }
       const shown = (finalText || interim).trim();
-      if (shown) setHeard(shown);
+      if (shown) { picked = true; setHeard(shown); }
       if (!finalText.trim()) return;
-      const { patches, labels, labelsEn } = parseVoiceFill(finalText);
-      if (!Object.keys(patches).length) {
-        setMsg(copy.heardNone(finalText.trim()));
+      const parsed = parseVoiceFill(finalText);
+      const en = lang.startsWith('en');
+      const missed = en ? parsed.unresolvedLabelsEn : parsed.unresolvedLabels;
+      if (!Object.keys(parsed.patches).length) {
+        setMsg(missed.length ? copy.skipped(missed.join(', ')) : copy.heardNone(finalText.trim()));
         setOk(false);
         return;
       }
-      onApply(patches);
-      setOk(true);
-      setMsg(copy.filled((lang.startsWith('en') ? labelsEn : labels).join(', ')));
+      applyRef.current?.(parsed.patches);
+      const filled = copy.filled((en ? parsed.labelsEn : parsed.labels).join(', '));
+      setOk(!missed.length);
+      setMsg(missed.length ? `${filled}. ${copy.skipped(missed.join(', '))}` : filled);
     };
-    try { rec.start(); } catch { setMsg(copy.already); }
+    recRef.current = rec;
+
+    // Flip the button to "stop" before the engine answers, so a second click
+    // always ends the take instead of opening a competing session.
+    setListening(true);
+    watchdogRef.current = setTimeout(() => { if (live()) { finish(); abortRunning(); } }, MAX_SESSION_MS);
+    // Releases the microphone the refused call is holding, so the next press
+    // starts from a clean engine instead of being swallowed as well.
+    if (engineReadyRef.current) {
+      startTimerRef.current = setTimeout(() => {
+        if (!live()) return;
+        errored = true;
+        finish();
+        abortRunning();
+        setMsg(copy.noEngine);
+      }, START_TIMEOUT_MS);
+    }
+    try {
+      rec.start();
+    } catch (e) {
+      recRef.current = null;
+      rec.onstart = null; rec.onend = null; rec.onerror = null; rec.onresult = null;
+      finish();
+      setMsg(copy.failed + copy.code(e?.name || 'start'));
+    }
   };
 
-  const stop = () => { try { recRef.current?.stop(); } catch { /* ignore */ } };
+  const stop = () => {
+    // The engine may still deliver a final result after stop(), and that take
+    // is still the live one, so the words the user just said still land.
+    userStoppedRef.current = true;
+    finish();
+    const rec = recRef.current;
+    if (!rec) return;
+    try { rec.stop(); } catch { abortRunning(); }
+  };
 
   return (
     <div className={`voice-fill${listening ? ' on' : ''}`}>

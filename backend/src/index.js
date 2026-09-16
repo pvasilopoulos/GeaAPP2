@@ -22,6 +22,7 @@ import { authenticate } from './middleware/auth.js';
 import { ensureSchema } from './db/ensure-schema.js';
 import { tenantsRouter } from './routes/tenants.js';
 import { settingsRouter } from './routes/settings.js';
+import { messageTemplatesRouter } from './routes/messageTemplates.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -64,6 +65,7 @@ app.use('/api/uploads', uploadsRouter);
 app.use('/api/geo', geoRouter);
 app.use('/api/tenants', tenantsRouter);
 app.use('/api/settings', settingsRouter);
+app.use('/api/message-templates', messageTemplatesRouter);
 app.use('/api', usersRouter);
 
 // Unknown API routes return JSON 404 (never the SPA shell).

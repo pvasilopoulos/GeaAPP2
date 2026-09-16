@@ -36,7 +36,28 @@ export async function ensureSchema() {
   await addColumn('users', 'is_platform_admin', 'TINYINT(1) NOT NULL DEFAULT 0');
   await addColumn('communications', 'recipient', 'VARCHAR(255) NULL');
   await addColumn('communications', 'delivery_status', "VARCHAR(20) NOT NULL DEFAULT 'logged'");
+  await addColumn('communications', 'body_format', "VARCHAR(10) NOT NULL DEFAULT 'text'");
+  await addColumn('communications', 'attachments', 'JSON NULL');
   await addColumn('activities', 'details', 'JSON NULL');
+
+  if (!(await tableExists('message_templates'))) {
+    await query(`CREATE TABLE message_templates (
+      id          BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      tenant_id   BIGINT NOT NULL,
+      name        VARCHAR(160) NOT NULL,
+      channel     VARCHAR(20) NULL,
+      subject     VARCHAR(255) NULL,
+      body        TEXT NOT NULL,
+      body_format VARCHAR(10) NOT NULL DEFAULT 'text',
+      attachments JSON NULL,
+      active      TINYINT(1) NOT NULL DEFAULT 1,
+      sort_order  INT NOT NULL DEFAULT 0,
+      created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      KEY idx_tpl_tenant (tenant_id, channel, sort_order)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    console.log('[schema] created message_templates');
+  }
 
   if (!(await tableExists('platform_settings'))) {
     await query(`CREATE TABLE platform_settings (

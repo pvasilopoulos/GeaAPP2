@@ -8,12 +8,14 @@ import TenantsPanel from './settings/TenantsPanel.jsx';
 import OrgPanel from './settings/OrgPanel.jsx';
 import AppPanel from './settings/AppPanel.jsx';
 import MessagingPanel from './settings/MessagingPanel.jsx';
+import TemplatesPanel from './settings/TemplatesPanel.jsx';
 import SecurityPanel from './settings/SecurityPanel.jsx';
 
 const CATS = [
   { id: 'org', label: 'Οργανισμός', hint: 'Επωνυμία, γλώσσα, νόμισμα', icon: 'building', perms: [PERMS.TENANT_MANAGE, PERMS.SETTINGS_MANAGE] },
   { id: 'app', label: 'Εφαρμογή', hint: 'Προεπιλογές πελατών και εμφάνισης', icon: 'layers', perms: [PERMS.SETTINGS_MANAGE] },
   { id: 'messaging', label: 'Μηνύματα', hint: 'Email, Viber, Viber Routee, SMS, Telegram', icon: 'message', perms: [PERMS.SETTINGS_MANAGE] },
+  { id: 'templates', label: 'Πρότυπα μηνυμάτων', hint: 'Έτοιμα κείμενα με μεταβλητές', icon: 'copy', perms: [PERMS.SETTINGS_MANAGE] },
   { id: 'users', label: 'Χρήστες & Ρόλοι', hint: 'Μέλη οργανισμού και δικαιώματα', icon: 'users', perms: [PERMS.USERS_MANAGE, PERMS.ROLES_MANAGE] },
   { id: 'fields', label: 'Custom Fields', hint: 'Δυναμικά πεδία πελατών / χώρων', icon: 'tag', perms: [PERMS.SETTINGS_MANAGE] },
   { id: 'tenants', label: 'Tenants', hint: 'Δημιουργία, επεξεργασία, διαγραφή οργανισμών', icon: 'grid', perms: [PERMS.TENANTS_PLATFORM] },
@@ -62,6 +64,7 @@ export default function Settings({ initialCat } = {}) {
               {active.id === 'org' && <OrgPanel />}
               {active.id === 'app' && <AppPanel />}
               {active.id === 'messaging' && <MessagingPanel />}
+              {active.id === 'templates' && <TemplatesPanel />}
               {active.id === 'users' && <Users embedded />}
               {active.id === 'fields' && <CustomFieldsPanel />}
               {active.id === 'tenants' && <TenantsPanel />}
