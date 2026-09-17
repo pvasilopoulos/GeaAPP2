@@ -54,10 +54,13 @@ export default function CustomersPanel() {
       {message && <div className="voice-msg ok">{message}</div>}
       <section className="customers-settings-card">
       <div className="customers-settings-card-head"><div><h3>Λίστα πελατών</h3><p>Ρύθμισε την πυκνότητα των γραμμών στη λίστα.</p></div><Icon name="layers" size={18} /></div>
-      <div className="customers-settings-grid"><div className="field-group"><label>Ύψος γραμμής</label>
+      <div className="customers-settings-grid"><div className="field-group"><label>Προκαθορισμένο ύψος γραμμής</label>
         <select className="settings-control" value={profile.customer_list_row_height || 68} onChange={(event) => setProfile({ customer_list_row_height: Number(event.target.value) })}>
           <option value="56">Compact — 56px</option><option value="68">Κανονικό — 68px</option><option value="84">Άνετο — 84px</option><option value="104">Μεγάλο — 104px</option>
+          {[56, 68, 84, 104].includes(Number(profile.customer_list_row_height)) ? null : <option value={profile.customer_list_row_height}>{profile.customer_list_row_height}px — Custom</option>}
         </select>
+        <small className="muted">Ή όρισε ακριβώς το ύψος που θέλεις:</small>
+        <div className="settings-inline-control"><input className="settings-control" type="number" min="44" max="180" step="1" value={profile.customer_list_row_height || 68} onChange={(event) => setProfile({ customer_list_row_height: Math.min(180, Math.max(44, Number(event.target.value) || 68)) })} /><span>px</span></div>
       </div></div>
       </section>
       <section className="customers-settings-card">

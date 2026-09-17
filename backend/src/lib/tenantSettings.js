@@ -8,7 +8,8 @@ export const APP_SETTING_KEYS = [
 ];
 
 export const MAP_PROVIDER_IDS = ['google', 'osm', 'apple', 'bing'];
-const CUSTOMER_ROW_HEIGHTS = [56, 68, 84, 104];
+const CUSTOMER_ROW_HEIGHT_MIN = 44;
+const CUSTOMER_ROW_HEIGHT_MAX = 180;
 
 export const DEFAULT_TENANT_SETTINGS = {
   default_country: 'Ελλάδα',
@@ -91,8 +92,9 @@ export function mergeTenantSettings(raw) {
   const google_maps_api_key = parsed.google_maps_api_key == null ? '' : String(parsed.google_maps_api_key);
   const rawViews = parsed.view_preferences && typeof parsed.view_preferences === 'object' ? parsed.view_preferences : {};
   const customerProfile = rawViews.customer_profile || {};
-  const customer_list_row_height = CUSTOMER_ROW_HEIGHTS.includes(Number(customerProfile.customer_list_row_height))
-    ? Number(customerProfile.customer_list_row_height)
+  const requestedRowHeight = Number(customerProfile.customer_list_row_height);
+  const customer_list_row_height = Number.isFinite(requestedRowHeight)
+    ? Math.min(CUSTOMER_ROW_HEIGHT_MAX, Math.max(CUSTOMER_ROW_HEIGHT_MIN, requestedRowHeight))
     : DEFAULT_TENANT_SETTINGS.view_preferences.customer_profile.customer_list_row_height;
   return {
     ...DEFAULT_TENANT_SETTINGS,
