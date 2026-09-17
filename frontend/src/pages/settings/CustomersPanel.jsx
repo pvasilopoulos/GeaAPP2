@@ -53,6 +53,14 @@ export default function CustomersPanel() {
       </div>
       {message && <div className="voice-msg ok">{message}</div>}
       <section className="customers-settings-card">
+      <div className="customers-settings-card-head"><div><h3>Λίστα πελατών</h3><p>Ρύθμισε την πυκνότητα των γραμμών στη λίστα.</p></div><Icon name="layers" size={18} /></div>
+      <div className="customers-settings-grid"><div className="field-group"><label>Ύψος γραμμής</label>
+        <select className="settings-control" value={profile.customer_list_row_height || 68} onChange={(event) => setProfile({ customer_list_row_height: Number(event.target.value) })}>
+          <option value="56">Compact — 56px</option><option value="68">Κανονικό — 68px</option><option value="84">Άνετο — 84px</option><option value="104">Μεγάλο — 104px</option>
+        </select>
+      </div></div>
+      </section>
+      <section className="customers-settings-card">
         <div className="customers-settings-card-head"><div><h3>Προεπιλογές νέου πελάτη</h3><p>Τιμές που χρησιμοποιούνται αυτόματα στις νέες εγγραφές.</p></div><Icon name="settings" size={18} /></div>
       <div className="customers-settings-grid"><div className="field-group"><label>Προεπιλεγμένη χώρα</label><input className="settings-control" value={value.default_country || ''} onChange={(event) => onChange({ ...value, default_country: event.target.value })} /></div>
       <div className="field-group"><label>Προεπιλεγμένη κατάσταση</label>

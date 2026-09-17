@@ -155,6 +155,7 @@ export default function Customers({ onOpenCustomer }) {
   const [sort, setSort] = useState('last_visit');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
+  const [rowHeight, setRowHeight] = useState(68);
   const [showFilters, setShowFilters] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [columnOrder, setColumnOrder] = useState(DEFAULT_COLUMNS);
@@ -171,6 +172,11 @@ export default function Customers({ onOpenCustomer }) {
   const columnsMenuRef = useRef(null);
 
   const { data: meta } = useQuery({ queryKey: ['meta'], queryFn: ({ signal }) => api.meta({ signal }) });
+  const { data: appSettings } = useQuery({ queryKey: ['settings-app'], queryFn: ({ signal }) => api.appSettings({ signal }) });
+  useEffect(() => {
+    const configured = appSettings?.settings?.view_preferences?.customer_profile?.customer_list_row_height;
+    if (configured) setRowHeight(Number(configured));
+  }, [appSettings]);
   useEffect(() => {
     api.metaCustomFields('customer').then((response) => setCustomFieldColumns(
       (response.fields || []).map((field) => ({ key: `custom:${field.key}`, label: field.name, customKey: field.key })),
@@ -192,6 +198,7 @@ export default function Customers({ onOpenCustomer }) {
         if (config.sort) setSort(config.sort);
         if (config.sortDir) setSortDir(config.sortDir);
         if (config.pageSize) setPageSize(config.pageSize);
+        if (config.rowHeight) setRowHeight(Number(config.rowHeight));
         if (config.identityFields) setIdentityFields(config.identityFields);
         if (config.columnFilters) setColumnFilters(config.columnFilters);
       }
@@ -285,7 +292,7 @@ export default function Customers({ onOpenCustomer }) {
     if (column.key === 'last_visit') return 'minmax(130px, 1.1fr)';
     return 'minmax(110px, 1fr)';
   }).join(' ');
-  const viewConfig = () => ({ filters, columns: columnOrder, hiddenColumns, sort, sortDir, pageSize, identityFields, columnFilters });
+  const viewConfig = () => ({ filters, columns: columnOrder, hiddenColumns, sort, sortDir, pageSize, rowHeight, identityFields, columnFilters });
   const saveView = async () => {
     const name = viewName.trim() || window.prompt('Όνομα λίστας', activeView?.name || '');
     if (!name) return;
@@ -316,6 +323,7 @@ export default function Customers({ onOpenCustomer }) {
     setSort(config.sort || 'last_visit');
     setSortDir(config.sortDir || 'DESC');
     setPageSize(config.pageSize || 50);
+    if (config.rowHeight) setRowHeight(Number(config.rowHeight));
     setIdentityFields(config.identityFields || DEFAULT_IDENTITY_FIELDS);
     setColumnFilters(config.columnFilters || {});
   };
@@ -489,7 +497,7 @@ export default function Customers({ onOpenCustomer }) {
               last_visit_at: c.last_visit_at ? formatDate(c.last_visit_at) : '',
             };
             const identityMeta = identityFields.map((field) => identityValues[field] ?? c[field]).filter((value) => value !== undefined && value !== null && value !== '').join(' · ');
-            return <div className="trow" key={c.id} style={{ gridTemplateColumns: tableGrid }} onClick={() => onOpenCustomer(c)}>
+            return <div className="trow" key={c.id} style={{ gridTemplateColumns: tableGrid, minHeight: `${rowHeight}px` }} onClick={() => onOpenCustomer(c)}>
             {visibleColumns.map((column) => column.key === 'name' ? <div className="cust-cell" key={column.key}>
                 <Avatar name={displayName} src={c.avatar_url} size={38} fallback={false} />
                 <div style={{ minWidth: 0 }}>

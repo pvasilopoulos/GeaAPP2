@@ -8,6 +8,7 @@ export const APP_SETTING_KEYS = [
 ];
 
 export const MAP_PROVIDER_IDS = ['google', 'osm', 'apple', 'bing'];
+const CUSTOMER_ROW_HEIGHTS = [56, 68, 84, 104];
 
 export const DEFAULT_TENANT_SETTINGS = {
   default_country: 'Ελλάδα',
@@ -30,6 +31,7 @@ export const DEFAULT_TENANT_SETTINGS = {
   view_preferences: {
     customer_profile: {
       default_tab: 'overview',
+      customer_list_row_height: 68,
       show_contacts: true,
       show_branches: true,
       show_bookings: true,
@@ -88,6 +90,10 @@ export function mergeTenantSettings(raw) {
   const map_provider = MAP_PROVIDER_IDS.includes(parsed.map_provider) ? parsed.map_provider : DEFAULT_TENANT_SETTINGS.map_provider;
   const google_maps_api_key = parsed.google_maps_api_key == null ? '' : String(parsed.google_maps_api_key);
   const rawViews = parsed.view_preferences && typeof parsed.view_preferences === 'object' ? parsed.view_preferences : {};
+  const customerProfile = rawViews.customer_profile || {};
+  const customer_list_row_height = CUSTOMER_ROW_HEIGHTS.includes(Number(customerProfile.customer_list_row_height))
+    ? Number(customerProfile.customer_list_row_height)
+    : DEFAULT_TENANT_SETTINGS.view_preferences.customer_profile.customer_list_row_height;
   return {
     ...DEFAULT_TENANT_SETTINGS,
     ...parsed,
@@ -96,7 +102,8 @@ export function mergeTenantSettings(raw) {
     view_preferences: {
       customer_profile: {
         ...DEFAULT_TENANT_SETTINGS.view_preferences.customer_profile,
-        ...(rawViews.customer_profile || {}),
+        ...customerProfile,
+        customer_list_row_height,
         tabs: Array.isArray(rawViews.customer_profile?.tabs)
           ? rawViews.customer_profile.tabs.map((tab, index) => ({ ...tab, order: tab.order ?? index }))
           : DEFAULT_TENANT_SETTINGS.view_preferences.customer_profile.tabs,
