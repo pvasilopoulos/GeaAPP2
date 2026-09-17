@@ -482,9 +482,14 @@ CREATE TABLE notes (
   category    VARCHAR(60) NOT NULL DEFAULT 'general',
   is_pinned   TINYINT(1) NOT NULL DEFAULT 0,
   is_archived TINYINT(1) NOT NULL DEFAULT 0,
+  due_at      DATETIME NULL,
+  tags        JSON NULL,
   employee_id BIGINT NULL,
   created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_notes_customer_time (customer_id, created_at),
+  KEY idx_notes_customer_due (customer_id, due_at),
+  KEY idx_notes_customer_archived (customer_id, is_archived, is_pinned, created_at),
   CONSTRAINT fk_notes_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

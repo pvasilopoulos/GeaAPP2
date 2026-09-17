@@ -42,6 +42,12 @@ async function addColumn(table, column, ddl) {
   console.log(`[schema] added ${table}.${column}`);
 }
 
+async function addIndex(table, index, columns) {
+  if (await indexExists(table, index)) return;
+  await query(`ALTER TABLE ${table} ADD INDEX ${index} (${columns})`);
+  console.log(`[schema] added index ${table}.${index}`);
+}
+
 export async function ensureSchema() {
   await addColumn('tenants', 'status', "VARCHAR(20) NOT NULL DEFAULT 'active'");
   await addColumn('tenants', 'locale', "VARCHAR(10) NOT NULL DEFAULT 'el'");
@@ -72,6 +78,11 @@ export async function ensureSchema() {
   await addColumn('notes', 'category', "VARCHAR(60) NOT NULL DEFAULT 'general'");
   await addColumn('notes', 'is_pinned', 'TINYINT(1) NOT NULL DEFAULT 0');
   await addColumn('notes', 'is_archived', 'TINYINT(1) NOT NULL DEFAULT 0');
+  await addColumn('notes', 'due_at', 'DATETIME NULL');
+  await addColumn('notes', 'tags', 'JSON NULL');
+  await addColumn('notes', 'updated_at', 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP');
+  await addIndex('notes', 'idx_notes_customer_due', 'customer_id, due_at');
+  await addIndex('notes', 'idx_notes_customer_archived', 'customer_id, is_archived, is_pinned, created_at');
   if (!(await tableExists('follow_ups'))) {
     await query(`CREATE TABLE follow_ups (
       id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
