@@ -5,6 +5,7 @@ import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { authorize } from '../middleware/auth.js';
 import { PERMISSIONS } from '../lib/permissions.js';
+import { query } from '../db.js';
 
 export const uploadsRouter = Router();
 uploadsRouter.use(authorize(PERMISSIONS.CUSTOMERS_WRITE));
@@ -26,6 +27,16 @@ const MIME_EXT = {
 };
 const MAX_BYTES = 5 * 1024 * 1024;
 
+function safePathSegment(value, fallback) {
+  const segment = String(value || '')
+    .normalize('NFKD')
+    .replace(/[^\w.-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^[.-]+|[.-]+$/g, '')
+    .slice(0, 100);
+  return segment || fallback;
+}
+
 // POST /api/uploads — { mime, data } where data is base64 (no data-URL prefix required).
 uploadsRouter.post('/', async (req, res, next) => {
   try {
@@ -39,9 +50,23 @@ uploadsRouter.post('/', async (req, res, next) => {
     if (!buf.length) return res.status(400).json({ error: 'Κενό αρχείο' });
     if (buf.length > 20 * 1024 * 1024) return res.status(400).json({ error: 'Το αρχείο ξεπερνά τα 20 MB' });
 
-    await mkdir(UPLOADS_DIR, { recursive: true });
-    const name = `${Date.now()}-${randomBytes(6).toString('hex')}.${ext}`;
-    await writeFile(path.join(UPLOADS_DIR, name), buf);
-    res.status(201).json({ url: `/uploads/${name}` });
+    let relativeDir = '';
+    if (req.body?.customerId !== undefined && req.body?.customerId !== null) {
+      const customerId = Number(req.body.customerId);
+      if (!Number.isInteger(customerId) || customerId <= 0) return res.status(400).json({ error: 'Μη έγκυρος πελάτης' });
+      const customer = (await query(
+        'SELECT code FROM customers WHERE id = ? AND tenant_id = ?',
+        [customerId, req.user.tenantId],
+      )).rows[0];
+      if (!customer) return res.status(404).json({ error: 'Ο πελάτης δεν βρέθηκε' });
+      relativeDir = path.join('Customer', safePathSegment(customer.code, `customer-${customerId}`));
+    }
+    const targetDir = path.join(UPLOADS_DIR, relativeDir);
+    await mkdir(targetDir, { recursive: true });
+    const originalName = safePathSegment(String(req.body?.fileName || ''), 'document');
+    const name = `${originalName}-${Date.now()}-${randomBytes(6).toString('hex')}.${ext}`;
+    await writeFile(path.join(targetDir, name), buf);
+    const urlPath = relativeDir ? `${relativeDir.replace(/\\/g, '/')}/${name}` : name;
+    res.status(201).json({ url: `/uploads/${urlPath}`, path: urlPath });
   } catch (err) { next(err); }
 });

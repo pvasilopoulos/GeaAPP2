@@ -144,14 +144,14 @@ export const api = {
     });
     return send('POST', '/uploads', { mime: file.type, data });
   },
-  async uploadFile(file) {
+  async uploadFile(file, customerId) {
     const data = await new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result));
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
-    return send('POST', '/uploads', { mime: file.type, data });
+    return send('POST', '/uploads', { mime: file.type, data, customerId, fileName: file.name });
   },
   // export (fetch as blob so the Authorization header is sent, then download)
   async exportCustomers(format, params) {

@@ -22,7 +22,7 @@ export default function CustomerKnowledgePanel({ customerId, kind }) {
     if (!file) return;
     setUploading(true);
     try {
-      const uploaded = await api.uploadFile(file);
+      const uploaded = await api.uploadFile(file, customerId);
       await api.createCustomerDocument(customerId, { name: file.name, mime_type: file.type, size_bytes: file.size, url: uploaded.url });
       refresh();
     } finally { setUploading(false); }
