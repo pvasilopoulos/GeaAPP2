@@ -9,8 +9,8 @@ const entities = [
 ];
 
 const defaultMappings = {
-  sources: { customers: 'customers', branches: 'branches', spaces: 'spaces' },
-  customers: { erp_id: 'id', code: 'code', first_name: 'first_name', last_name: 'last_name', name: 'name' },
+  sources: { customers: '', branches: 'branches', spaces: 'spaces' },
+  customers: { erp_id: 'customer_id', code: 'code', company: 'company_name', first_name: 'first_name', last_name: 'last_name', address_line: 'address_street', postal_code: 'address_postal', city: 'address_city', tax_id: 'vat_number', email: 'email', phone: 'phone', mobile: 'mobile', status: 'status' },
   branches: { erp_id: 'id', customer_erp_id: 'customer_id', name: 'name' },
   spaces: { erp_id: 'id', branch_erp_id: 'branch_id', name: 'name' },
 };
@@ -19,7 +19,8 @@ const mappingFields = {
   customers: [
     ['erp_id', 'ERP ID', true], ['code', 'Κωδικός', false], ['first_name', 'Όνομα', false],
     ['last_name', 'Επώνυμο', false], ['company', 'Επωνυμία', false], ['email', 'Email', false],
-    ['phone', 'Τηλέφωνο', false],
+    ['phone', 'Τηλέφωνο', false], ['mobile', 'Κινητό', false], ['tax_id', 'ΑΦΜ', false],
+    ['address_line', 'Διεύθυνση', false], ['postal_code', 'ΤΚ', false], ['city', 'Πόλη', false],
   ],
   branches: [
     ['erp_id', 'ERP ID', true], ['customer_erp_id', 'ERP ID πελάτη', true],
@@ -169,9 +170,9 @@ export default function ConnectorsPanel() {
               </div>
             </section>
             <section className="erp-card">
-              <div className="erp-card-title"><span className="erp-step">2</span><div><h3>Τι θα συγχρονίσουμε;</h3><p>Όρισε τα πεδία που θα διαβάζει το ERP response.</p></div></div>
+              <div className="erp-card-title"><span className="erp-step">2</span><div><h3>Τι θα συγχρονίσουμε;</h3><p>Όρισε τα πεδία που θα διαβάζει το ERP response. Για λίστα χρησιμοποίησε π.χ. <code>data.items</code> ή <code>customers</code>.</p></div></div>
               <div className="erp-entity-tabs">{entities.map((entity) => <button type="button" key={entity.key} className={`erp-entity-tab ${activeEntity === entity.key ? 'active' : ''}`} onClick={() => setActiveEntity(entity.key)}><span className={`erp-icon erp-icon-${entity.tone}`}><Icon name={entity.icon} size={16} /></span><span><b>{entity.label}</b><small>{entity.hint}</small></span><Icon name="chevronRight" size={15} /></button>)}</div>
-              <div className="erp-mapping-head"><div><b>{entities.find((item) => item.key === activeEntity)?.label}</b><span>Αντιστοίχισε κάθε πεδίο σε JSON path</span></div><span className="erp-mapping-count">{Object.keys(selectedMappings[activeEntity] || {}).length} πεδία</span></div>
+              <div className="erp-mapping-head"><div><b>{entities.find((item) => item.key === activeEntity)?.label}</b><span>Αντιστοίχισε κάθε πεδίο σε JSON path</span></div><div className="erp-mapping-head-actions"><button className="erp-link-button" type="button" onClick={() => updateMapping(activeEntity, 'erp_id', activeEntity === 'customers' ? 'customer_id' : activeEntity === 'branches' ? 'branch_id' : 'space_id')}>Χρήση ERP ID</button><span className="erp-mapping-count">{Object.keys(selectedMappings[activeEntity] || {}).length} πεδία</span></div></div>
               <div className="erp-mapping-list">{mappingFields[activeEntity].map(([field, label, required]) => <div className="erp-mapping-row" key={field}><div><b>{label}</b><code>{field}</code></div><span className="erp-arrow">→</span><input value={selectedMappings[activeEntity]?.[field] || ''} onChange={(e) => updateMapping(activeEntity, field, e.target.value)} placeholder={required ? 'required JSON path' : 'προαιρετικό'} /><span className={selectedMappings[activeEntity]?.[field] ? 'erp-map-ok' : required ? 'erp-map-missing' : 'erp-map-optional'}>{selectedMappings[activeEntity]?.[field] ? 'Mapped' : required ? 'Required' : 'Optional'}</span></div>)}</div>
               <button className="erp-advanced-toggle" type="button" onClick={() => setShowAdvanced(!showAdvanced)}><Icon name={showAdvanced ? 'chevronUp' : 'chevronDown'} size={15} /> {showAdvanced ? 'Απόκρυψη advanced mapping' : 'Άνοιγμα advanced mapping JSON'}</button>
               {showAdvanced && <textarea className="erp-codearea" rows="10" value={form.mappings} onChange={(e) => update('mappings', e.target.value)} />}

@@ -11,6 +11,14 @@ function parseJson(value, fallback = {}) {
   try { return JSON.parse(value); } catch { return fallback; }
 }
 
+function recordsAt(payload, source) {
+  const value = getPath(payload, source);
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === 'object') return [value];
+  if (Array.isArray(payload)) return payload;
+  return [];
+}
+
 function applyCredentials(headers, credentials, authType) {
   if (!credentials) return;
   if (authType === 'api-key' && credentials.key && credentials.value) {
@@ -60,7 +68,7 @@ async function fetchWithRetry(connector) {
 }
 
 const ENTITY_FIELDS = {
-  customers: ['code', 'first_name', 'last_name', 'company', 'email', 'phone', 'status'],
+  customers: ['code', 'first_name', 'last_name', 'company', 'email', 'phone', 'mobile', 'tax_id', 'customer_type', 'address_line', 'city', 'postal_code', 'status'],
   branches: ['customer_id', 'code', 'name', 'address_line', 'city', 'phone', 'status'],
   spaces: ['customer_id', 'branch_id', 'code', 'name', 'space_type', 'status'],
 };
@@ -90,7 +98,7 @@ async function upsert(conn, table, tenantId, data) {
     await conn.query(
       `INSERT INTO customers (tenant_id, erp_id, code, first_name, last_name, company, email, phone, status, search_norm)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '')`,
-      [tenantId, erpId, data.code || `ERP-${tenantId}-${erpId}`, data.first_name || data.name || erpId,
+      [tenantId, erpId, data.code || `ERP-${tenantId}-${erpId}`, data.first_name || data.name || data.company || erpId,
         data.last_name || '', data.company, data.email, data.phone, data.status || 'active'],
     );
   } else if (table === 'branches') {
@@ -154,10 +162,13 @@ export async function runSync(tenantId, connectorId) {
     const payload = await fetchWithRetry(connector);
     const entities = Object.fromEntries(Object.keys(ENTITY_FIELDS).map((entity) => {
       const source = mappings.sources?.[entity] || entity;
-      const value = getPath(payload, source);
-      return [entity, Array.isArray(value) ? value : []];
+      return [entity, recordsAt(payload, source)];
     }));
     let upserted = 0;
+    const recordsSeen = Object.values(entities).reduce((sum, records) => sum + records.length, 0);
+    if (!recordsSeen) {
+      throw new Error('Το response δεν περιέχει records. Έλεγξε το JSON path στο sources ή αν το ERP επιστρέφει data/items.');
+    }
 
     await withConnection(async (conn) => {
       await conn.beginTransaction();
@@ -192,7 +203,6 @@ export async function runSync(tenantId, connectorId) {
       }
     });
 
-    const recordsSeen = Object.values(entities).reduce((sum, records) => sum + records.length, 0);
     await query(
       'UPDATE sync_runs SET status = ?, finished_at = NOW(), records_seen = ?, records_upserted = ? WHERE id = ? AND tenant_id = ?',
       ['success', recordsSeen, upserted, runId, tenantId],
