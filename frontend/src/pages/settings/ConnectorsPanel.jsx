@@ -37,6 +37,7 @@ const mappingFields = {
 const newForm = () => ({
   name: '', base_url: '', method: 'GET', auth_type: 'bearer', token: '',
   target_entity: 'customers',
+  response_encoding: 'auto',
   username: '', password: '', api_key_name: '', api_key_value: '',
   body_template: '', headers: '{}', schedule_minutes: '', enabled: false,
   mappings: JSON.stringify(defaultMappings, null, 2),
@@ -164,6 +165,7 @@ export default function ConnectorsPanel() {
                 <label className="erp-field wide"><span>Όνομα σύνδεσης</span><input value={form.name} onChange={(e) => update('name', e.target.value)} placeholder="π.χ. Entersoft παραγωγής" required /></label>
                 <label className="erp-field wide"><span>Endpoint URL</span><div className="erp-input-prefix"><Icon name="globe" size={15} /><input type="url" value={form.base_url} onChange={(e) => update('base_url', e.target.value)} placeholder="https://erp.example.com/api/customers" required /></div></label>
                 <label className="erp-field wide"><span>Οντότητα συγχρονισμού</span><select value={form.target_entity} onChange={(e) => { update('target_entity', e.target.value); setActiveEntity(e.target.value); }}><option value="customers">Πελάτες</option><option value="branches">Υποκαταστήματα</option><option value="spaces">Χώροι</option></select></label>
+                <label className="erp-field wide"><span>Encoding response <em>Για ελληνικά ERP APIs συνήθως Windows-1253</em></span><select value={form.response_encoding} onChange={(e) => update('response_encoding', e.target.value)}><option value="auto">Αυτόματο (header → UTF-8 → Windows-1253)</option><option value="utf-8">UTF-8</option><option value="windows-1253">Windows-1253 (Ελληνικά)</option><option value="windows-1258">Windows-1258</option></select></label>
                 <label className="erp-field"><span>Μέθοδος</span><select value={form.method} onChange={(e) => update('method', e.target.value)}><option>GET</option><option>POST</option><option>PUT</option></select></label>
                 <label className="erp-field"><span>Authentication</span><select value={form.auth_type} onChange={(e) => update('auth_type', e.target.value)}><option value="bearer">Bearer token</option><option value="api-key">API key</option><option value="basic">Basic Auth</option><option value="none">Χωρίς authentication</option></select></label>
                 {form.auth_type === 'bearer' && <label className="erp-field wide"><span>Bearer token <em>Αποθηκεύεται κρυπτογραφημένο</em></span><input type="password" value={form.token} onChange={(e) => update('token', e.target.value)} placeholder={selected?.hasCredentials ? 'Υπάρχει αποθηκευμένο token — άφησέ το κενό' : 'Επικόλλησε το token'} /></label>}

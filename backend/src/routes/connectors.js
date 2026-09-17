@@ -13,8 +13,8 @@ connectorsRouter.post('/', guard, async (req, res, next) => {
   try {
     const b = req.body || {}; const targetEntity = b.target_entity || 'customers'; const errors = validateMappings(b.mappings, targetEntity);
     if (!b.name || !b.base_url || errors.length) return res.status(400).json({ error: errors.join('; ') || 'Όνομα και URL απαιτούνται' });
-    const result = await query(`INSERT INTO connectors (tenant_id,name,base_url,target_entity,method,auth_type,credentials_enc,body_template,headers,mappings,schedule_minutes,enabled,timeout_ms,retry_count) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [req.user.tenantId, b.name.trim(), b.base_url, b.target_entity || 'customers', b.method || 'GET', b.auth_type || 'bearer',
+    const result = await query(`INSERT INTO connectors (tenant_id,name,base_url,target_entity,response_encoding,method,auth_type,credentials_enc,body_template,headers,mappings,schedule_minutes,enabled,timeout_ms,retry_count) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [req.user.tenantId, b.name.trim(), b.base_url, b.target_entity || 'customers', b.response_encoding || 'auto', b.method || 'GET', b.auth_type || 'bearer',
         encryptCredentials(b.credentials), b.body_template || null, JSON.stringify(b.headers || {}),
         JSON.stringify(b.mappings), b.schedule_minutes || null, !!b.enabled, b.timeout_ms || 30000, b.retry_count ?? 3]);
     const { rows } = await query('SELECT * FROM connectors WHERE id = ?', [result.rows.insertId]); res.status(201).json({ connector: redactConnector(rows[0]) });
@@ -23,7 +23,7 @@ connectorsRouter.post('/', guard, async (req, res, next) => {
 connectorsRouter.patch('/:id', guard, async (req, res, next) => {
   try {
     const b = req.body || {}; const targetEntity = b.target_entity || 'customers'; if (b.mappings && validateMappings(b.mappings, targetEntity).length) return res.status(400).json({ error: validateMappings(b.mappings, targetEntity).join('; ') });
-    const fields = ['name','base_url','target_entity','method','auth_type','body_template','headers','mappings','schedule_minutes','enabled','timeout_ms','retry_count']; const sets = [], params = [];
+    const fields = ['name','base_url','target_entity','response_encoding','method','auth_type','body_template','headers','mappings','schedule_minutes','enabled','timeout_ms','retry_count']; const sets = [], params = [];
     for (const f of fields) if (b[f] !== undefined) { sets.push(`${f} = ?`); params.push(['headers','mappings'].includes(f) ? JSON.stringify(b[f]) : b[f]); }
     if (b.credentials !== undefined) { sets.push('credentials_enc = ?'); params.push(encryptCredentials(b.credentials)); }
     if (!sets.length) return res.status(400).json({ error: 'Καμία αλλαγή' }); params.push(req.params.id, req.user.tenantId);

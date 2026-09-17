@@ -2,6 +2,7 @@ import { query, withConnection } from '../db.js';
 import { decryptCredentials } from './connectorCrypto.js';
 import { getPath, mapRecord, validateMappings } from './mapping.js';
 import { retryDelay } from './schedulerPolicy.js';
+import { parseEncodedJson } from './responseEncoding.js';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -47,7 +48,11 @@ async function request(connector) {
   try {
     const response = await fetch(connector.base_url, { ...options, signal: controller.signal });
     if (!response.ok) throw new Error(`ERP returned ${response.status}`);
-    return response.json();
+    const buffer = await response.arrayBuffer();
+    return parseEncodedJson(Buffer.from(buffer), {
+      encoding: connector.response_encoding || 'auto',
+      contentType: response.headers.get('content-type') || '',
+    }).value;
   } finally {
     clearTimeout(timer);
   }
