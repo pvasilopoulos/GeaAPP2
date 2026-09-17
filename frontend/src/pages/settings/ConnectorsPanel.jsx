@@ -1,147 +1,205 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import Icon from '../../components/Icon.jsx';
 import { api } from '../../api.js';
 
-const emptyMappings = {
+const entities = [
+  { key: 'customers', label: 'Πελάτες', icon: 'users', tone: 'indigo', hint: 'Στοιχεία πελατών και ERP IDs' },
+  { key: 'branches', label: 'Υποκαταστήματα', icon: 'building', tone: 'teal', hint: 'Σύνδεση με τον ERP πελάτη' },
+  { key: 'spaces', label: 'Χώροι', icon: 'grid', tone: 'amber', hint: 'Σύνδεση με υποκατάστημα και πελάτη' },
+];
+
+const defaultMappings = {
   sources: { customers: 'customers', branches: 'branches', spaces: 'spaces' },
   customers: { erp_id: 'id', code: 'code', first_name: 'first_name', last_name: 'last_name', name: 'name' },
   branches: { erp_id: 'id', customer_erp_id: 'customer_id', name: 'name' },
   spaces: { erp_id: 'id', branch_erp_id: 'branch_id', name: 'name' },
 };
 
+const mappingFields = {
+  customers: [
+    ['erp_id', 'ERP ID', true], ['code', 'Κωδικός', false], ['first_name', 'Όνομα', false],
+    ['last_name', 'Επώνυμο', false], ['company', 'Επωνυμία', false], ['email', 'Email', false],
+    ['phone', 'Τηλέφωνο', false],
+  ],
+  branches: [
+    ['erp_id', 'ERP ID', true], ['customer_erp_id', 'ERP ID πελάτη', true],
+    ['name', 'Όνομα', true], ['code', 'Κωδικός', false], ['city', 'Πόλη', false],
+    ['address_line', 'Διεύθυνση', false], ['phone', 'Τηλέφωνο', false],
+  ],
+  spaces: [
+    ['erp_id', 'ERP ID', true], ['branch_erp_id', 'ERP ID υποκαταστήματος', true],
+    ['name', 'Όνομα', true], ['code', 'Κωδικός', false], ['space_type', 'Τύπος χώρου', false],
+    ['status', 'Κατάσταση', false],
+  ],
+};
+
 const newForm = () => ({
-  name: '',
-  base_url: '',
-  method: 'GET',
-  auth_type: 'bearer',
-  token: '',
-  username: '',
-  password: '',
-  api_key_name: '',
-  api_key_value: '',
-  body_template: '',
-  headers: '{}',
-  schedule_minutes: '',
-  enabled: false,
-  mappings: JSON.stringify(emptyMappings, null, 2),
+  name: '', base_url: '', method: 'GET', auth_type: 'bearer', token: '',
+  username: '', password: '', api_key_name: '', api_key_value: '',
+  body_template: '', headers: '{}', schedule_minutes: '', enabled: false,
+  mappings: JSON.stringify(defaultMappings, null, 2),
 });
+
+function parseJson(value, fallback) {
+  try { return JSON.parse(value); } catch { return fallback; }
+}
+
+function formatDate(value) {
+  if (!value) return 'Δεν έχει εκτελεστεί ακόμη';
+  return new Intl.DateTimeFormat('el-GR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+}
+
+function StatusPill({ enabled }) {
+  return <span className={`erp-status ${enabled ? 'is-on' : 'is-off'} `}><span />{enabled ? 'Ενεργό' : 'Χειροκίνητο'}</span>;
+}
 
 export default function ConnectorsPanel() {
   const [items, setItems] = useState([]);
   const [selected, setSelected] = useState(null);
   const [form, setForm] = useState(newForm);
   const [runs, setRuns] = useState([]);
-  const [message, setMessage] = useState('');
+  const [activeEntity, setActiveEntity] = useState('customers');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [message, setMessage] = useState(null);
+  const [busy, setBusy] = useState(false);
 
   const load = () => api.connectors().then((response) => setItems(response.connectors || []));
   useEffect(() => { load(); }, []);
 
-  const edit = async (connector) => {
+  const selectedMappings = useMemo(() => parseJson(form.mappings, defaultMappings), [form.mappings]);
+  const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  const updateMapping = (entity, field, path) => {
+    const next = { ...selectedMappings, [entity]: { ...(selectedMappings[entity] || {}), [field]: path } };
+    update('mappings', JSON.stringify(next, null, 2));
+  };
+
+  const openEditor = async (connector = null) => {
     setSelected(connector);
+    setMessage(null);
+    setShowAdvanced(false);
+    setActiveEntity('customers');
+    if (!connector) {
+      setForm(newForm());
+      setRuns([]);
+      return;
+    }
     setForm({
-      ...newForm(),
-      ...connector,
-      token: '',
+      ...newForm(), ...connector, token: '',
       headers: JSON.stringify(connector.headers || {}, null, 2),
-      mappings: JSON.stringify(connector.mappings || emptyMappings, null, 2),
+      mappings: JSON.stringify(connector.mappings || defaultMappings, null, 2),
       schedule_minutes: connector.schedule_minutes || '',
     });
     const response = await api.connectorRuns(connector.id);
     setRuns(response.runs || []);
   };
 
-  const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
-
   const save = async (event) => {
     event.preventDefault();
+    setBusy(true);
     try {
       const payload = {
         ...form,
         headers: JSON.parse(form.headers || '{}'),
         mappings: JSON.parse(form.mappings),
         schedule_minutes: form.schedule_minutes ? Number(form.schedule_minutes) : null,
-        credentials: form.token ? { token: form.token } : undefined,
+        credentials: form.auth_type === 'basic' && form.username
+          ? { username: form.username, password: form.password }
+          : form.auth_type === 'api-key' && form.api_key_name
+            ? { key: form.api_key_name, value: form.api_key_value }
+            : form.token ? { token: form.token } : undefined,
       };
-      if (form.auth_type === 'basic' && form.username) {
-        payload.credentials = { username: form.username, password: form.password };
-      }
-      if (form.auth_type === 'api-key' && form.api_key_name) {
-        payload.credentials = { key: form.api_key_name, value: form.api_key_value };
-      }
       delete payload.token;
       if (selected) await api.updateConnector(selected.id, payload);
       else await api.createConnector(payload);
-      setMessage('Η σύνδεση αποθηκεύτηκε.');
+      setMessage({ type: 'success', text: 'Η σύνδεση αποθηκεύτηκε επιτυχώς.' });
       setSelected(null);
       await load();
     } catch (error) {
-      setMessage(error.message || 'Δεν ήταν δυνατή η αποθήκευση.');
-    }
+      setMessage({ type: 'error', text: error.message || 'Δεν ήταν δυνατή η αποθήκευση.' });
+    } finally { setBusy(false); }
   };
 
   const run = async () => {
+    if (!selected) return;
+    setBusy(true);
     try {
-      setMessage('Εκτελείται συγχρονισμός…');
       await api.runConnector(selected.id);
-      setMessage('Ο συγχρονισμός ολοκληρώθηκε.');
-      await edit(selected);
+      setMessage({ type: 'success', text: 'Ο συγχρονισμός ολοκληρώθηκε.' });
+      await openEditor(selected);
     } catch (error) {
-      setMessage(error.message || 'Ο συγχρονισμός απέτυχε.');
-    }
+      setMessage({ type: 'error', text: error.message || 'Ο συγχρονισμός απέτυχε.' });
+    } finally { setBusy(false); }
   };
 
-  return (
-    <div>
-      <div className="panel-head">
-        <h2>Συνδέσεις ERP</h2>
-        <button className="btn primary" type="button" onClick={() => { setSelected(null); setForm(newForm()); setRuns([]); }}>
-          Νέα σύνδεση
-        </button>
-      </div>
-      {message && <div className="notice">{message}</div>}
-      {items.map((connector) => (
-        <div key={connector.id} className="list-row">
-          <div>
-            <b>{connector.name}</b>
-            <div className="muted">
-              {connector.method} {connector.base_url} · {connector.enabled ? `κάθε ${connector.schedule_minutes} λεπτά` : 'χειροκίνητη'}
-            </div>
+  const deleteConnector = async () => {
+    if (!selected || !window.confirm('Να διαγραφεί αυτή η σύνδεση και το ιστορικό της;')) return;
+    await api.deleteConnector(selected.id);
+    setMessage({ type: 'success', text: 'Η σύνδεση διαγράφηκε.' });
+    setSelected(null);
+    await load();
+  };
+
+  if (selected || !items.length) {
+    return (
+      <div className="erp-shell">
+        <div className="erp-editor-head">
+          <button className="btn btn-ghost" type="button" onClick={() => setSelected(null)}><Icon name="arrowLeft" size={16} /> Πίσω στις συνδέσεις</button>
+          <div className="erp-editor-actions">
+            {selected && <button className="btn btn-ghost danger-action" type="button" onClick={deleteConnector}>Διαγραφή</button>}
+            {selected && <button className="btn btn-accent" type="button" onClick={run} disabled={busy}><Icon name="refresh" size={16} /> {busy ? 'Εκτέλεση…' : 'Συγχρονισμός τώρα'}</button>}
           </div>
-          <button className="btn" type="button" onClick={() => edit(connector)}>Ρύθμιση</button>
         </div>
-      ))}
-      {(selected || !items.length) && (
-        <form onSubmit={save} className="form-grid" style={{ marginTop: 20 }}>
-          <label>Όνομα σύνδεσης<input value={form.name} onChange={(event) => update('name', event.target.value)} required /></label>
-          <label>URL ERP<input value={form.base_url} onChange={(event) => update('base_url', event.target.value)} required /></label>
-          <label>Μέθοδος
-            <select value={form.method} onChange={(event) => update('method', event.target.value)}>
-              <option>GET</option><option>POST</option><option>PUT</option>
-            </select>
-          </label>
-          <label>Authentication
-            <select value={form.auth_type} onChange={(event) => update('auth_type', event.target.value)}>
-              <option value="bearer">Bearer token</option><option value="api-key">API key</option>
-              <option value="basic">Basic Auth</option><option value="none">Χωρίς authentication</option>
-            </select>
-          </label>
-          {form.auth_type === 'bearer' && <label>Token<input type="password" value={form.token} onChange={(event) => update('token', event.target.value)} /></label>}
-          {form.auth_type === 'basic' && <><label>Username<input value={form.username} onChange={(event) => update('username', event.target.value)} /></label><label>Password<input type="password" value={form.password} onChange={(event) => update('password', event.target.value)} /></label></>}
-          {form.auth_type === 'api-key' && <><label>Όνομα header<input value={form.api_key_name} onChange={(event) => update('api_key_name', event.target.value)} placeholder="X-API-Key" /></label><label>API key<input type="password" value={form.api_key_value} onChange={(event) => update('api_key_value', event.target.value)} /></label></>}
-          <label>Interval (λεπτά)<input type="number" min="1" value={form.schedule_minutes} onChange={(event) => update('schedule_minutes', event.target.value)} /></label>
-          <label><input type="checkbox" checked={!!form.enabled} onChange={(event) => update('enabled', event.target.checked)} /> Ενεργός scheduler</label>
-          <label style={{ gridColumn: '1/-1' }}>Headers JSON<textarea rows="3" value={form.headers} onChange={(event) => update('headers', event.target.value)} /></label>
-          <label style={{ gridColumn: '1/-1' }}>Body template<textarea rows="5" value={form.body_template || ''} onChange={(event) => update('body_template', event.target.value)} placeholder='{"limit": 100}' /></label>
-          <label style={{ gridColumn: '1/-1' }}>Αντιστοίχιση JSON paths<textarea rows="12" value={form.mappings} onChange={(event) => update('mappings', event.target.value)} /></label>
-          <div>
-            <button className="btn primary" type="submit">Αποθήκευση</button>
-            {selected && <button className="btn" type="button" onClick={run} style={{ marginLeft: 8 }}>Χειροκίνητη εκτέλεση</button>}
+        <div className="erp-editor-title">
+          <div className="erp-icon erp-icon-indigo"><Icon name="refresh" size={22} /></div>
+          <div><h2>{selected ? 'Επεξεργασία σύνδεσης' : 'Νέα σύνδεση ERP'}</h2><p>Ρύθμισε μία φορά τη σύνδεση και άφησε το σύστημα να συγχρονίζει αυτόματα.</p></div>
+        </div>
+        {message && <div className={`erp-alert ${message.type}`}><Icon name={message.type === 'success' ? 'check' : 'x'} size={16} />{message.text}</div>}
+        <form onSubmit={save} className="erp-editor-grid">
+          <div className="erp-editor-main">
+            <section className="erp-card">
+              <div className="erp-card-title"><span className="erp-step">1</span><div><h3>Βασικές πληροφορίες</h3><p>Πώς θα εμφανίζεται αυτή η σύνδεση στην ομάδα σου.</p></div></div>
+              <div className="erp-form-grid">
+                <label className="erp-field wide"><span>Όνομα σύνδεσης</span><input value={form.name} onChange={(e) => update('name', e.target.value)} placeholder="π.χ. Entersoft παραγωγής" required /></label>
+                <label className="erp-field wide"><span>Endpoint URL</span><div className="erp-input-prefix"><Icon name="globe" size={15} /><input type="url" value={form.base_url} onChange={(e) => update('base_url', e.target.value)} placeholder="https://erp.example.com/api/customers" required /></div></label>
+                <label className="erp-field"><span>Μέθοδος</span><select value={form.method} onChange={(e) => update('method', e.target.value)}><option>GET</option><option>POST</option><option>PUT</option></select></label>
+                <label className="erp-field"><span>Authentication</span><select value={form.auth_type} onChange={(e) => update('auth_type', e.target.value)}><option value="bearer">Bearer token</option><option value="api-key">API key</option><option value="basic">Basic Auth</option><option value="none">Χωρίς authentication</option></select></label>
+                {form.auth_type === 'bearer' && <label className="erp-field wide"><span>Bearer token <em>Αποθηκεύεται κρυπτογραφημένο</em></span><input type="password" value={form.token} onChange={(e) => update('token', e.target.value)} placeholder={selected?.hasCredentials ? 'Υπάρχει αποθηκευμένο token — άφησέ το κενό' : 'Επικόλλησε το token'} /></label>}
+                {form.auth_type === 'basic' && <><label className="erp-field"><span>Username</span><input value={form.username} onChange={(e) => update('username', e.target.value)} /></label><label className="erp-field"><span>Password</span><input type="password" value={form.password} onChange={(e) => update('password', e.target.value)} /></label></>}
+                {form.auth_type === 'api-key' && <><label className="erp-field"><span>Header name</span><input value={form.api_key_name} onChange={(e) => update('api_key_name', e.target.value)} placeholder="X-API-Key" /></label><label className="erp-field"><span>API key</span><input type="password" value={form.api_key_value} onChange={(e) => update('api_key_value', e.target.value)} /></label></>}
+              </div>
+            </section>
+            <section className="erp-card">
+              <div className="erp-card-title"><span className="erp-step">2</span><div><h3>Τι θα συγχρονίσουμε;</h3><p>Όρισε τα πεδία που θα διαβάζει το ERP response.</p></div></div>
+              <div className="erp-entity-tabs">{entities.map((entity) => <button type="button" key={entity.key} className={`erp-entity-tab ${activeEntity === entity.key ? 'active' : ''}`} onClick={() => setActiveEntity(entity.key)}><span className={`erp-icon erp-icon-${entity.tone}`}><Icon name={entity.icon} size={16} /></span><span><b>{entity.label}</b><small>{entity.hint}</small></span><Icon name="chevronRight" size={15} /></button>)}</div>
+              <div className="erp-mapping-head"><div><b>{entities.find((item) => item.key === activeEntity)?.label}</b><span>Αντιστοίχισε κάθε πεδίο σε JSON path</span></div><span className="erp-mapping-count">{Object.keys(selectedMappings[activeEntity] || {}).length} πεδία</span></div>
+              <div className="erp-mapping-list">{mappingFields[activeEntity].map(([field, label, required]) => <div className="erp-mapping-row" key={field}><div><b>{label}</b><code>{field}</code></div><span className="erp-arrow">→</span><input value={selectedMappings[activeEntity]?.[field] || ''} onChange={(e) => updateMapping(activeEntity, field, e.target.value)} placeholder={required ? 'required JSON path' : 'προαιρετικό'} /><span className={selectedMappings[activeEntity]?.[field] ? 'erp-map-ok' : required ? 'erp-map-missing' : 'erp-map-optional'}>{selectedMappings[activeEntity]?.[field] ? 'Mapped' : required ? 'Required' : 'Optional'}</span></div>)}</div>
+              <button className="erp-advanced-toggle" type="button" onClick={() => setShowAdvanced(!showAdvanced)}><Icon name={showAdvanced ? 'chevronUp' : 'chevronDown'} size={15} /> {showAdvanced ? 'Απόκρυψη advanced mapping' : 'Άνοιγμα advanced mapping JSON'}</button>
+              {showAdvanced && <textarea className="erp-codearea" rows="10" value={form.mappings} onChange={(e) => update('mappings', e.target.value)} />}
+            </section>
+            <section className="erp-card">
+              <div className="erp-card-title"><span className="erp-step">3</span><div><h3>Request details</h3><p>Προαιρετικές παράμετροι για POST/PUT requests.</p></div></div>
+              <label className="erp-field wide"><span>Headers JSON</span><textarea rows="3" value={form.headers} onChange={(e) => update('headers', e.target.value)} placeholder='{"Accept":"application/json"}' /></label>
+              <label className="erp-field wide"><span>Body template</span><textarea rows="4" value={form.body_template || ''} onChange={(e) => update('body_template', e.target.value)} placeholder='{"page": 1, "limit": 100}' /></label>
+            </section>
           </div>
-          {selected && <div style={{ gridColumn: '1/-1' }}>
-            <h3>Ιστορικό συγχρονισμών</h3>
-            {runs.map((runItem) => <div className="muted" key={runItem.id}>{runItem.started_at} · {runItem.status} · {runItem.records_upserted} εγγραφές {runItem.error_message || ''}</div>)}
-          </div>}
+          <aside className="erp-editor-side">
+            <section className="erp-card erp-side-card"><div className="erp-side-label">Πρόγραμμα συγχρονισμού</div><div className="erp-schedule-preview"><Icon name="clock" size={20} /><div><strong>{form.schedule_minutes ? `Κάθε ${form.schedule_minutes} λεπτά` : 'Χειροκίνητη εκτέλεση'}</strong><small>Ο worker εκτελείται στο παρασκήνιο</small></div></div><label className="erp-field"><span>Interval σε λεπτά</span><input type="number" min="1" value={form.schedule_minutes} onChange={(e) => update('schedule_minutes', e.target.value)} placeholder="π.χ. 15" /></label><label className="erp-toggle"><input type="checkbox" checked={!!form.enabled} onChange={(e) => update('enabled', e.target.checked)} /><span className="erp-switch" /><span>Ενεργοποίηση scheduler</span></label></section>
+            <section className="erp-card erp-side-card"><div className="erp-side-label">Πρόσφατη δραστηριότητα</div>{runs.length ? runs.slice(0, 5).map((item) => <div className="erp-mini-run" key={item.id}><span className={`erp-run-dot ${item.status}`} /><div><b>{item.status === 'success' ? 'Επιτυχής συγχρονισμός' : item.status === 'running' ? 'Σε εξέλιξη' : 'Αποτυχημένος συγχρονισμός'}</b><small>{formatDate(item.started_at)} · {item.records_upserted || 0} records</small></div></div>) : <div className="erp-empty-mini"><Icon name="activity" size={20} /><span>Δεν υπάρχει ιστορικό ακόμη</span></div>}</section>
+            <button className="btn btn-accent erp-save-btn" type="submit" disabled={busy}>{busy ? 'Αποθήκευση…' : selected ? 'Αποθήκευση αλλαγών' : 'Δημιουργία σύνδεσης'}</button>
+          </aside>
         </form>
-      )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="erp-shell">
+      <div className="erp-hero"><div><div className="erp-eyebrow"><span className="erp-live-dot" /> INTEGRATIONS</div><h2>ERP Sync</h2><p>Σύνδεσε το ERP σου και κράτησε πελάτες, υποκαταστήματα και χώρους πάντα ενημερωμένους.</p></div><button className="btn btn-accent" type="button" onClick={() => openEditor()}><Icon name="plus" size={16} /> Νέα σύνδεση</button></div>
+      {message && <div className={`erp-alert ${message.type}`}><Icon name={message.type === 'success' ? 'check' : 'x'} size={16} />{message.text}</div>}
+      <div className="erp-stats"><div><span className="erp-stat-icon indigo"><Icon name="layers" size={18} /></span><div><small>Συνδέσεις</small><strong>{items.length}</strong></div></div><div><span className="erp-stat-icon green"><Icon name="activity" size={18} /></span><div><small>Ενεργές</small><strong>{items.filter((item) => item.enabled).length}</strong></div></div><div><span className="erp-stat-icon amber"><Icon name="clock" size={18} /></span><div><small>Αυτόματα runs</small><strong>{items.filter((item) => item.enabled).length ? 'ON' : '—'}</strong></div></div></div>
+      <div className="erp-section-heading"><div><h3>Οι συνδέσεις σου</h3><span>Διαχείριση endpoints και προγραμματισμών</span></div><span className="erp-list-count">{items.length} {items.length === 1 ? 'σύνδεση' : 'συνδέσεις'}</span></div>
+      <div className="erp-connector-list">{items.map((connector) => <button className="erp-connector-card" type="button" key={connector.id} onClick={() => openEditor(connector)}><span className="erp-connector-logo"><Icon name="refresh" size={21} /></span><span className="erp-connector-info"><strong>{connector.name}</strong><small>{connector.base_url}</small><span><StatusPill enabled={connector.enabled} />{connector.enabled && <em>Κάθε {connector.schedule_minutes} λεπτά</em>}</span></span><span className="erp-connector-last"><small>Τελευταίο run</small><b>{formatDate(connector.last_run_at)}</b></span><Icon name="chevronRight" size={18} /></button>)}</div>
+      <div className="erp-empty-tip"><span className="erp-tip-icon"><Icon name="activity" size={19} /></span><div><b>Πώς λειτουργεί το ERP Sync;</b><span>Ρύθμισε το endpoint, αντιστοίχισε τα JSON fields και ενεργοποίησε τον scheduler. Το σύστημα κάνει ασφαλές matching με ERP IDs.</span></div></div>
     </div>
   );
 }
