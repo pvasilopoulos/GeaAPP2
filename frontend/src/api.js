@@ -76,6 +76,7 @@ export const api = {
   updateConnector: (id, payload) => send('PATCH', `/connectors/${id}`, payload),
   deleteConnector: (id) => send('DELETE', `/connectors/${id}`),
   runConnector: (id) => send('POST', `/connectors/${id}/run`),
+  retryConnectorRun: (connectorId, runId) => send('POST', `/connectors/${connectorId}/runs/${runId}/retry`),
   quotes: (opts) => get('/quotes', opts),
   quote: (id, opts) => get(`/quotes/${id}`, opts),
   resolveQuoteLines: (payload) => send('POST', '/quotes/resolve-lines', payload),

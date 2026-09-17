@@ -5,6 +5,7 @@ import { PERMISSIONS } from '../lib/permissions.js';
 import { encryptCredentials, redactConnector } from '../lib/connectorCrypto.js';
 import { validateMappings } from '../lib/mapping.js';
 import { runSync } from '../lib/sync.js';
+import { canRetrySyncRun } from '../lib/syncMonitoring.js';
 
 export const connectorsRouter = Router();
 const guard = authorize(PERMISSIONS.SETTINGS_MANAGE);
@@ -38,6 +39,20 @@ connectorsRouter.post('/:id/run', guard, async (req, res, next) => {
   } catch (e) {
     if (e.code === 'SYNC_IN_PROGRESS') return res.status(409).json({ error: e.message });
     return res.status(422).json({ error: e.message || 'Ο συγχρονισμός απέτυχε' });
+  }
+});
+connectorsRouter.post('/:id/runs/:runId/retry', guard, async (req, res, next) => {
+  try {
+    const { rows } = await query(
+      'SELECT id, status FROM sync_runs WHERE id = ? AND connector_id = ? AND tenant_id = ?',
+      [req.params.runId, req.params.id, req.user.tenantId],
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Δεν βρέθηκε το run' });
+    if (!canRetrySyncRun(rows[0].status)) return res.status(409).json({ error: 'Μπορούν να επαναληφθούν μόνο αποτυχημένα runs' });
+    res.json(await runSync(req.user.tenantId, req.params.id));
+  } catch (e) {
+    if (e.code === 'SYNC_IN_PROGRESS') return res.status(409).json({ error: e.message });
+    return res.status(422).json({ error: e.message || 'Η επανάληψη απέτυχε' });
   }
 });
 connectorsRouter.get('/:id/runs', guard, async (req, res, next) => { try { const { rows } = await query('SELECT * FROM sync_runs WHERE connector_id = ? AND tenant_id = ? ORDER BY started_at DESC LIMIT 50', [req.params.id, req.user.tenantId]); res.json({ runs: rows }); } catch (e) { next(e); } });
