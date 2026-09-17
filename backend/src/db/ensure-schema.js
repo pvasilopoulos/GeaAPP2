@@ -65,6 +65,8 @@ export async function ensureSchema() {
   await addColumn('activities', 'details', 'JSON NULL');
   await addColumn('customers', 'next_action_at', 'DATETIME NULL');
   await addColumn('customers', 'next_action_note', 'VARCHAR(200) NULL');
+  await addColumn('customers', 'next_action_followup_id', 'BIGINT NULL');
+  await addIndex('customers', 'idx_customers_next_action_followup', 'next_action_followup_id');
   await addColumn('customers', 'erp_id', 'VARCHAR(160) NULL');
   await addColumn('branches', 'erp_id', 'VARCHAR(160) NULL');
   await addColumn('branches', 'customer_erp_id', 'VARCHAR(160) NULL');

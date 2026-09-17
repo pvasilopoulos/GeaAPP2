@@ -8,6 +8,7 @@ import TenantsPanel from './settings/TenantsPanel.jsx';
 import OrgPanel from './settings/OrgPanel.jsx';
 import AppPanel from './settings/AppPanel.jsx';
 import MessagingPanel from './settings/MessagingPanel.jsx';
+import RemindersPanel from './settings/RemindersPanel.jsx';
 import SecurityPanel from './settings/SecurityPanel.jsx';
 import ConnectorsPanel from './settings/ConnectorsPanel.jsx';
 import CustomersPanel from './settings/CustomersPanel.jsx';
@@ -19,6 +20,7 @@ const CATS = [
   { id: 'customers', label: 'Customers', hint: 'Tabs, εμφάνιση και προεπιλογές πελατών', icon: 'users', perms: [PERMS.SETTINGS_MANAGE] },
   { id: 'quotes', label: 'Προσφορές / ERP API', hint: 'Endpoint και JSON για τις γραμμές προσφορών', icon: 'file', perms: [PERMS.SETTINGS_MANAGE] },
   { id: 'messaging', label: 'Μηνύματα', hint: 'Email, Viber, SMS, Telegram', icon: 'message', perms: [PERMS.SETTINGS_MANAGE] },
+  { id: 'reminders', label: 'Υπενθυμίσεις', hint: 'Προειδοποιήσεις, εργάσιμο ωράριο, snooze', icon: 'bell', perms: [PERMS.SETTINGS_MANAGE] },
   { id: 'users', label: 'Χρήστες & Ρόλοι', hint: 'Μέλη οργανισμού και δικαιώματα', icon: 'users', perms: [PERMS.USERS_MANAGE, PERMS.ROLES_MANAGE] },
   { id: 'fields', label: 'Custom Fields', hint: 'Δυναμικά πεδία πελατών / χώρων', icon: 'tag', perms: [PERMS.SETTINGS_MANAGE] },
   { id: 'tenants', label: 'Tenants', hint: 'Δημιουργία, επεξεργασία, διαγραφή οργανισμών', icon: 'grid', perms: [PERMS.TENANTS_PLATFORM] },
@@ -28,7 +30,7 @@ const CATS = [
 
 const GROUPS = [
   { id: 'workspace', label: 'Χώρος εργασίας', items: ['org', 'app', 'customers', 'fields'] },
-  { id: 'operations', label: 'Λειτουργίες', items: ['messaging', 'connectors', 'quotes'] },
+  { id: 'operations', label: 'Λειτουργίες', items: ['messaging', 'reminders', 'connectors', 'quotes'] },
   { id: 'access', label: 'Πρόσβαση & ασφάλεια', items: ['users', 'security'] },
   { id: 'platform', label: 'Πλατφόρμα', items: ['tenants'] },
 ];
@@ -91,6 +93,7 @@ export default function Settings({ initialCat } = {}) {
               {active.id === 'customers' && <CustomersPanel />}
               {active.id === 'quotes' && <QuotesPanel />}
               {active.id === 'messaging' && <MessagingPanel />}
+              {active.id === 'reminders' && <RemindersPanel />}
               {active.id === 'users' && <Users embedded />}
               {active.id === 'fields' && <CustomFieldsPanel />}
               {active.id === 'tenants' && <TenantsPanel />}
