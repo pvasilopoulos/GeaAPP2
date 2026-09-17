@@ -14,6 +14,7 @@ import { PERMS } from '../lib/perms.js';
 import { CustomerFormDrawer } from '../components/forms.jsx';
 import SendMessageMenu from '../components/message/SendMessageMenu.jsx';
 import BranchActivityList from '../components/customer/BranchActivityList.jsx';
+import CustomerKnowledgePanel from '../components/customer/CustomerKnowledgePanel.jsx';
 
 const TABS = [
   { key: 'overview', label: 'Σύνοψη', icon: 'home', group: 'Πελάτης' },
@@ -166,8 +167,8 @@ export default function CustomerProfile({ customerId, tabId, onBack }) {
         {tab === 'bookings' && <HistoryList kind="bookings" customerId={id} />}
         {tab === 'payments' && <HistoryList kind="payments" customerId={id} />}
         {tab === 'communications' && <HistoryList kind="communications" customerId={id} />}
-        {tab === 'documents' && <HistoryList kind="documents" customerId={id} />}
-        {tab === 'notes' && <HistoryList kind="notes" customerId={id} />}
+        {tab === 'documents' && <CustomerKnowledgePanel kind="documents" customerId={id} />}
+        {tab === 'notes' && <CustomerKnowledgePanel kind="notes" customerId={id} />}
         {tab === 'activity' && <HistoryList kind="activity" customerId={id} />}
         {tab === 'branch_actions' && <BranchActivityList customerId={id} mode="actions" />}
         {tab === 'branch_invoices' && <BranchActivityList customerId={id} mode="invoices" />}

@@ -17,6 +17,12 @@ const MIME_EXT = {
   'image/png': 'png',
   'image/webp': 'webp',
   'image/gif': 'gif',
+  'application/pdf': 'pdf',
+  'text/plain': 'txt',
+  'application/msword': 'doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.ms-excel': 'xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
 };
 const MAX_BYTES = 5 * 1024 * 1024;
 
@@ -25,13 +31,13 @@ uploadsRouter.post('/', async (req, res, next) => {
   try {
     const mime = String(req.body?.mime || '').toLowerCase();
     const ext = MIME_EXT[mime];
-    if (!ext) return res.status(400).json({ error: 'Επιτρέπονται μόνο εικόνες JPEG, PNG, WebP ή GIF' });
+    if (!ext) return res.status(400).json({ error: 'Μη υποστηριζόμενος τύπος αρχείου' });
     let raw = String(req.body?.data || '');
     const comma = raw.indexOf(',');
     if (raw.startsWith('data:') && comma !== -1) raw = raw.slice(comma + 1);
     const buf = Buffer.from(raw, 'base64');
     if (!buf.length) return res.status(400).json({ error: 'Κενό αρχείο' });
-    if (buf.length > MAX_BYTES) return res.status(400).json({ error: 'Το αρχείο ξεπερνά τα 5 MB' });
+    if (buf.length > 20 * 1024 * 1024) return res.status(400).json({ error: 'Το αρχείο ξεπερνά τα 20 MB' });
 
     await mkdir(UPLOADS_DIR, { recursive: true });
     const name = `${Date.now()}-${randomBytes(6).toString('hex')}.${ext}`;

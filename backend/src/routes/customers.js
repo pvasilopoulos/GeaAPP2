@@ -435,12 +435,58 @@ customersRouter.post('/:id/messages', authorize(PERMISSIONS.CUSTOMERS_WRITE), as
 });
 
 customersRouter.get('/:id/documents', subResource(
-  `SELECT id, name, mime_type, size_bytes, url, created_at FROM documents
+  `SELECT id, name, mime_type, size_bytes, url, category, description, uploaded_by, created_at FROM documents
    WHERE customer_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`));
 
+customersRouter.post('/:id/documents', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
+  try {
+    const name = String(req.body?.name || '').trim().slice(0, 255);
+    const url = String(req.body?.url || '').trim();
+    if (!name || !url) return res.status(400).json({ error: 'Απαιτείται όνομα και αρχείο' });
+    const r = await query(
+      `INSERT INTO documents (customer_id, name, mime_type, size_bytes, url, category, description, uploaded_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [Number(req.params.id), name, String(req.body?.mime_type || '').slice(0, 120), Number(req.body?.size_bytes) || 0, url, String(req.body?.category || 'general').slice(0, 60), String(req.body?.description || '').slice(0, 500) || null, req.user.id]);
+    res.status(201).json({ id: r.rows.insertId });
+  } catch (err) { next(err); }
+});
+
 customersRouter.get('/:id/notes', subResource(
-  `SELECT id, body, created_at FROM notes
-   WHERE customer_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`));
+  `SELECT n.id, n.body, n.title, n.body_html, n.category, n.is_pinned, n.is_archived, n.employee_id, n.created_at, e.full_name AS author_name
+   FROM notes n LEFT JOIN employees e ON e.id = n.employee_id
+   WHERE n.customer_id = ? AND n.is_archived = 0 ORDER BY n.is_pinned DESC, n.created_at DESC LIMIT ? OFFSET ?`));
+
+customersRouter.post('/:id/notes', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
+  try {
+    const customerId = Number(req.params.id);
+    const title = String(req.body?.title || '').trim().slice(0, 200);
+    const bodyHtml = String(req.body?.body_html || '').replace(/<script[\s\S]*?<\/script>/gi, '').trim();
+    const body = String(req.body?.body || bodyHtml.replace(/<[^>]+>/g, ' ')).trim();
+    if (!body) return res.status(400).json({ error: 'Η σημείωση δεν μπορεί να είναι κενή' });
+    const r = await query(
+      `INSERT INTO notes (customer_id, body, title, body_html, category, is_pinned, employee_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [customerId, body, title || null, bodyHtml || null, String(req.body?.category || 'general').slice(0, 60), req.body?.is_pinned ? 1 : 0, req.user.id]);
+    res.status(201).json({ id: r.rows.insertId });
+  } catch (err) { next(err); }
+});
+
+customersRouter.patch('/:id/notes/:noteId', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
+  try {
+    const bodyHtml = String(req.body?.body_html || '').replace(/<script[\s\S]*?<\/script>/gi, '').trim();
+    const body = String(req.body?.body || bodyHtml.replace(/<[^>]+>/g, ' ')).trim();
+    if (!body) return res.status(400).json({ error: 'Η σημείωση δεν μπορεί να είναι κενή' });
+    await query(
+      `UPDATE notes SET title = ?, body = ?, body_html = ?, category = ?, is_pinned = ? WHERE id = ? AND customer_id = ?`,
+      [String(req.body?.title || '').trim().slice(0, 200) || null, body, bodyHtml || null, String(req.body?.category || 'general').slice(0, 60), req.body?.is_pinned ? 1 : 0, Number(req.params.noteId), Number(req.params.id)]);
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+customersRouter.delete('/:id/notes/:noteId', authorize(PERMISSIONS.CUSTOMERS_DELETE), async (req, res, next) => {
+  try { await query('DELETE FROM notes WHERE id = ? AND customer_id = ?', [Number(req.params.noteId), Number(req.params.id)]); res.json({ ok: true }); }
+  catch (err) { next(err); }
+});
 
 // ---- Tags -----------------------------------------------------------------
 customersRouter.post('/:id/tags', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {

@@ -106,7 +106,11 @@ export const api = {
   customerPayments: (id, params, opts) => get(`/customers/${id}/payments${qs(params)}`, opts),
   customerCommunications: (id, params, opts) => get(`/customers/${id}/communications${qs(params)}`, opts),
   customerDocuments: (id, params, opts) => get(`/customers/${id}/documents${qs(params)}`, opts),
+  createCustomerDocument: (id, payload) => send('POST', `/customers/${id}/documents`, payload),
   customerNotes: (id, params, opts) => get(`/customers/${id}/notes${qs(params)}`, opts),
+  createCustomerNote: (id, payload) => send('POST', `/customers/${id}/notes`, payload),
+  updateCustomerNote: (id, noteId, payload) => send('PATCH', `/customers/${id}/notes/${noteId}`, payload),
+  deleteCustomerNote: (id, noteId) => send('DELETE', `/customers/${id}/notes/${noteId}`),
   customerCustomFields: (id, opts) => get(`/customers/${id}/custom-fields`, opts),
   spaceUsage: (customerId, spaceId, opts) => get(`/customers/${customerId}/spaces/${spaceId}/usage`, opts),
   branches: (params, opts) => get(`/branches${qs(params)}`, opts),
@@ -137,6 +141,15 @@ export const api = {
       r.onload = () => resolve(String(r.result));
       r.onerror = reject;
       r.readAsDataURL(file);
+    });
+    return send('POST', '/uploads', { mime: file.type, data });
+  },
+  async uploadFile(file) {
+    const data = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
     });
     return send('POST', '/uploads', { mime: file.type, data });
   },

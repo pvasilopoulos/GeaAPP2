@@ -345,6 +345,14 @@ input, select { font-family: inherit; font-size: 14px; }
 .cust-cell .nm { font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cust-cell .sub { font-size: 12px; color: var(--text-3); }
 .customer-vip { color: var(--gold); margin-left: 3px; }
+.knowledge-panel { display: grid; gap: 16px; }
+.knowledge-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; padding: 20px; border: 1px solid #dfe1ff; border-radius: 16px; background: linear-gradient(135deg, #fafaff, #f4f5ff); }
+.knowledge-header h2 { margin: 3px 0 4px; font-size: 21px; }.knowledge-header p { margin: 0; color: var(--text-3); font-size: 12.5px; }
+.knowledge-header-actions { display: flex; gap: 8px; flex: none; }
+.knowledge-card, .knowledge-note, .knowledge-document, .note-editor-card { border: 1px solid var(--border); border-radius: 14px; background: #fff; box-shadow: var(--shadow-sm); }
+.knowledge-grid { display: grid; gap: 12px; }.knowledge-note { padding: 17px; }.knowledge-note.is-pinned { border-color: #e3c875; box-shadow: 0 0 0 2px #fff8dc; }.knowledge-note-head, .note-editor-head { display: flex; justify-content: space-between; gap: 12px; }.knowledge-note-head h3, .knowledge-document h3, .note-editor-head h3 { margin: 0; font-size: 14px; }.knowledge-note-head span, .knowledge-document p, .note-editor-head span { display: block; margin-top: 4px; color: var(--text-3); font-size: 11px; }.knowledge-note-body { margin: 14px 0; color: var(--text-2); font-size: 13.5px; line-height: 1.65; }.knowledge-note-body p { margin: 0 0 8px; }.knowledge-note-body ul { padding-left: 20px; }.knowledge-actions { display: flex; gap: 7px; border-top: 1px solid var(--border); padding-top: 10px; }
+.knowledge-document { display: flex; align-items: center; gap: 13px; padding: 14px; }.knowledge-document-icon { display: grid; place-items: center; width: 42px; height: 42px; flex: none; border-radius: 11px; color: var(--red); background: var(--red-soft); }.knowledge-document > div:nth-child(2) { min-width: 0; flex: 1; }.knowledge-document p { margin: 3px 0 0; }.knowledge-document span { display: block; margin-top: 4px; color: var(--text-2); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note-editor-card { padding: 18px; }.note-editor-head { align-items: flex-start; padding-bottom: 13px; border-bottom: 1px solid var(--border); }.knowledge-form-grid { display: grid; grid-template-columns: 1fr 180px; gap: 9px; margin: 14px 0 9px; }.rich-toolbar { display: flex; flex-wrap: wrap; gap: 5px; padding: 7px; border: 1px solid var(--border); border-bottom: 0; border-radius: 9px 9px 0 0; background: var(--surface-2); }.rich-toolbar button { padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; color: var(--text-2); background: #fff; font-size: 11px; cursor: pointer; }.rich-toolbar button:hover { color: var(--accent); border-color: var(--accent); }.rich-editor { min-height: 180px; padding: 12px; border: 1px solid var(--border-strong); border-radius: 0 0 9px 9px; outline: none; color: var(--text); font-size: 13.5px; line-height: 1.6; }.rich-editor:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }.rich-editor:empty:before { color: var(--text-3); content: attr(data-placeholder); }.note-editor-actions { display: flex; align-items: center; gap: 8px; margin-top: 13px; }.note-editor-actions span { flex: 1; }
 .muted { color: var(--text-3); }
 .mono { font-variant-numeric: tabular-nums; }
 .num { font-variant-numeric: tabular-nums; font-weight: 600; }
@@ -708,6 +716,7 @@ a.bd-fact:hover b { color: var(--accent); }
   .customer-columns-menu-head { font-size: 14px; }
   .customer-columns-search { height: 38px; }
   .customer-columns-actions button { min-height: 30px; }
+  .knowledge-header { align-items: stretch; flex-direction: column; padding: 16px; }.knowledge-header-actions { display: flex; }.knowledge-header .btn { width: 100%; justify-content: center; }.knowledge-form-grid { grid-template-columns: 1fr; }.knowledge-document { align-items: flex-start; flex-wrap: wrap; }.knowledge-document .btn { margin-left: 55px; }.note-editor-actions { flex-wrap: wrap; }.note-editor-actions span { display: none; }.note-editor-actions .settings-check { width: 100%; }.note-editor-actions .btn { flex: 1; justify-content: center; }
   .thead, .trow { min-width: 900px; }
   .thead { padding-left: 12px; padding-right: 12px; }
 }

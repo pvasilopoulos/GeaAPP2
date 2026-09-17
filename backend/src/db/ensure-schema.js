@@ -62,6 +62,14 @@ export async function ensureSchema() {
   await addColumn('branches', 'customer_erp_id', 'VARCHAR(160) NULL');
   await addColumn('spaces', 'erp_id', 'VARCHAR(160) NULL');
   await addColumn('spaces', 'branch_erp_id', 'VARCHAR(160) NULL');
+  await addColumn('documents', 'category', "VARCHAR(60) NOT NULL DEFAULT 'general'");
+  await addColumn('documents', 'description', 'VARCHAR(500) NULL');
+  await addColumn('documents', 'uploaded_by', 'BIGINT NULL');
+  await addColumn('notes', 'title', 'VARCHAR(200) NULL');
+  await addColumn('notes', 'body_html', 'MEDIUMTEXT NULL');
+  await addColumn('notes', 'category', "VARCHAR(60) NOT NULL DEFAULT 'general'");
+  await addColumn('notes', 'is_pinned', 'TINYINT(1) NOT NULL DEFAULT 0');
+  await addColumn('notes', 'is_archived', 'TINYINT(1) NOT NULL DEFAULT 0');
   await addUniqueIndex('customers', 'uq_customers_tenant_erp_id', 'tenant_id, erp_id');
   // ERP identity is based on ERP IDs, not the human-readable/imported code.
   // Existing installations may still have the inline UNIQUE index named `code`.
