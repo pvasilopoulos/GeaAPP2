@@ -158,6 +158,7 @@ export async function ensureSchema() {
       id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
       tenant_id BIGINT NOT NULL, user_id BIGINT NOT NULL,
       name VARCHAR(160) NOT NULL, config_json JSON NOT NULL,
+      visibility ENUM('personal', 'shared') NOT NULL DEFAULT 'personal',
       is_default TINYINT(1) NOT NULL DEFAULT 0,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -168,6 +169,7 @@ export async function ensureSchema() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
     console.log('[schema] created customer_saved_views');
   }
+  await addColumn('customer_saved_views', 'visibility', "ENUM('personal', 'shared') NOT NULL DEFAULT 'personal'");
 
   const admins = await query('SELECT COUNT(*) AS c FROM users WHERE is_platform_admin = 1');
   if (!Number(admins.rows[0].c)) {

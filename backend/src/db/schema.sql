@@ -218,10 +218,12 @@ CREATE TABLE customer_saved_views (
   user_id BIGINT NOT NULL,
   name VARCHAR(160) NOT NULL,
   config_json JSON NOT NULL,
+  visibility ENUM('personal', 'shared') NOT NULL DEFAULT 'personal',
   is_default TINYINT(1) NOT NULL DEFAULT 0,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_saved_view_user_name (tenant_id, user_id, name),
+  KEY idx_saved_view_visibility (tenant_id, visibility, updated_at),
   KEY idx_saved_view_user (tenant_id, user_id, updated_at),
   CONSTRAINT fk_saved_view_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
   CONSTRAINT fk_saved_view_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
