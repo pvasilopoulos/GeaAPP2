@@ -59,6 +59,7 @@ function StatusPill({ enabled }) {
 export default function ConnectorsPanel() {
   const [items, setItems] = useState([]);
   const [selected, setSelected] = useState(null);
+  const [isCreating, setIsCreating] = useState(false);
   const [form, setForm] = useState(newForm);
   const [runs, setRuns] = useState([]);
   const [activeEntity, setActiveEntity] = useState('customers');
@@ -105,6 +106,7 @@ export default function ConnectorsPanel() {
 
   const openEditor = async (connector = null) => {
     setSelected(connector);
+    setIsCreating(!connector);
     setMessage(null);
     setShowAdvanced(false);
     setActiveEntity(connector?.target_entity || 'customers');
@@ -143,6 +145,7 @@ export default function ConnectorsPanel() {
       else await api.createConnector(payload);
       setMessage({ type: 'success', text: 'Η σύνδεση αποθηκεύτηκε επιτυχώς.' });
       setSelected(null);
+      setIsCreating(false);
       await load();
     } catch (error) {
       setMessage({ type: 'error', text: error.message || 'Δεν ήταν δυνατή η αποθήκευση.' });
@@ -166,14 +169,15 @@ export default function ConnectorsPanel() {
     await api.deleteConnector(selected.id);
     setMessage({ type: 'success', text: 'Η σύνδεση διαγράφηκε.' });
     setSelected(null);
+    setIsCreating(false);
     await load();
   };
 
-  if (selected || !items.length) {
+  if (selected || isCreating || !items.length) {
     return (
       <div className="erp-shell">
         <div className="erp-editor-head">
-          <button className="btn btn-ghost" type="button" onClick={() => setSelected(null)}><Icon name="arrowLeft" size={16} /> Πίσω στις συνδέσεις</button>
+          <button className="btn btn-ghost" type="button" onClick={() => { setSelected(null); setIsCreating(false); }}><Icon name="arrowLeft" size={16} /> Πίσω στις συνδέσεις</button>
           <div className="erp-editor-actions">
             {selected && <button className="btn btn-ghost danger-action" type="button" onClick={deleteConnector}>Διαγραφή</button>}
             {selected && <button className="btn btn-accent" type="button" onClick={run} disabled={busy}><Icon name="refresh" size={16} /> {busy ? 'Εκτέλεση…' : 'Συγχρονισμός τώρα'}</button>}
