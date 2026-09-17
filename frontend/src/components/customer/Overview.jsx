@@ -127,8 +127,9 @@ export default function Overview({ customerId, data, onOpenTab, onEditCustomer }
           <div className="card-pad">
             {followUpsQ.data?.results?.length ? followUpsQ.data.results.slice(0, 4).map((f) => (
               <div className="search-row" key={f.id} style={{ padding: '8px 0' }}>
-                <Icon name="bell" size={15} style={{ color: new Date(f.due_at) < new Date() ? 'var(--red)' : 'var(--amber)' }} />
+                <Icon name="bell" size={15} style={{ color: f.computed_status === 'overdue' ? 'var(--red)' : f.computed_status === 'due_soon' ? 'var(--amber)' : 'var(--text-3)' }} />
                 <div style={{ flex: 1 }}><div style={{ fontWeight: 600 }}>{f.title}</div><div className="meta">{formatDateTime(f.due_at)}</div></div>
+                {canWrite && f.status === 'open' && <button className="btn btn-sm btn-ghost" title="Αναβολή 1 ώρα" onClick={async () => { await api.snoozeFollowUp(f.id, 60); qc.invalidateQueries({ queryKey: ['c-follow-ups', customerId] }); qc.invalidateQueries({ queryKey: ['customer', customerId] }); }}><Icon name="clock" size={14} /></button>}
                 {canWrite && <button className="btn btn-sm btn-ghost" onClick={async () => { await api.updateFollowUp(f.id, { status: 'completed' }); qc.invalidateQueries({ queryKey: ['c-follow-ups', customerId] }); qc.invalidateQueries({ queryKey: ['customer', customerId] }); }}><Icon name="check" size={14} /></button>}
               </div>
             )) : <div className="muted" style={{ marginBottom: 10 }}>Δεν υπάρχουν προγραμματισμένες ενέργειες.</div>}

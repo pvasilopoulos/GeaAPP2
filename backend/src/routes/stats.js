@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { query } from '../db.js';
 import { authorize } from '../middleware/auth.js';
 import { PERMISSIONS } from '../lib/permissions.js';
+import { computeReminderState } from '../lib/reminderSettings.js';
+import { loadTenant } from '../lib/tenants.js';
 
 export const statsRouter = Router();
 statsRouter.use(authorize(PERMISSIONS.CUSTOMERS_READ, PERMISSIONS.REPORTS_READ));
@@ -10,7 +12,7 @@ statsRouter.use(authorize(PERMISSIONS.CUSTOMERS_READ, PERMISSIONS.REPORTS_READ))
 statsRouter.get('/overview', async (req, res, next) => {
   try {
     const t = req.user.tenantId;
-    const [totals, vip, upcoming, topCities, recent, followUps] = await Promise.all([
+    const [totals, vip, upcoming, topCities, recent, followUps, followUpCounts, tenant] = await Promise.all([
       query(`SELECT COUNT(*) AS total_customers,
                     SUM(status = 'active') AS active_customers,
                     COALESCE(SUM(total_value), 0) AS total_value
@@ -29,7 +31,16 @@ statsRouter.get('/overview', async (req, res, next) => {
              FROM follow_ups f JOIN customers c ON c.id = f.customer_id
              WHERE f.tenant_id = ? AND f.status = 'open'
              ORDER BY f.due_at ASC LIMIT 12`, [t]),
+      // Counted over ALL open follow-ups (not just the top-12 slice above),
+      // otherwise the dashboard badges undercount once a tenant has more
+      // than 12 open reminders.
+      query(`SELECT SUM(DATE(due_at) = CURDATE()) AS today, SUM(due_at < NOW()) AS overdue
+             FROM follow_ups WHERE tenant_id = ? AND status = 'open'`, [t]),
+      loadTenant(query, t),
     ]);
+    const reminders = tenant?.settings?.reminders;
+    const timezone = tenant?.timezone || 'UTC';
+    const now = new Date();
     res.json({
       totalCustomers: Number(totals.rows[0].total_customers),
       activeCustomers: Number(totals.rows[0].active_customers),
@@ -38,11 +49,12 @@ statsRouter.get('/overview', async (req, res, next) => {
       upcomingBookings: Number(upcoming.rows[0].upcoming),
       topCities: topCities.rows.map((r) => ({ ...r, customers: Number(r.customers) })),
       recentActivity: recent.rows,
-      followUps: followUps.rows,
+      followUps: followUps.rows.map((r) => ({ ...r, computed_status: computeReminderState(r.due_at, r.status, reminders, now, timezone) })),
       followUpCounts: {
-        today: followUps.rows.filter((r) => new Date(r.due_at).toDateString() === new Date().toDateString()).length,
-        overdue: followUps.rows.filter((r) => new Date(r.due_at) < new Date()).length,
+        today: Number(followUpCounts.rows[0].today || 0),
+        overdue: Number(followUpCounts.rows[0].overdue || 0),
       },
+      remindersEnabled: reminders ? reminders.enabled !== false : true,
     });
   } catch (err) {
     next(err);

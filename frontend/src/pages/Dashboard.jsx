@@ -76,6 +76,9 @@ export default function Dashboard() {
         <FollowUpsSection followUps={data?.followUps || []} loading={loading} onComplete={async (id) => {
           await api.updateFollowUp(id, { status: 'completed' });
           qc.invalidateQueries({ queryKey: ['stats'] });
+        }} onSnooze={async (id) => {
+          await api.snoozeFollowUp(id, 60);
+          qc.invalidateQueries({ queryKey: ['stats'] });
         }} />
         <div className="card">
           <div className="card-head"><h3><Icon name="pin" /> Κορυφαίες πόλεις</h3></div>
@@ -119,27 +122,28 @@ export default function Dashboard() {
   );
 }
 
-function FollowUpsSection({ followUps, loading, onComplete }) {
-  const overdue = followUps.filter((f) => new Date(f.due_at) < new Date());
-  const today = followUps.filter((f) => new Date(f.due_at).toDateString() === new Date().toDateString());
-  const rows = [...overdue, ...today.filter((f) => !overdue.includes(f))].slice(0, 8);
+function FollowUpsSection({ followUps, loading, onComplete, onSnooze }) {
+  const overdue = followUps.filter((f) => f.computed_status === 'overdue');
+  const dueSoon = followUps.filter((f) => f.computed_status === 'due_soon');
+  const rows = [...overdue, ...dueSoon.filter((f) => !overdue.includes(f))].slice(0, 8);
   return (
     <div className="card">
       <div className="card-head">
         <h3><Icon name="bell" /> Follow-ups</h3>
         <div style={{ display: 'flex', gap: 6 }}>
           {overdue.length > 0 && <span className="badge badge-inactive">{overdue.length} εκπρόθεσμα</span>}
-          {today.length > 0 && <span className="badge badge-prospect">{today.length} σήμερα</span>}
+          {dueSoon.length > 0 && <span className="badge badge-prospect">{dueSoon.length} επείγοντα</span>}
         </div>
       </div>
       <div style={{ padding: rows.length ? '4px 8px 8px' : 16 }}>
-        {loading ? <Skeleton h={60} /> : rows.length === 0 ? <span className="muted">Δεν υπάρχουν follow-ups για σήμερα.</span> : rows.map((f) => (
+        {loading ? <Skeleton h={60} /> : rows.length === 0 ? <span className="muted">Δεν υπάρχουν επείγοντα follow-ups.</span> : rows.map((f) => (
           <div className="search-row" key={f.id} style={{ padding: '10px 8px' }}>
-            <div className="avatar sq" style={{ width: 34, height: 34, background: new Date(f.due_at) < new Date() ? 'var(--red-soft)' : 'var(--amber-soft)', color: new Date(f.due_at) < new Date() ? 'var(--red)' : 'var(--amber)' }}><Icon name="bell" size={16} /></div>
+            <div className="avatar sq" style={{ width: 34, height: 34, background: f.computed_status === 'overdue' ? 'var(--red-soft)' : 'var(--amber-soft)', color: f.computed_status === 'overdue' ? 'var(--red)' : 'var(--amber)' }}><Icon name="bell" size={16} /></div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 600 }}>{f.title}</div>
               <div className="meta">{f.customer_name} · {new Date(f.due_at).toLocaleString('el-GR', { dateStyle: 'short', timeStyle: 'short' })}</div>
             </div>
+            <button className="btn btn-sm btn-ghost" title="Αναβολή 1 ώρα" onClick={() => onSnooze(f.id)}><Icon name="clock" size={15} /></button>
             <button className="btn btn-sm btn-ghost" title="Ολοκλήρωση" onClick={() => onComplete(f.id)}><Icon name="check" size={15} /></button>
           </div>
         ))}

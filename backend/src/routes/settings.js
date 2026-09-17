@@ -5,6 +5,7 @@ import { PERMISSIONS } from '../lib/permissions.js';
 import { loadTenant, getPlatformSettings, setPlatformSetting } from '../lib/tenants.js';
 import { mergeTenantSettings, parseJson, DEFAULT_PLATFORM_SETTINGS, publicAppSettings, applyAppSettingsPatch } from '../lib/tenantSettings.js';
 import { applyMessagingPatch, channelStatuses, publicMessaging } from '../lib/messaging.js';
+import { applyReminderSettingsPatch, publicReminderSettings } from '../lib/reminderSettings.js';
 
 export const settingsRouter = Router();
 
@@ -80,6 +81,25 @@ settingsRouter.patch('/messaging', authorize(PERMISSIONS.SETTINGS_MANAGE), async
     await query('UPDATE tenants SET settings = ?, updated_at = NOW() WHERE id = ?',
       [JSON.stringify(nextSettings), req.user.tenantId]);
     res.json({ messaging: publicMessaging(nextSettings.messaging) });
+  } catch (err) { next(err); }
+});
+
+settingsRouter.get('/reminders', authorize(PERMISSIONS.CUSTOMERS_READ, PERMISSIONS.SETTINGS_MANAGE), async (req, res, next) => {
+  try {
+    const { rows } = await query('SELECT settings FROM tenants WHERE id = ?', [req.user.tenantId]);
+    res.json({ reminders: publicReminderSettings(mergeTenantSettings(rows[0]?.settings).reminders) });
+  } catch (err) { next(err); }
+});
+
+settingsRouter.patch('/reminders', authorize(PERMISSIONS.SETTINGS_MANAGE), async (req, res, next) => {
+  try {
+    const { rows } = await query('SELECT settings FROM tenants WHERE id = ?', [req.user.tenantId]);
+    const current = parseJson(rows[0]?.settings, {}) || {};
+    const nextReminders = applyReminderSettingsPatch(current.reminders, req.body || {});
+    const nextSettings = mergeTenantSettings({ ...current, reminders: nextReminders });
+    await query('UPDATE tenants SET settings = ?, updated_at = NOW() WHERE id = ?',
+      [JSON.stringify(nextSettings), req.user.tenantId]);
+    res.json({ reminders: nextSettings.reminders });
   } catch (err) { next(err); }
 });
 

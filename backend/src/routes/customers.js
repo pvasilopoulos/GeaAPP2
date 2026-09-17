@@ -10,6 +10,8 @@ import { logActivity } from '../lib/activity.js';
 import { parseJson } from '../lib/masterData.js';
 import { CHANNELS, CHANNEL_META, deliverMessage, mergeMessaging } from '../lib/messaging.js';
 import { mergeTenantSettings } from '../lib/tenantSettings.js';
+import { loadTenant } from '../lib/tenants.js';
+import { computeReminderState } from '../lib/reminderSettings.js';
 import { diffRecords, snapshotFields, packDetails, changeSummary, parseDetails } from '../lib/activityDiff.js';
 import { parseNotePayload, noteReminderState } from '../lib/notes.js';
 
@@ -362,13 +364,18 @@ customersRouter.get('/:id/activities', subResource(
 
 customersRouter.get('/:id/follow-ups', async (req, res, next) => {
   try {
-    const { rows } = await query(
-      `SELECT f.id, f.title, f.description, f.due_at, f.status, f.completed_at,
-              f.assigned_employee_id, e.full_name AS assigned_employee
-       FROM follow_ups f LEFT JOIN employees e ON e.id = f.assigned_employee_id
-       WHERE f.customer_id = ? AND f.tenant_id = ? ORDER BY f.status = 'open' DESC, f.due_at ASC`,
-      [Number(req.params.id), req.user.tenantId]);
-    res.json({ results: rows });
+    const [{ rows }, tenant] = await Promise.all([
+      query(
+        `SELECT f.id, f.title, f.description, f.due_at, f.status, f.completed_at,
+                f.assigned_employee_id, e.full_name AS assigned_employee
+         FROM follow_ups f LEFT JOIN employees e ON e.id = f.assigned_employee_id
+         WHERE f.customer_id = ? AND f.tenant_id = ? ORDER BY f.status = 'open' DESC, f.due_at ASC`,
+        [Number(req.params.id), req.user.tenantId]),
+      loadTenant(query, req.user.tenantId),
+    ]);
+    const reminders = tenant?.settings?.reminders;
+    const timezone = tenant?.timezone || 'UTC';
+    res.json({ results: rows.map((r) => ({ ...r, computed_status: computeReminderState(r.due_at, r.status, reminders, new Date(), timezone) })) });
   } catch (err) { next(err); }
 });
 

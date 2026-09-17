@@ -1,4 +1,5 @@
 import { mergeMessaging } from './messaging.js';
+import { mergeReminderSettings } from './reminderSettings.js';
 
 export const APP_SETTING_KEYS = [
   'default_country', 'date_format', 'week_starts_on',
@@ -113,6 +114,7 @@ export function mergeTenantSettings(raw) {
       branch_detail: { ...DEFAULT_TENANT_SETTINGS.view_preferences.branch_detail, ...(rawViews.branch_detail || {}) },
     },
     messaging: mergeMessaging(parsed.messaging),
+    reminders: mergeReminderSettings(parsed.reminders),
   };
 }
 
