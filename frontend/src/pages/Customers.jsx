@@ -413,13 +413,15 @@ export default function Customers({ onOpenCustomer }) {
         ) : rows.length === 0 ? (
           <EmptyState icon="users" title="Δεν βρέθηκαν πελάτες" hint="Δοκιμάστε διαφορετικά κριτήρια αναζήτησης ή φίλτρα." />
         ) : (
-          rows.map((c) => (
-            <div className="trow" key={c.id} style={{ gridTemplateColumns: tableGrid }} onClick={() => onOpenCustomer(c)}>
+          rows.map((c) => {
+            const displayName = c.company || c.full_name || 'Χωρίς όνομα';
+            const identityMeta = [TYPE_LABELS[c.customer_type], c.city].filter(Boolean).join(' · ');
+            return <div className="trow" key={c.id} style={{ gridTemplateColumns: tableGrid }} onClick={() => onOpenCustomer(c)}>
             {visibleColumns.map((column) => column.key === 'name' ? <div className="cust-cell" key={column.key}>
-                <Avatar name={c.full_name} src={c.avatar_url} size={38} fallback={false} />
+                <Avatar name={displayName} src={c.avatar_url} size={38} fallback={false} />
                 <div style={{ minWidth: 0 }}>
-                  <div className="nm">{c.full_name} {c.is_vip ? <span style={{ color: 'var(--gold)' }}>★</span> : null}</div>
-                  <div className="sub">{c.company || TYPE_LABELS[c.customer_type]} · {c.city}</div>
+                  <div className="nm" title={displayName}>{displayName} {c.is_vip ? <span className="customer-vip" title="VIP">★</span> : null}</div>
+                  {identityMeta && <div className="sub">{identityMeta}</div>}
                 </div>
               </div>
               : column.key === 'code' ? <div className="mono muted" key={column.key}>{c.code}</div>
@@ -431,7 +433,7 @@ export default function Customers({ onOpenCustomer }) {
                           : column.key === 'actions' ? <div key={column.key} style={{ textAlign: 'right', color: 'var(--text-3)' }}><Icon name="chevronRight" size={16} /></div>
                             : <div key={column.key} className={typeof (column.customKey ? customValue(c, column.customKey) : c[column.key]) === 'number' ? 'num' : 'muted'}>{String(column.customKey ? customValue(c, column.customKey) ?? '' : c[column.key] ?? '')}</div>)}
             </div>
-          ))
+          })
         )}
       </div>
 

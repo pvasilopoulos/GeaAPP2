@@ -332,12 +332,13 @@ input, select { font-family: inherit; font-size: 14px; }
 .customer-columns-search { width: 100%; height: 32px; padding: 0 9px; border: 1px solid var(--border); border-radius: 7px; outline: none; font-size: 12px; }.customer-columns-search:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .customer-columns-actions { display: flex; gap: 10px; }.customer-columns-actions button { padding: 0; border: 0; color: var(--accent); background: transparent; font-size: 10px; cursor: pointer; }
 .customer-columns-list { max-height: 360px; overflow-y: auto; display: grid; gap: 13px; padding: 2px 2px 2px 0; }.customer-columns-group { display: grid; gap: 2px; }.customer-columns-group small { margin-bottom: 3px; color: var(--text-3); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }.customer-columns-menu label { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 4px 6px; border-radius: 7px; cursor: pointer; }.customer-columns-menu label:hover { background: var(--surface-2); }.customer-columns-menu label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.trow { height: 60px; border-bottom: 1px solid var(--border); font-size: 13.5px; }
-.trow:hover { background: var(--accent-soft); cursor: pointer; }
+.trow { min-height: 68px; border-bottom: 1px solid var(--border); font-size: 13.5px; transition: background .16s ease, box-shadow .16s ease; }
+.trow:hover { background: var(--accent-soft); cursor: pointer; box-shadow: inset 3px 0 0 var(--accent); }
 .trow:last-child { border-bottom: none; }
 .cust-cell { display: flex; align-items: center; gap: 11px; min-width: 0; }
-.cust-cell .nm { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cust-cell .nm { font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cust-cell .sub { font-size: 12px; color: var(--text-3); }
+.customer-vip { color: var(--gold); margin-left: 3px; }
 .muted { color: var(--text-3); }
 .mono { font-variant-numeric: tabular-nums; }
 .num { font-variant-numeric: tabular-nums; font-weight: 600; }
