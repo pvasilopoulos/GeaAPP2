@@ -54,6 +54,7 @@ export async function ensureSchema() {
     await query(`CREATE TABLE connectors (
       id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, tenant_id BIGINT NOT NULL,
       name VARCHAR(160) NOT NULL, base_url VARCHAR(500) NOT NULL,
+      target_entity VARCHAR(20) NOT NULL DEFAULT 'customers',
       method VARCHAR(10) NOT NULL DEFAULT 'GET', auth_type VARCHAR(20) NOT NULL DEFAULT 'bearer',
       credentials_enc TEXT NULL, body_template TEXT NULL,
       headers JSON NULL, mappings JSON NOT NULL, schedule_minutes INT NULL,
@@ -68,6 +69,7 @@ export async function ensureSchema() {
   }
   await addColumn('connectors', 'auth_type', "VARCHAR(20) NOT NULL DEFAULT 'bearer'");
   await addColumn('connectors', 'body_template', 'TEXT NULL');
+  await addColumn('connectors', 'target_entity', "VARCHAR(20) NOT NULL DEFAULT 'customers'");
   if (!(await tableExists('sync_runs'))) {
     await query(`CREATE TABLE sync_runs (
       id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, tenant_id BIGINT NOT NULL,

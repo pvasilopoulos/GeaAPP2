@@ -139,6 +139,8 @@ export async function runSync(tenantId, connectorId) {
   const { rows } = await query('SELECT * FROM connectors WHERE id = ? AND tenant_id = ?', [connectorId, tenantId]);
   if (!rows.length) throw new Error('Connector not found');
   const connector = rows[0];
+  const targetEntity = ['customers', 'branches', 'spaces'].includes(connector.target_entity)
+    ? connector.target_entity : 'customers';
   const active = await query(
     'SELECT id FROM sync_runs WHERE connector_id = ? AND tenant_id = ? AND status = ? ORDER BY started_at DESC LIMIT 1',
     [connectorId, tenantId, 'running'],
@@ -161,6 +163,7 @@ export async function runSync(tenantId, connectorId) {
   try {
     const payload = await fetchWithRetry(connector);
     const entities = Object.fromEntries(Object.keys(ENTITY_FIELDS).map((entity) => {
+      if (entity !== targetEntity) return [entity, []];
       const source = mappings.sources?.[entity] || entity;
       return [entity, recordsAt(payload, source)];
     }));
