@@ -3,6 +3,7 @@ import { decryptCredentials } from './connectorCrypto.js';
 import { getPath, mapRecord, validateMappings } from './mapping.js';
 import { retryDelay } from './schedulerPolicy.js';
 import { parseEncodedJson } from './responseEncoding.js';
+import { normalizeFields } from './normalize.js';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -78,6 +79,13 @@ const ENTITY_FIELDS = {
   spaces: ['customer_id', 'branch_id', 'code', 'name', 'space_type', 'status'],
 };
 
+function searchNorm(table, data) {
+  if (table === 'customers') {
+    return normalizeFields(data.code, data.first_name, data.last_name, data.company, data.email, data.phone, data.mobile, data.tax_id, data.address_line, data.city);
+  }
+  return normalizeFields(data.code, data.name, data.address_line, data.city, data.phone, data.space_type, data.status);
+}
+
 async function findByErpId(conn, table, tenantId, erpId) {
   const [rows] = await conn.query(`SELECT id FROM ${table} WHERE tenant_id = ? AND erp_id = ? LIMIT 1`, [tenantId, erpId]);
   return rows[0]?.id || null;
@@ -89,36 +97,39 @@ async function upsert(conn, table, tenantId, data) {
   const existingId = await findByErpId(conn, table, tenantId, erpId);
   const fields = ENTITY_FIELDS[table].filter((field) => data[field] !== undefined);
   const values = fields.map((field) => data[field]);
+  const normalized = searchNorm(table, data);
 
   if (existingId) {
     if (fields.length) {
       const updates = fields.map((field) => `${field} = ?`);
+      updates.push('search_norm = ?');
       if (table === 'customers') updates.push('updated_at = NOW()');
-      await conn.query(`UPDATE ${table} SET ${updates.join(', ')} WHERE id = ? AND tenant_id = ?`, [...values, existingId, tenantId]);
+      await conn.query(`UPDATE ${table} SET ${updates.join(', ')} WHERE id = ? AND tenant_id = ?`, [...values, normalized, existingId, tenantId]);
     }
     return existingId;
   }
 
   if (table === 'customers') {
     await conn.query(
-      `INSERT INTO customers (tenant_id, erp_id, code, first_name, last_name, company, email, phone, status, search_norm)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '')`,
+      `INSERT INTO customers (tenant_id, erp_id, code, first_name, last_name, company, email, phone, mobile, tax_id, customer_type, address_line, city, postal_code, status, search_norm)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [tenantId, erpId, data.code || `ERP-${tenantId}-${erpId}`, data.first_name || data.name || data.company || erpId,
-        data.last_name || '', data.company, data.email, data.phone, data.status || 'active'],
+        data.last_name || '', data.company, data.email, data.phone, data.mobile, data.tax_id, data.customer_type || 'individual',
+        data.address_line, data.city, data.postal_code, data.status || 'active', normalized],
     );
   } else if (table === 'branches') {
     await conn.query(
       `INSERT INTO branches (tenant_id, customer_id, erp_id, code, name, address_line, city, phone, status, search_norm)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '')`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [tenantId, data.customer_id, erpId, data.code || `ERP-${tenantId}-${erpId}`, data.name || erpId,
-        data.address_line, data.city, data.phone, data.status || 'active'],
+        data.address_line, data.city, data.phone, data.status || 'active', normalized],
     );
   } else {
     await conn.query(
       `INSERT INTO spaces (tenant_id, customer_id, branch_id, erp_id, code, name, space_type, status, search_norm)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, '')`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [tenantId, data.customer_id, data.branch_id, erpId, data.code || `ERP-${tenantId}-${erpId}`,
-        data.name || erpId, data.space_type, data.status || 'available'],
+        data.name || erpId, data.space_type, data.status || 'available', normalized],
     );
   }
   return findByErpId(conn, table, tenantId, erpId);

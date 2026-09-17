@@ -16,6 +16,20 @@ async function tableExists(table) {
   return Number(rows[0].c) > 0;
 }
 
+async function indexExists(table, index) {
+  const { rows } = await query(
+    `SELECT COUNT(*) AS c FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?`,
+    [table, index]);
+  return Number(rows[0].c) > 0;
+}
+
+async function addUniqueIndex(table, index, columns) {
+  if (await indexExists(table, index)) return;
+  await query(`ALTER TABLE ${table} ADD UNIQUE KEY ${index} (${columns})`);
+  console.log(`[schema] added ${table}.${index}`);
+}
+
 async function addColumn(table, column, ddl) {
   if (await columnExists(table, column)) return;
   await query(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
@@ -40,6 +54,9 @@ export async function ensureSchema() {
   await addColumn('customers', 'erp_id', 'VARCHAR(160) NULL');
   await addColumn('branches', 'erp_id', 'VARCHAR(160) NULL');
   await addColumn('spaces', 'erp_id', 'VARCHAR(160) NULL');
+  await addUniqueIndex('customers', 'uq_customers_tenant_erp_id', 'tenant_id, erp_id');
+  await addUniqueIndex('branches', 'uq_branches_tenant_erp_id', 'tenant_id, erp_id');
+  await addUniqueIndex('spaces', 'uq_spaces_tenant_erp_id', 'tenant_id, erp_id');
 
   if (!(await tableExists('platform_settings'))) {
     await query(`CREATE TABLE platform_settings (
