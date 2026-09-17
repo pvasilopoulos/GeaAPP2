@@ -1,6 +1,6 @@
 import { query } from '../db.js';
 import { verifyToken } from '../lib/auth.js';
-import { TENANT_PERMISSIONS } from '../lib/permissions.js';
+import { TENANT_PERMISSIONS, expandPermissions } from '../lib/permissions.js';
 
 function parsePerms(v) {
   if (Array.isArray(v)) return v;
@@ -32,7 +32,7 @@ export async function authenticate(req, res, next) {
     if (u.tenant_status === 'suspended' && !u.is_platform_admin) {
       return res.status(403).json({ error: 'Ο οργανισμός έχει ανασταλεί' });
     }
-    const permissions = u.role_key === 'owner' ? [...TENANT_PERMISSIONS] : parsePerms(u.permissions);
+    const permissions = u.role_key === 'owner' ? [...TENANT_PERMISSIONS] : expandPermissions(parsePerms(u.permissions));
     req.user = {
       id: u.id,
       tenantId: u.tenant_id,

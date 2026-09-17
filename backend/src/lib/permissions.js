@@ -15,12 +15,29 @@ export const PERMISSIONS = {
   ROLES_MANAGE: 'roles.manage',
   TENANT_MANAGE: 'tenant.manage',
   TENANTS_PLATFORM: 'tenants.platform',
+  CUSTOMERS_MENU: 'customers.menu', CUSTOMERS_VIEW: 'customers.view', CUSTOMERS_CREATE: 'customers.create', CUSTOMERS_EDIT: 'customers.edit',
+  BRANCHES_MENU: 'branches.menu', BRANCHES_VIEW: 'branches.view', BRANCHES_CREATE: 'branches.create', BRANCHES_EDIT: 'branches.edit', BRANCHES_DELETE: 'branches.delete',
+  SPACES_MENU: 'spaces.menu', SPACES_VIEW: 'spaces.view', SPACES_CREATE: 'spaces.create', SPACES_EDIT: 'spaces.edit', SPACES_DELETE: 'spaces.delete',
+  BOOKINGS_MENU: 'bookings.menu', BOOKINGS_VIEW: 'bookings.view', BOOKINGS_CREATE: 'bookings.create', BOOKINGS_EDIT: 'bookings.edit', BOOKINGS_DELETE: 'bookings.delete',
+  PAYMENTS_MENU: 'payments.menu', PAYMENTS_VIEW: 'payments.view', PAYMENTS_CREATE: 'payments.create', PAYMENTS_EDIT: 'payments.edit', PAYMENTS_DELETE: 'payments.delete',
+  COMMUNICATIONS_MENU: 'communications.menu', COMMUNICATIONS_VIEW: 'communications.view', COMMUNICATIONS_CREATE: 'communications.create',
+  REPORTS_MENU: 'reports.menu', REPORTS_VIEW: 'reports.view', SETTINGS_MENU: 'settings.menu', USERS_MENU: 'users.menu', ROLES_MENU: 'roles.menu',
 };
 
 const P = PERMISSIONS;
 
 // Catalog with Greek labels + grouping, used to render the permission editor.
 export const PERMISSION_CATALOG = [
+  ...[
+    ['CUSTOMERS', 'Πελάτες', ['MENU', 'VIEW', 'CREATE', 'EDIT', 'DELETE']],
+    ['BRANCHES', 'Υποκαταστήματα', ['MENU', 'VIEW', 'CREATE', 'EDIT', 'DELETE']],
+    ['SPACES', 'Χώροι', ['MENU', 'VIEW', 'CREATE', 'EDIT', 'DELETE']],
+    ['BOOKINGS', 'Κρατήσεις', ['MENU', 'VIEW', 'CREATE', 'EDIT', 'DELETE']],
+    ['PAYMENTS', 'Πληρωμές', ['MENU', 'VIEW', 'CREATE', 'EDIT', 'DELETE']],
+    ['COMMUNICATIONS', 'Επικοινωνίες', ['MENU', 'VIEW', 'CREATE']],
+  ].flatMap(([prefix, label, actions]) => actions.map((action) => ({
+    code: P[`${prefix}_${action}`], label: `${action === 'MENU' ? 'Menu' : action === 'VIEW' ? 'Προβολή' : action === 'CREATE' ? 'Δημιουργία' : action === 'EDIT' ? 'Επεξεργασία' : 'Διαγραφή'} ${label.toLowerCase()}`, group: label,
+  }))),
   { code: P.CUSTOMERS_READ, label: 'Προβολή πελατών', group: 'Πελάτες' },
   { code: P.CUSTOMERS_WRITE, label: 'Επεξεργασία πελατών', group: 'Πελάτες' },
   { code: P.CUSTOMERS_DELETE, label: 'Διαγραφή πελατών', group: 'Πελάτες' },
@@ -33,6 +50,11 @@ export const PERMISSION_CATALOG = [
   { code: P.ROLES_MANAGE, label: 'Διαχείριση ρόλων & δικαιωμάτων', group: 'Διαχείριση' },
   { code: P.TENANT_MANAGE, label: 'Διαχείριση οργανισμού', group: 'Διαχείριση' },
   { code: P.TENANTS_PLATFORM, label: 'Διαχείριση όλων των tenants (πλατφόρμα)', group: 'Πλατφόρμα' },
+  { code: P.REPORTS_MENU, label: 'Menu αναφορών', group: 'Αναφορές' },
+  { code: P.REPORTS_VIEW, label: 'Προβολή αναφορών', group: 'Αναφορές' },
+  { code: P.SETTINGS_MENU, label: 'Menu ρυθμίσεων', group: 'Διαχείριση' },
+  { code: P.USERS_MENU, label: 'Menu χρηστών', group: 'Διαχείριση' },
+  { code: P.ROLES_MENU, label: 'Menu ρόλων', group: 'Διαχείριση' },
 ];
 
 export const ALL_PERMISSIONS = PERMISSION_CATALOG.map((p) => p.code);
@@ -57,3 +79,21 @@ export const ROLE_TEMPLATES = [
 ];
 
 export const isValidPermission = (code) => TENANT_PERMISSIONS.includes(code);
+
+const IMPLICATIONS = {
+  'customers.read': ['customers.menu', 'customers.view'],
+  'customers.write': ['customers.create', 'customers.edit'],
+  'customers.delete': ['customers.delete'],
+  'branches.read': ['branches.menu', 'branches.view'],
+  'spaces.read': ['spaces.menu', 'spaces.view'],
+  'reports.read': ['reports.menu', 'reports.view'],
+};
+export function expandPermissions(perms = []) {
+  const result = new Set(perms);
+  for (const code of [...result]) (IMPLICATIONS[code] || []).forEach((item) => result.add(item));
+  for (const code of [...result]) {
+    if (code.endsWith('.view')) result.add(code.replace('.view', '.read'));
+    if (code.endsWith('.edit') || code.endsWith('.create')) result.add(code.replace(/\.(edit|create)$/, '.write'));
+  }
+  return [...result];
+}

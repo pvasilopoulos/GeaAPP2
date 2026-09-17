@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { query } from '../db.js';
 import { authorize } from '../middleware/auth.js';
 import { hashPassword } from '../lib/auth.js';
-import { PERMISSIONS, PERMISSION_CATALOG, isValidPermission } from '../lib/permissions.js';
+import { PERMISSIONS, PERMISSION_CATALOG, isValidPermission, expandPermissions } from '../lib/permissions.js';
 
 export const usersRouter = Router();
 
@@ -42,7 +42,7 @@ usersRouter.get('/roles', authorize(PERMISSIONS.USERS_MANAGE, PERMISSIONS.ROLES_
       `SELECT r.id, r.\`key\`, r.name, r.permissions, r.is_system,
               (SELECT COUNT(*) FROM users u WHERE u.role_id = r.id) AS user_count
        FROM roles r WHERE r.tenant_id = ? ORDER BY r.id`, [req.user.tenantId]);
-    for (const r of rows) { r.permissions = parsePerms(r.permissions); r.user_count = Number(r.user_count); }
+    for (const r of rows) { r.permissions = expandPermissions(parsePerms(r.permissions)); r.user_count = Number(r.user_count); }
     res.json({ roles: rows });
   } catch (err) { next(err); }
 });

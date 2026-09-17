@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { query } from '../db.js';
 import { verifyPassword, signToken } from '../lib/auth.js';
 import { authenticate } from '../middleware/auth.js';
-import { TENANT_PERMISSIONS } from '../lib/permissions.js';
+import { TENANT_PERMISSIONS, expandPermissions } from '../lib/permissions.js';
 import { createTenantWithOwner, getPlatformSetting, getPlatformSettings } from '../lib/tenants.js';
 
 export const authRouter = Router();
@@ -16,7 +16,7 @@ function parsePerms(v) {
 function publicUser(u) {
   const permissions = u.roleKey === 'owner' || u.role_key === 'owner'
     ? [...TENANT_PERMISSIONS]
-    : (u.permissions || []);
+    : expandPermissions(u.permissions || []);
   return {
     id: u.id, email: u.email, fullName: u.fullName ?? u.full_name,
     roleKey: u.roleKey ?? u.role_key, roleName: u.roleName ?? u.role_name,
