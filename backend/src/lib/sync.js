@@ -82,7 +82,7 @@ const ENTITY_FIELDS = {
 
 function searchNorm(table, data) {
   if (table === 'customers') {
-    return normalizeFields(data.code, data.first_name, data.last_name, data.company, data.email, data.phone, data.mobile, data.tax_id, data.address_line, data.city);
+    return normalizeFields(data.code, data.first_name, data.last_name, data.company, data.email, data.phone, data.mobile, data.tax_id, data.address_line, data.city, data.postal_code);
   }
 
   return normalizeFields(data.code, data.name, data.address_line, data.city, data.phone, data.space_type, data.status);

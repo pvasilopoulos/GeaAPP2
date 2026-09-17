@@ -58,6 +58,7 @@ const IDENTITY_FIELDS = [
   ['last_visit_at', 'Τελ. επίσκεψη'],
 ];
 const DEFAULT_IDENTITY_FIELDS = ['customer_type', 'city'];
+const COLUMN_FILTER_KEYS = new Set(['name', 'code', 'status', 'city', 'email', 'phone', 'mobile', 'tax_id', 'address_line', 'erp_id']);
 
 const EMPTY_FILTERS = {
   status: [], customerType: '', tag: '', isVip: false, employeeId: '', city: '',
@@ -166,6 +167,7 @@ export default function Customers({ onOpenCustomer }) {
   const [customFieldColumns, setCustomFieldColumns] = useState([]);
   const [columnSearch, setColumnSearch] = useState('');
   const [identityFields, setIdentityFields] = useState(DEFAULT_IDENTITY_FIELDS);
+  const [columnFilters, setColumnFilters] = useState({});
 
   const { data: meta } = useQuery({ queryKey: ['meta'], queryFn: ({ signal }) => api.meta({ signal }) });
   useEffect(() => {
@@ -190,6 +192,7 @@ export default function Customers({ onOpenCustomer }) {
         if (config.sortDir) setSortDir(config.sortDir);
         if (config.pageSize) setPageSize(config.pageSize);
         if (config.identityFields) setIdentityFields(config.identityFields);
+        if (config.columnFilters) setColumnFilters(config.columnFilters);
       }
     }).catch(() => {});
   }, []);
@@ -219,7 +222,8 @@ export default function Customers({ onOpenCustomer }) {
     minSpaces: filters.minSpaces || undefined,
     sort: sort !== 'last_visit' ? sort : undefined,
     sortDir,
-  }), [q, filters, sort, sortDir]);
+    ...Object.fromEntries(Object.entries(columnFilters).filter(([, value]) => String(value || '').trim()).map(([key, value]) => [`column_${key}`, value])),
+  }), [q, filters, sort, sortDir, columnFilters]);
 
   useEffect(() => { setPage(1); }, [filterParams, pageSize]);
 
@@ -263,7 +267,7 @@ export default function Customers({ onOpenCustomer }) {
     if (column.key === 'last_visit') return 'minmax(130px, 1.1fr)';
     return 'minmax(110px, 1fr)';
   }).join(' ');
-  const viewConfig = () => ({ filters, columns: columnOrder, hiddenColumns, sort, sortDir, pageSize, identityFields });
+  const viewConfig = () => ({ filters, columns: columnOrder, hiddenColumns, sort, sortDir, pageSize, identityFields, columnFilters });
   const saveView = async () => {
     const name = viewName.trim() || window.prompt('Όνομα λίστας', activeView?.name || '');
     if (!name) return;
@@ -295,6 +299,7 @@ export default function Customers({ onOpenCustomer }) {
     setSortDir(config.sortDir || 'DESC');
     setPageSize(config.pageSize || 50);
     setIdentityFields(config.identityFields || DEFAULT_IDENTITY_FIELDS);
+    setColumnFilters(config.columnFilters || {});
   };
   const dragEnd = (target) => {
     if (!dragColumn || dragColumn === target) return;
@@ -334,7 +339,7 @@ export default function Customers({ onOpenCustomer }) {
       <div className="toolbar">
         <div className="search-input">
           <Icon name="search" size={17} />
-          <input value={input} placeholder="Αναζήτηση με όνομα, κωδικό, τηλέφωνο, email, εταιρεία, ΑΦΜ…" onChange={(e) => setInput(e.target.value)} />
+          <input value={input} placeholder="Όνομα, ΑΦΜ, email, διεύθυνση ή τηλέφωνο…" onChange={(e) => setInput(e.target.value)} />
           {isFetching && <span className="spinner" />}
         </div>
         <button className={`filter-chip${chips.length ? ' active' : ''}`} onClick={() => setShowFilters(true)}>
@@ -401,7 +406,7 @@ export default function Customers({ onOpenCustomer }) {
                 </div>;
               })}
             </div>
-            <button className="btn btn-sm btn-ghost" onClick={() => { setColumnOrder(DEFAULT_COLUMNS); setHiddenColumns([]); setIdentityFields(DEFAULT_IDENTITY_FIELDS); setColumnSearch(''); }}>Επαναφορά</button>
+            <button className="btn btn-sm btn-ghost" onClick={() => { setColumnOrder(DEFAULT_COLUMNS); setHiddenColumns([]); setIdentityFields(DEFAULT_IDENTITY_FIELDS); setColumnFilters({}); setColumnSearch(''); }}>Επαναφορά</button>
           </div>
           )}
         </div>
@@ -430,10 +435,12 @@ export default function Customers({ onOpenCustomer }) {
       <div className="table-wrap">
         <div className="thead" style={{ gridTemplateColumns: tableGrid }}>
           {visibleColumns.map((c) => (
-            <div key={c.key} draggable onDragStart={() => setDragColumn(c.key)} onDragOver={(event) => event.preventDefault()} onDrop={() => dragEnd(c.key)} className={c.sort ? 'sortable' : ''} style={c.key === 'actions' ? { textAlign: 'right' } : undefined}
-              onClick={c.sort ? () => toggleSort(c.sort) : undefined}>
-              {c.label}
-              {c.sort && sort === c.sort && <Icon name="chevronDown" size={13} style={{ transform: sortDir === 'ASC' ? 'rotate(180deg)' : undefined }} />}
+            <div key={c.key} draggable onDragStart={() => setDragColumn(c.key)} onDragOver={(event) => event.preventDefault()} onDrop={() => dragEnd(c.key)} className={`${c.sort ? 'sortable' : ''} table-head-cell`} style={c.key === 'actions' ? { textAlign: 'right' } : undefined}>
+              <button type="button" className="table-head-sort" onClick={c.sort ? () => toggleSort(c.sort) : undefined}>
+                {c.label}
+                {c.sort && sort === c.sort && <Icon name="chevronDown" size={13} style={{ transform: sortDir === 'ASC' ? 'rotate(180deg)' : undefined }} />}
+              </button>
+              {COLUMN_FILTER_KEYS.has(c.key) && <input className="column-filter-input" value={columnFilters[c.key] || ''} placeholder="Φίλτρο…" onClick={(event) => event.stopPropagation()} onChange={(event) => { setColumnFilters((current) => ({ ...current, [c.key]: event.target.value })); setPage(1); }} />}
             </div>
           ))}
         </div>

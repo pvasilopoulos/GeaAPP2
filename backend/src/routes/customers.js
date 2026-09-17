@@ -17,7 +17,7 @@ const CUSTOMER_FIELDS = ['first_name', 'last_name', 'email', 'phone', 'mobile', 
   'postal_code', 'country', 'profile_note', 'assigned_employee_id', 'avatar_url'];
 
 function customerSearchNorm(r) {
-  return normalizeFields(r.first_name, r.last_name, r.email, r.phone, r.mobile, r.company, r.tax_id, r.code);
+  return normalizeFields(r.first_name, r.last_name, r.email, r.phone, r.mobile, r.company, r.tax_id, r.code, r.address_line, r.city, r.postal_code);
 }
 
 export const customersRouter = Router();

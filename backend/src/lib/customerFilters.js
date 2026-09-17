@@ -28,8 +28,24 @@ export function buildFilters(req) {
   const qnorm = q ? normalize(q) : '';
   if (qnorm) {
     const sc = searchClause(qnorm, 'c.search_norm');
-    if (sc) { where.push(sc.clause); sc.params.forEach((p) => params.push(p)); }
+    if (sc) {
+      const rawLike = `%${q}%`;
+      where.push(`(${sc.clause} OR c.email LIKE ${push(rawLike)} OR c.phone LIKE ${push(rawLike)}
+        OR c.mobile LIKE ${push(rawLike)} OR c.tax_id LIKE ${push(rawLike)}
+        OR c.address_line LIKE ${push(rawLike)} OR c.city LIKE ${push(rawLike)})`);
+      const rawParams = params.splice(params.length - 6, 6);
+      params.push(...sc.params, ...rawParams);
+    }
   }
+  const columnFilters = {
+    name: 'c.full_name', code: 'c.code', status: 'c.status', city: 'c.city',
+    email: 'c.email', phone: 'c.phone', mobile: 'c.mobile', tax_id: 'c.tax_id',
+    address_line: 'c.address_line', erp_id: 'c.erp_id',
+  };
+  Object.entries(columnFilters).forEach(([key, column]) => {
+    const value = String(req.query[`column_${key}`] || '').trim();
+    if (value) where.push(`LOWER(${column}) LIKE ${push(`%${value.toLowerCase()}%`)}`);
+  });
   if (req.query.status) where.push(`c.status IN (${push(String(req.query.status).split(','))})`);
   if (req.query.customerType) where.push(`c.customer_type = ${push(req.query.customerType)}`);
   if (req.query.isVip === 'true') where.push('c.is_vip = 1');
