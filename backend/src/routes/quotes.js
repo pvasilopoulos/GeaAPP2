@@ -10,6 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { QUOTE_STATUSES, QUOTE_STATUS_TRANSITIONS } from '../lib/quoteWorkflow.js';
 import { mapErpLinesToQuoteLines } from '../lib/quoteLineMapping.js';
+import { parseEncodedJson } from '../lib/responseEncoding.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FONT = path.resolve(__dirname, '../../assets/fonts/DejaVuSans.ttf');
@@ -69,7 +70,10 @@ quotesRouter.post('/resolve-lines', authorize(PERMISSIONS.QUOTES_FETCH_LINES), a
       response = await fetch(config.url, { method: config.method === 'GET' ? 'GET' : 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: config.method === 'GET' ? undefined : rendered, signal: controller.signal });
     } finally { clearTimeout(timer); }
     if (!response.ok) return res.status(502).json({ error: `Το ERP API επέστρεψε HTTP ${response.status}` });
-    const payload = await response.json();
+    const payload = parseEncodedJson(Buffer.from(await response.arrayBuffer()), {
+      encoding: config.response_encoding || 'auto',
+      contentType: response.headers.get('content-type'),
+    }).value;
     const configuredPath = String(config.response_path || 'data.lines').trim();
     let lines = configuredPath.split('.').filter(Boolean).reduce((value, key) => value?.[key], payload);
     // ERP responses commonly wrap the line array in { data: { lines: [...] } }.
