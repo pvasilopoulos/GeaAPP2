@@ -22,6 +22,13 @@ const CATS = [
   { id: 'connectors', label: 'ERP Sync', hint: 'Συνδέσεις, αντιστοιχίσεις και συγχρονισμοί', icon: 'refresh', perms: [PERMS.SETTINGS_MANAGE] },
 ];
 
+const GROUPS = [
+  { id: 'workspace', label: 'Χώρος εργασίας', items: ['org', 'app', 'fields'] },
+  { id: 'operations', label: 'Λειτουργίες', items: ['messaging', 'connectors'] },
+  { id: 'access', label: 'Πρόσβαση & ασφάλεια', items: ['users', 'security'] },
+  { id: 'platform', label: 'Πλατφόρμα', items: ['tenants'] },
+];
+
 export default function Settings({ initialCat } = {}) {
   const hasPerm = useAuth((s) => s.hasPerm);
   const cats = useMemo(() => CATS.filter((c) => c.perms.some((p) => hasPerm(p))), [hasPerm]);
@@ -42,24 +49,38 @@ export default function Settings({ initialCat } = {}) {
 
       <div className="settings-layout">
         <aside className="settings-nav">
-          {cats.map((c) => (
-            <button key={c.id} type="button"
-              className={`settings-nav-item${active?.id === c.id ? ' active' : ''}`}
-              onClick={() => setCat(c.id)}>
-              <Icon name={c.icon} size={16} />
-              <span>
-                <b>{c.label}</b>
-                <small>{c.hint}</small>
-              </span>
-            </button>
-          ))}
+          {GROUPS.map((group) => {
+            const groupCats = group.items.map((id) => cats.find((c) => c.id === id)).filter(Boolean);
+            if (!groupCats.length) return null;
+            return (
+              <div className="settings-nav-group" key={group.id}>
+                <div className="settings-nav-group-title">{group.label}</div>
+                {groupCats.map((c) => (
+                  <button key={c.id} type="button"
+                    className={`settings-nav-item${active?.id === c.id ? ' active' : ''}`}
+                    onClick={() => setCat(c.id)}>
+                    <span className="settings-nav-icon"><Icon name={c.icon} size={16} /></span>
+                    <span>
+                      <b>{c.label}</b>
+                      <small>{c.hint}</small>
+                    </span>
+                    {active?.id === c.id && <Icon name="chevronRight" size={14} />}
+                  </button>
+                ))}
+              </div>
+            );
+          })}
         </aside>
         <div className="settings-body">
           {active && (
             <>
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontWeight: 700, fontSize: 16 }}>{active.label}</div>
-                <div className="muted" style={{ fontSize: 13, marginTop: 2 }}>{active.hint}</div>
+              <div className="settings-section-head">
+                <div>
+                  <div className="settings-eyebrow">ΡΥΘΜΙΣΕΙΣ</div>
+                  <h2>{active.label}</h2>
+                  <div className="muted">{active.hint}</div>
+                </div>
+                <div className="settings-section-icon"><Icon name={active.icon} size={21} /></div>
               </div>
               {active.id === 'org' && <OrgPanel />}
               {active.id === 'app' && <AppPanel />}
