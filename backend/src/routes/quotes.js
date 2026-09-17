@@ -108,9 +108,9 @@ quotesRouter.post('/', authorize(PERMISSIONS.QUOTES_CREATE), async (req, res, ne
     const calculated = totals(lines);
     const number = Number(b.quoteNumber) || Date.now() % 1000000;
     const r = await query(
-      `INSERT INTO quotes (tenant_id, series, quote_number, quote_date, customer_id, branch_id, email_template, payment_terms, valid_until, seller_id, reference_start_year, reference_end_year, payment_due_date, send_email, status, status_updated_at, status_updated_by, subtotal, tax_total, total, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?)`,
-      [req.user.tenantId, b.series || 'ΠΡΟΣ', number, b.quoteDate, b.customerId, b.branchId || null, b.emailTemplate || null, b.paymentTerms || null, b.validUntil || null, b.sellerId || null, b.referenceStartYear || null, b.referenceEndYear || null, b.paymentDueDate || null, b.sendEmail ? 1 : 0, b.sendEmail ? 'ready' : 'draft', req.user.id, calculated.subtotal, calculated.tax_total, calculated.total, req.user.id]);
+      `INSERT INTO quotes (tenant_id, series, quote_number, quote_date, customer_id, branch_id, email_template, payment_terms, valid_until, seller_id, reference_start_year, reference_end_year, payment_due_date, send_email, status, subtotal, tax_total, total, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [req.user.tenantId, b.series || 'ΠΡΟΣ', number, b.quoteDate, b.customerId, b.branchId || null, b.emailTemplate || null, b.paymentTerms || null, b.validUntil || null, b.sellerId || null, b.referenceStartYear || null, b.referenceEndYear || null, b.paymentDueDate || null, b.sendEmail ? 1 : 0, b.sendEmail ? 'ready' : 'draft', calculated.subtotal, calculated.tax_total, calculated.total, req.user.id]);
     for (const line of lines) await insertQuoteLine(r.rows.insertId, line);
     res.status(201).json({ id: r.rows.insertId, ...calculated });
   } catch (err) { next(err); }
