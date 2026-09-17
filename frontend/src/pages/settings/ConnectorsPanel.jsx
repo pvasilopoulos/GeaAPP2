@@ -65,14 +65,41 @@ export default function ConnectorsPanel() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [message, setMessage] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [customFields, setCustomFields] = useState({ customers: [], branches: [], spaces: [] });
 
   const load = () => api.connectors().then((response) => setItems(response.connectors || []));
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    Promise.all([
+      api.customFields('customer'),
+      api.customFields('branch'),
+      api.customFields('space'),
+    ]).then(([customers, branches, spaces]) => {
+      setCustomFields({
+        customers: customers.fields || [],
+        branches: branches.fields || [],
+        spaces: spaces.fields || [],
+      });
+    }).catch(() => setCustomFields({ customers: [], branches: [], spaces: [] }));
+  }, []);
 
   const selectedMappings = useMemo(() => parseJson(form.mappings, defaultMappings), [form.mappings]);
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   const updateMapping = (entity, field, path) => {
     const next = { ...selectedMappings, [entity]: { ...(selectedMappings[entity] || {}), [field]: path } };
+    update('mappings', JSON.stringify(next, null, 2));
+  };
+  const updateCustomMapping = (entity, key, path) => {
+    const next = {
+      ...selectedMappings,
+      [entity]: {
+        ...(selectedMappings[entity] || {}),
+        custom_fields: {
+          ...(selectedMappings[entity]?.custom_fields || {}),
+          [key]: path,
+        },
+      },
+    };
     update('mappings', JSON.stringify(next, null, 2));
   };
 
@@ -178,6 +205,23 @@ export default function ConnectorsPanel() {
               <div className="erp-entity-tabs">{entities.map((entity) => <button type="button" key={entity.key} className={`erp-entity-tab ${activeEntity === entity.key ? 'active' : ''} ${form.target_entity !== entity.key ? 'is-disabled' : ''}`} onClick={() => form.target_entity === entity.key && setActiveEntity(entity.key)}><span className={`erp-icon erp-icon-${entity.tone}`}><Icon name={entity.icon} size={16} /></span><span><b>{entity.label}</b><small>{form.target_entity === entity.key ? entity.hint : 'Άλλαξε την οντότητα παραπάνω'}</small></span><Icon name="chevronRight" size={15} /></button>)}</div>
               <div className="erp-mapping-head"><div><b>{entities.find((item) => item.key === activeEntity)?.label}</b><span>Αντιστοίχισε κάθε πεδίο σε JSON path</span></div><div className="erp-mapping-head-actions"><button className="erp-link-button" type="button" onClick={() => updateMapping(activeEntity, 'erp_id', activeEntity === 'customers' ? 'customer_id' : activeEntity === 'branches' ? 'branch_id' : 'space_id')}>Χρήση ERP ID</button><span className="erp-mapping-count">{Object.keys(selectedMappings[activeEntity] || {}).length} πεδία</span></div></div>
               <div className="erp-mapping-list">{mappingFields[activeEntity].map(([field, label, required]) => <div className="erp-mapping-row" key={field}><div><b>{label}</b><code>{field}</code></div><span className="erp-arrow">→</span><input value={selectedMappings[activeEntity]?.[field] || ''} onChange={(e) => updateMapping(activeEntity, field, e.target.value)} placeholder={required ? 'required JSON path' : 'προαιρετικό'} /><span className={selectedMappings[activeEntity]?.[field] ? 'erp-map-ok' : required ? 'erp-map-missing' : 'erp-map-optional'}>{selectedMappings[activeEntity]?.[field] ? 'Mapped' : required ? 'Required' : 'Optional'}</span></div>)}</div>
+              <div className="erp-custom-mapping">
+                <div className="erp-mapping-head">
+                  <div><b>Custom πεδία βάσης</b><span>Τα ενεργά custom fields της οντότητας εμφανίζονται αυτόματα.</span></div>
+                  <span className="erp-mapping-count">{customFields[activeEntity].length} πεδία</span>
+                </div>
+                {customFields[activeEntity].length === 0
+                  ? <p className="erp-mapping-empty">Δεν υπάρχουν custom fields για αυτή την οντότητα. Δημιούργησέ τα από τις Ρυθμίσεις → Custom Fields.</p>
+                  : <div className="erp-mapping-list">{customFields[activeEntity].map((field) => {
+                    const path = selectedMappings[activeEntity]?.custom_fields?.[field.key] || '';
+                    return <div className="erp-mapping-row" key={field.id}>
+                      <div><b>{field.name}</b><code>custom_fields.{field.key}</code></div>
+                      <span className="erp-arrow">→</span>
+                      <input value={path} onChange={(e) => updateCustomMapping(activeEntity, field.key, e.target.value)} placeholder="JSON path, π.χ. customer_code" />
+                      <span className={path ? 'erp-map-ok' : 'erp-map-optional'}>{path ? 'Mapped' : 'Optional'}</span>
+                    </div>;
+                  })}</div>}
+              </div>
               <button className="erp-advanced-toggle" type="button" onClick={() => setShowAdvanced(!showAdvanced)}><Icon name={showAdvanced ? 'chevronUp' : 'chevronDown'} size={15} /> {showAdvanced ? 'Απόκρυψη advanced mapping' : 'Άνοιγμα advanced mapping JSON'}</button>
               {showAdvanced && <textarea className="erp-codearea" rows="10" value={form.mappings} onChange={(e) => update('mappings', e.target.value)} />}
             </section>
