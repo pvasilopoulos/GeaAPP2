@@ -83,6 +83,32 @@ function searchNorm(table, data) {
   if (table === 'customers') {
     return normalizeFields(data.code, data.first_name, data.last_name, data.company, data.email, data.phone, data.mobile, data.tax_id, data.address_line, data.city);
   }
+
+  function mapEntityRecord(entity, raw, mapping) {
+    const data = mapRecord(raw, mapping);
+    if (entity === 'customers') {
+      const aliases = {
+        erp_id: ['customer_id', 'id'],
+        code: ['code'],
+        company: ['company_name', 'trade_name'],
+        address_line: ['address_street', 'address'],
+        postal_code: ['address_postal', 'postal_code', 'postalCode'],
+        city: ['address_city', 'city'],
+        mobile: ['mobile', 'mobile_phone'],
+        tax_id: ['vat_number', 'tax_id'],
+        customer_type: ['customer_type'],
+        email: ['email'],
+        phone: ['phone'],
+        status: ['status'],
+      };
+      for (const [field, paths] of Object.entries(aliases)) {
+        if (data[field] !== undefined && data[field] !== null && data[field] !== '') continue;
+        const fallback = paths.map((path) => getPath(raw, path)).find((value) => value !== undefined && value !== null && value !== '');
+        if (fallback !== undefined) data[field] = fallback;
+      }
+    }
+    return data;
+  }
   return normalizeFields(data.code, data.name, data.address_line, data.city, data.phone, data.space_type, data.status);
 }
 
@@ -196,20 +222,20 @@ export async function runSync(tenantId, connectorId) {
         const customers = new Map();
         const branches = new Map();
         for (const raw of entities.customers) {
-          const data = mapRecord(raw, mappings.customers);
+          const data = mapEntityRecord('customers', raw, mappings.customers);
           const id = await upsert(conn, 'customers', tenantId, data);
           customers.set(String(data.erp_id), id);
           upserted += 1;
         }
         for (const raw of entities.branches) {
-          const data = mapRecord(raw, mappings.branches);
+          const data = mapEntityRecord('branches', raw, mappings.branches);
           data.customer_id = await resolveCustomer(conn, tenantId, customers, data);
           const id = await upsert(conn, 'branches', tenantId, data);
           branches.set(String(data.erp_id), id);
           upserted += 1;
         }
         for (const raw of entities.spaces) {
-          const data = mapRecord(raw, mappings.spaces);
+          const data = mapEntityRecord('spaces', raw, mappings.spaces);
           const parent = await resolveBranch(conn, tenantId, branches, data);
           data.branch_id = parent.branchId;
           data.customer_id = parent.customerId;
