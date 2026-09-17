@@ -16,6 +16,7 @@ DROP TABLE IF EXISTS branch_custom_field_values;
 DROP TABLE IF EXISTS space_custom_field_values;
 DROP TABLE IF EXISTS custom_field_definitions;
 DROP TABLE IF EXISTS customer_saved_views;
+DROP TABLE IF EXISTS follow_ups;
 DROP TABLE IF EXISTS activities;
 DROP TABLE IF EXISTS communications;
 DROP TABLE IF EXISTS documents;
