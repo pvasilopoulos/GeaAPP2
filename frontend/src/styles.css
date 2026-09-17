@@ -826,7 +826,15 @@ a.bd-fact:hover b { color: var(--accent); }
 .channel-card-b { padding: 0 16px 16px; border-top: 1px solid var(--border); }
 
 @media (max-width: 600px) {
-  .drawer { width: 100%; max-width: 100%; height: 100dvh; max-height: 100dvh; }
+  .drawer {
+    top: auto; right: 0; bottom: 0; width: 100%; max-width: 100%;
+    height: min(82dvh, 680px); max-height: 82dvh;
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -12px 36px rgba(16,24,40,.18);
+    animation: slideup .2s ease;
+  }
+  .drawer-head { flex: none; padding: 14px 16px; }
+  .drawer-body { padding: 14px 16px calc(18px + env(safe-area-inset-bottom, 0px)); }
   .page-head { flex-wrap: wrap; gap: 12px; }
   .ph-top { flex-wrap: wrap; }
   .ph-actions { margin-left: 0; width: 100%; flex-wrap: wrap; }
@@ -846,3 +854,4 @@ a.bd-fact:hover b { color: var(--accent); }
   .user-btn .who { display: none; }
   h1 { font-size: 18px; }
 }
+@keyframes slideup { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }

@@ -1,5 +1,6 @@
 import { initials, avatarColor, STATUS_LABELS, BRANCH_STATUS_LABELS, SPACE_STATUS_LABELS } from '../lib/format.js';
 import Icon from './Icon.jsx';
+import { useEffect, useRef } from 'react';
 
 export function Avatar({ name, src, size = 40, square = false, fallback = true }) {
   if (!src && !fallback) return null;
@@ -57,6 +58,22 @@ export function EmptyState({ icon = 'grid', title, hint }) {
 }
 
 export function Drawer({ title, subtitle, onClose, children, wide = false }) {
+  const closeRef = useRef(null);
+  const previousFocus = useRef(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  useEffect(() => {
+    previousFocus.current = document.activeElement;
+    closeRef.current?.focus();
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') onCloseRef.current();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      previousFocus.current?.focus?.();
+    };
+  }, []);
   return (
     <>
       <div className="drawer-backdrop" onClick={onClose} aria-hidden="true" />
@@ -66,7 +83,7 @@ export function Drawer({ title, subtitle, onClose, children, wide = false }) {
             <div style={{ fontSize: 16, fontWeight: 700 }}>{title}</div>
             {subtitle && <div style={{ color: 'var(--text-3)', fontSize: 13, marginTop: 2 }}>{subtitle}</div>}
           </div>
-          <button className="btn btn-icon btn-ghost" onClick={onClose} aria-label="Κλείσιμο">
+          <button ref={closeRef} className="btn btn-icon btn-ghost" onClick={onClose} aria-label="Κλείσιμο">
             <Icon name="x" />
           </button>
         </div>
