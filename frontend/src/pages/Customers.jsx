@@ -168,6 +168,7 @@ export default function Customers({ onOpenCustomer }) {
   const [columnSearch, setColumnSearch] = useState('');
   const [identityFields, setIdentityFields] = useState(DEFAULT_IDENTITY_FIELDS);
   const [columnFilters, setColumnFilters] = useState({});
+  const columnsMenuRef = useRef(null);
 
   const { data: meta } = useQuery({ queryKey: ['meta'], queryFn: ({ signal }) => api.meta({ signal }) });
   useEffect(() => {
@@ -253,6 +254,23 @@ export default function Customers({ onOpenCustomer }) {
     { key: 'custom', label: 'Custom πεδία', columns: availableColumns.filter((column) => column.customKey) },
   ];
   const normalizedColumnSearch = columnSearch.trim().toLocaleLowerCase('el-GR');
+  useEffect(() => {
+    if (!showColumns) return undefined;
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setShowColumns(false);
+    };
+    const closeOnOutsideClick = (event) => {
+      if (columnsMenuRef.current && !columnsMenuRef.current.contains(event.target)) setShowColumns(false);
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    document.addEventListener('mousedown', closeOnOutsideClick);
+    document.addEventListener('touchstart', closeOnOutsideClick);
+    return () => {
+      document.removeEventListener('keydown', closeOnEscape);
+      document.removeEventListener('mousedown', closeOnOutsideClick);
+      document.removeEventListener('touchstart', closeOnOutsideClick);
+    };
+  }, [showColumns]);
   const customValue = (customer, key) => {
     const values = typeof customer.custom_fields === 'string' ? (() => { try { return JSON.parse(customer.custom_fields); } catch { return {}; } })() : (customer.custom_fields || {});
     return values[key];
@@ -361,11 +379,15 @@ export default function Customers({ onOpenCustomer }) {
             {views.map((view) => <option key={view.id} value={view.id}>{view.name}</option>)}
           </select>
         </div>
-        <div className="customer-columns-anchor">
+        <div className="customer-columns-anchor" ref={columnsMenuRef}>
           <button className={`btn${showColumns ? ' is-active' : ''}`} onClick={() => setShowColumns((open) => !open)}><Icon name="settings" size={15} /> Στήλες <span className="customer-columns-count">{visibleColumns.length}</span></button>
           {showColumns && (
           <div className="customer-columns-menu" role="dialog" aria-label="Επιλογή στηλών">
-            <div className="customer-columns-menu-head"><b>Στήλες</b><span>{visibleColumns.length}/{availableColumns.length}</span></div>
+            <div className="customer-columns-menu-head">
+              <b>Στήλες</b>
+              <span>{visibleColumns.length}/{availableColumns.length}</span>
+              <button type="button" className="customer-columns-close" aria-label="Κλείσιμο στηλών" onClick={() => setShowColumns(false)}><Icon name="x" size={16} /></button>
+            </div>
             <input className="customer-columns-search" value={columnSearch} onChange={(event) => setColumnSearch(event.target.value)} placeholder="Αναζήτηση πεδίου…" />
             <div className="customer-columns-actions">
               <button type="button" onClick={() => { setColumnOrder(availableColumns.map((column) => column.key)); setHiddenColumns([]); }}>Όλες</button>
