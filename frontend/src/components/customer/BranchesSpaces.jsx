@@ -76,9 +76,9 @@ export default function BranchesSpaces({ customerId }) {
     <div className="bs-layout">
       {/* LEFT PANEL */}
       <div className="stack">
-        <div className="card">
+        <div className="card branch-directory">
           <div className="card-head">
-            <h3><Icon name="building" /> Υποκαταστήματα πελάτη</h3>
+            <h3><Icon name="building" /> Υποκαταστήματα πελάτη <span className="muted">({branches.length})</span></h3>
             {canWrite && <a className="link" onClick={() => setBranchForm({})}><Icon name="plus" size={13} /> Προσθήκη</a>}
           </div>
           <div className="card-pad" style={{ paddingBottom: 10 }}>
@@ -89,7 +89,9 @@ export default function BranchesSpaces({ customerId }) {
             <div className="branch-list">
               {filtered.map((b) => (
                 <div key={b.id} className={`branch-item${selected?.id === b.id ? ' active' : ''}`} onClick={() => setSelectedId(b.id)}>
-                  {b.image_url ? <BranchThumb src={b.image_url} name={b.name} size={56} /> : null}
+                  {b.image_url ? <BranchThumb src={b.image_url} name={b.name} size={64} /> : (
+                    <div className="branch-tile-placeholder"><Icon name="building" size={22} /></div>
+                  )}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div className="nm">{b.name} {b.is_primary && <span className="pill" style={{ color: 'var(--accent)', background: 'var(--accent-soft)', border: 'none' }}>Κύριο</span>}</div>
                     <div className="ad">{b.address_line}, {b.city}</div>

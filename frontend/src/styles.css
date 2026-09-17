@@ -380,21 +380,26 @@ input, select { font-family: inherit; font-size: 14px; }
 .stat .l { font-size: 12px; color: var(--text-3); }
 
 /* ---------- Branches & spaces (two-panel) ---------- */
-.bs-layout { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 20px; align-items: start; }
-.branch-list { display: flex; flex-direction: column; gap: 8px; }
+.bs-layout { display: block; }
+.branch-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
 .bs-layout > .stack { gap: 16px; }
 .bs-layout .card { border-radius: 15px; box-shadow: 0 1px 3px rgba(16,24,40,.045); }
 .bs-layout .card-head { padding: 15px 18px; }
 .bs-layout .card-pad { padding: 16px 18px; }
-.branch-item { display: flex; gap: 12px; padding: 12px; border: 1px solid transparent; border-radius: 12px; background: var(--surface-2); align-items: center; transition: background .12s, border-color .12s, box-shadow .12s; }
+.branch-item { position: relative; display: flex; gap: 12px; min-height: 92px; padding: 13px; border: 1px solid transparent; border-radius: 13px; background: var(--surface-2); align-items: center; transition: background .12s, border-color .12s, box-shadow .12s, transform .12s; cursor: pointer; }
 .branch-item:hover { background: #fff; border-color: var(--border); }
 .branch-item.active { background: #fff; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.branch-item .thumb { width: 56px; height: 56px; border-radius: 9px; object-fit: cover; flex: none; background: var(--surface-2); }
+.branch-item:hover { transform: translateY(-1px); }
+.branch-item .thumb { width: 64px; height: 64px; border-radius: 11px; object-fit: cover; flex: none; background: #fff; }
+.branch-tile-placeholder { width: 64px; height: 64px; border-radius: 11px; display: grid; place-items: center; flex: none; background: var(--accent-soft); color: var(--accent); }
 .branch-item .nm { font-weight: 600; display: flex; align-items: center; gap: 7px; }
 .branch-item .ad { font-size: 12px; color: var(--text-3); margin-top: 2px; }
 .branch-item .st { font-size: 12px; color: var(--text-2); margin-top: 4px; }
+.branch-item > svg { margin-left: auto; flex: none; }
+.branch-directory .card-head h3 { margin: 0; }
+.branch-directory .card-head .muted { margin-left: 4px; font-size: 12px; font-weight: 400; }
 
-.branch-detail { overflow: hidden; border-radius: 15px !important; }
+.branch-detail { margin-top: 16px; overflow: hidden; border-radius: 15px !important; }
 .branch-detail .hero { display: flex; gap: 16px; align-items: flex-start; }
 .bd-cover { height: 168px; background: var(--surface-2); position: relative; }
 .bd-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
