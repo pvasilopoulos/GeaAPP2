@@ -62,13 +62,27 @@ export default function ConnectorsPanel() {
   const [isCreating, setIsCreating] = useState(false);
   const [form, setForm] = useState(newForm);
   const [runs, setRuns] = useState([]);
+  const [monitoringRuns, setMonitoringRuns] = useState([]);
   const [activeEntity, setActiveEntity] = useState('customers');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [message, setMessage] = useState(null);
   const [busy, setBusy] = useState(false);
   const [customFields, setCustomFields] = useState({ customers: [], branches: [], spaces: [] });
 
-  const load = () => api.connectors().then((response) => setItems(response.connectors || []));
+  const load = async () => {
+    const response = await api.connectors();
+    const connectors = response.connectors || [];
+    setItems(connectors);
+    const histories = await Promise.all(connectors.map(async (connector) => {
+      try {
+        const result = await api.connectorRuns(connector.id);
+        return (result.runs || []).map((run) => ({ ...run, connectorName: connector.name, connectorId: connector.id }));
+      } catch {
+        return [];
+      }
+    }));
+    setMonitoringRuns(histories.flat().sort((a, b) => new Date(b.started_at) - new Date(a.started_at)));
+  };
   useEffect(() => {
     load();
     Promise.all([
@@ -173,6 +187,27 @@ export default function ConnectorsPanel() {
     await load();
   };
 
+  const retryRun = async (run) => {
+    setBusy(true);
+    try {
+      await api.retryConnectorRun(run.connectorId, run.id);
+      setMessage({ type: 'success', text: 'Η επανάληψη ξεκίνησε.' });
+      await load();
+    } catch (error) {
+      setMessage({ type: 'error', text: error.message || 'Δεν ήταν δυνατή η επανάληψη.' });
+    } finally { setBusy(false); }
+  };
+
+  const failedRuns = monitoringRuns.filter((run) => run.status === 'failed');
+  const runningRuns = monitoringRuns.filter((run) => run.status === 'running');
+  const connectorHealth = (connector) => {
+    const latest = monitoringRuns.find((run) => run.connectorId === connector.id);
+    if (!latest) return { label: 'Χωρίς ιστορικό', tone: 'unknown' };
+    if (latest.status === 'running') return { label: 'Σε εξέλιξη', tone: 'running' };
+    if (latest.status === 'failed') return { label: 'Απαιτεί προσοχή', tone: 'failed' };
+    return { label: 'Υγιές', tone: 'success' };
+  };
+
   if (selected || isCreating || !items.length) {
     return (
       <div className="erp-shell">
@@ -249,7 +284,28 @@ export default function ConnectorsPanel() {
     <div className="erp-shell">
       <div className="erp-hero"><div><div className="erp-eyebrow"><span className="erp-live-dot" /> INTEGRATIONS</div><h2>ERP Sync</h2><p>Σύνδεσε το ERP σου και κράτησε πελάτες, υποκαταστήματα και χώρους πάντα ενημερωμένους.</p></div><button className="btn btn-accent" type="button" onClick={() => openEditor()}><Icon name="plus" size={16} /> Νέα σύνδεση</button></div>
       {message && <div className={`erp-alert ${message.type}`}><Icon name={message.type === 'success' ? 'check' : 'x'} size={16} />{message.text}</div>}
-      <div className="erp-stats"><div><span className="erp-stat-icon indigo"><Icon name="layers" size={18} /></span><div><small>Συνδέσεις</small><strong>{items.length}</strong></div></div><div><span className="erp-stat-icon green"><Icon name="activity" size={18} /></span><div><small>Ενεργές</small><strong>{items.filter((item) => item.enabled).length}</strong></div></div><div><span className="erp-stat-icon amber"><Icon name="clock" size={18} /></span><div><small>Αυτόματα runs</small><strong>{items.filter((item) => item.enabled).length ? 'ON' : '—'}</strong></div></div></div>
+      <div className="erp-stats"><div><span className="erp-stat-icon indigo"><Icon name="layers" size={18} /></span><div><small>Συνδέσεις</small><strong>{items.length}</strong></div></div><div><span className="erp-stat-icon green"><Icon name="activity" size={18} /></span><div><small>Υγιείς συνδέσεις</small><strong>{items.filter((item) => connectorHealth(item).tone === 'success').length}</strong></div></div><div><span className="erp-stat-icon amber"><Icon name="clock" size={18} /></span><div><small>Αποτυχημένα runs</small><strong>{failedRuns.length}</strong></div></div></div>
+      <div className="erp-monitor-grid">
+        <section className="erp-card erp-monitor-card">
+          <div className="erp-section-heading"><div><h3>Υγεία συνδέσεων</h3><span>Τελευταίο γνωστό αποτέλεσμα ανά connector</span></div><span className="erp-list-count">{runningRuns.length} σε εξέλιξη</span></div>
+          <div className="erp-health-list">{items.map((connector) => {
+            const health = connectorHealth(connector);
+            return <div className="erp-health-row" key={connector.id}>
+              <span className={`erp-health-dot ${health.tone}`} />
+              <div><b>{connector.name}</b><small>{connector.enabled ? `Scheduler κάθε ${connector.schedule_minutes || '—'} λεπτά` : 'Χειροκίνητη εκτέλεση'}</small></div>
+              <strong className={`erp-health-label ${health.tone}`}>{health.label}</strong>
+            </div>;
+          })}</div>
+        </section>
+        <section className="erp-card erp-monitor-card">
+          <div className="erp-section-heading"><div><h3>Τελευταίες μετρήσεις</h3><span>Στοιχεία από τα καταγεγραμμένα sync runs</span></div></div>
+          <div className="erp-monitor-metrics"><div><b>{monitoringRuns.reduce((sum, run) => sum + Number(run.records_seen || 0), 0)}</b><small>records seen</small></div><div><b>{monitoringRuns.reduce((sum, run) => sum + Number(run.records_upserted || 0), 0)}</b><small>upserted</small></div><div><b>{monitoringRuns.reduce((sum, run) => sum + Number(run.error_count || 0), 0)}</b><small>errors</small></div></div>
+        </section>
+      </div>
+      <section className="erp-card erp-failed-runs">
+        <div className="erp-section-heading"><div><h3>Αποτυχημένα runs</h3><span>Εμφανίζονται μόνο runs του τρέχοντος tenant</span></div><span className="erp-list-count">{failedRuns.length}</span></div>
+        {failedRuns.length ? <div className="erp-run-table">{failedRuns.slice(0, 8).map((run) => <div className="erp-run-row" key={run.id}><span className="erp-run-dot failed" /><div><b>{run.connectorName}</b><small>{formatDate(run.started_at)} · {run.records_seen || 0} records · {run.error_count || 0} errors</small><span className="erp-run-error">{run.error_message || 'Άγνωστο σφάλμα'}</span></div><button className="btn btn-ghost" type="button" onClick={() => retryRun(run)} disabled={busy}>Επανάληψη</button></div>)}</div> : <div className="erp-empty-mini"><Icon name="check" size={20} /> <span>Δεν υπάρχουν αποτυχημένα runs.</span></div>}
+      </section>
       <div className="erp-section-heading"><div><h3>Οι συνδέσεις σου</h3><span>Διαχείριση endpoints και προγραμματισμών</span></div><span className="erp-list-count">{items.length} {items.length === 1 ? 'σύνδεση' : 'συνδέσεις'}</span></div>
       <div className="erp-connector-list">{items.map((connector) => <button className="erp-connector-card" type="button" key={connector.id} onClick={() => openEditor(connector)}><span className="erp-connector-logo"><Icon name="refresh" size={21} /></span><span className="erp-connector-info"><strong>{connector.name}</strong><small>{connector.base_url}</small><span><StatusPill enabled={connector.enabled} />{connector.enabled && <em>Κάθε {connector.schedule_minutes} λεπτά</em>}</span></span><span className="erp-connector-last"><small>Τελευταίο run</small><b>{formatDate(connector.last_run_at)}</b></span><Icon name="chevronRight" size={18} /></button>)}</div>
       <div className="erp-empty-tip"><span className="erp-tip-icon"><Icon name="activity" size={19} /></span><div><b>Πώς λειτουργεί το ERP Sync;</b><span>Ρύθμισε το endpoint, αντιστοίχισε τα JSON fields και ενεργοποίησε τον scheduler. Το σύστημα κάνει ασφαλές matching με ERP IDs.</span></div></div>

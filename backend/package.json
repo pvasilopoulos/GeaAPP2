@@ -11,7 +11,7 @@
     "db:schema": "node src/db/apply-schema.js",
     "db:seed": "node src/db/seed.js",
     "db:reset": "node src/db/apply-schema.js && node src/db/seed.js",
-    "test": "node src/lib/tenantSettings.test.mjs && node src/lib/messaging.test.mjs && node src/lib/activityDiff.test.mjs && node src/lib/mapping.test.mjs && node src/lib/matching.test.mjs && node src/lib/schedulerPolicy.test.mjs && node src/lib/responseEncoding.test.mjs && node src/lib/followUps.test.mjs"
+    "test": "node src/lib/tenantSettings.test.mjs && node src/lib/messaging.test.mjs && node src/lib/activityDiff.test.mjs && node src/lib/mapping.test.mjs && node src/lib/matching.test.mjs && node src/lib/schedulerPolicy.test.mjs && node src/lib/responseEncoding.test.mjs && node src/lib/followUps.test.mjs && node src/lib/syncMonitoring.test.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
