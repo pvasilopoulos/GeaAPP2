@@ -63,6 +63,11 @@ export async function ensureSchema() {
   await addColumn('spaces', 'erp_id', 'VARCHAR(160) NULL');
   await addColumn('spaces', 'branch_erp_id', 'VARCHAR(160) NULL');
   await addUniqueIndex('customers', 'uq_customers_tenant_erp_id', 'tenant_id, erp_id');
+  // ERP identity is based on ERP IDs, not the human-readable/imported code.
+  // Existing installations may still have the inline UNIQUE index named `code`.
+  await dropIndex('customers', 'code');
+  await dropIndex('branches', 'code');
+  await dropIndex('spaces', 'code');
   await query('UPDATE branches b JOIN customers c ON c.id = b.customer_id SET b.customer_erp_id = c.erp_id WHERE b.customer_erp_id IS NULL');
   await query('UPDATE spaces s JOIN branches b ON b.id = s.branch_id SET s.branch_erp_id = b.erp_id WHERE s.branch_erp_id IS NULL');
   await dropIndex('branches', 'uq_branches_tenant_erp_id');
