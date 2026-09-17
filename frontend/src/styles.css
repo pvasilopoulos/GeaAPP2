@@ -477,15 +477,16 @@ a.bd-fact:hover b { color: var(--accent); }
 .bd-section { margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--surface-2); }
 .bd-section-h { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; margin-bottom: 12px; }
 .bd-empty { padding: 22px 18px; text-align: center; color: var(--text-3); font-size: 13px; background: var(--surface-2); border: 1px dashed var(--border-strong); border-radius: 12px; }
-.space-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
+.space-cards { display: grid; grid-template-columns: 1fr; gap: 10px; align-items: stretch; }
 .space-card {
+  display: grid; grid-template-columns: 116px minmax(0, 1fr); align-items: stretch;
   border: 1px solid var(--border); border-radius: 13px; overflow: hidden; background: #fff;
   transition: box-shadow .15s, border-color .15s, transform .15s;
   padding: 0; text-align: left; font: inherit; color: inherit; cursor: pointer; width: 100%;
 }
 .space-card:hover { box-shadow: var(--shadow); border-color: var(--border-strong); transform: translateY(-2px); }
-.space-card .img { height: 118px; background: var(--surface-2); object-fit: cover; width: 100%; display: block; }
-.space-ph { height: 72px; display: grid; place-items: center; background: var(--surface-2); color: var(--text-3); }
+.space-card .img { height: 100%; min-height: 104px; background: var(--surface-2); object-fit: cover; width: 100%; display: block; }
+.space-ph { min-height: 104px; display: grid; place-items: center; background: var(--surface-2); color: var(--text-3); }
 .space-card .body { padding: 11px 13px 13px; }
 .space-card .nm { font-weight: 650; }
 .space-card .st { font-size: 12px; color: var(--text-3); margin-top: 3px; }
@@ -830,6 +831,8 @@ a.bd-fact:hover b { color: var(--accent); }
   .ph-top { flex-wrap: wrap; }
   .ph-actions { margin-left: 0; width: 100%; flex-wrap: wrap; }
   .space-cards { grid-template-columns: 1fr; }
+  .space-card { grid-template-columns: 88px minmax(0, 1fr); }
+  .space-card .img, .space-ph { min-height: 96px; }
   .kpi-grid { grid-template-columns: 1fr; }
   .bd-kpis { grid-template-columns: 1fr; }
   .visit-row { grid-template-columns: 1fr auto; }
