@@ -12,4 +12,9 @@ export const PERMS = {
   ROLES_MANAGE: 'roles.manage',
   TENANT_MANAGE: 'tenant.manage',
   TENANTS_PLATFORM: 'tenants.platform',
+  QUOTES_VIEW: 'quotes.view',
+  QUOTES_CREATE: 'quotes.create',
+  QUOTES_EDIT: 'quotes.edit',
+  QUOTES_SEND_EMAIL: 'quotes.send_email',
+  QUOTES_FETCH_LINES: 'quotes.fetch_lines',
 };
