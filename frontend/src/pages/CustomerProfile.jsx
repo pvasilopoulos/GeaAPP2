@@ -15,15 +15,15 @@ import { CustomerFormDrawer } from '../components/forms.jsx';
 import SendMessageMenu from '../components/message/SendMessageMenu.jsx';
 
 const TABS = [
-  { key: 'overview', label: 'Σύνοψη', icon: 'home' },
-  { key: 'contacts', label: 'Επαφές', icon: 'users' },
-  { key: 'branches', label: 'Υποκαταστήματα & Χώροι', icon: 'building' },
-  { key: 'bookings', label: 'Κρατήσεις', icon: 'calendar' },
-  { key: 'payments', label: 'Πληρωμές', icon: 'wallet' },
-  { key: 'communications', label: 'Επικοινωνίες', icon: 'message' },
-  { key: 'documents', label: 'Έγγραφα', icon: 'file' },
-  { key: 'notes', label: 'Σημειώσεις', icon: 'note' },
-  { key: 'activity', label: 'Δραστηριότητα', icon: 'activity' },
+  { key: 'overview', label: 'Σύνοψη', icon: 'home', group: 'Πελάτης' },
+  { key: 'contacts', label: 'Επαφές', icon: 'users', group: 'Πελάτης' },
+  { key: 'branches', label: 'Υποκαταστήματα & Χώροι', icon: 'building', group: 'Πελάτης' },
+  { key: 'bookings', label: 'Κρατήσεις', icon: 'calendar', group: 'Συναλλαγές' },
+  { key: 'payments', label: 'Πληρωμές', icon: 'wallet', group: 'Συναλλαγές' },
+  { key: 'communications', label: 'Επικοινωνίες', icon: 'message', group: 'Επικοινωνία' },
+  { key: 'documents', label: 'Έγγραφα', icon: 'file', group: 'Επικοινωνία' },
+  { key: 'notes', label: 'Σημειώσεις', icon: 'note', group: 'Επικοινωνία' },
+  { key: 'activity', label: 'Δραστηριότητα', icon: 'activity', group: 'Επικοινωνία' },
 ];
 
 export default function CustomerProfile({ customerId, tabId, onBack }) {
@@ -85,7 +85,7 @@ export default function CustomerProfile({ customerId, tabId, onBack }) {
             </div>
           ) : null}
 
-          <div style={{ minWidth: 0 }}>
+          <div className="ph-main">
             <div className="ph-id">
               <h1>{c.full_name}</h1>
               {c.is_vip && <VipBadge />}
@@ -123,15 +123,22 @@ export default function CustomerProfile({ customerId, tabId, onBack }) {
         )}
       </div>
 
-      <div className="tabs">
-        {TABS.map((t) => (
-          <button key={t.key} className={`tab${tab === t.key ? ' active' : ''}`} onClick={() => setTab(t.key)}>
-            <Icon name={t.icon} /> {t.label}
-          </button>
+      <div className="profile-tabs" role="tablist" aria-label="Ενότητες πελάτη">
+        {['Πελάτης', 'Συναλλαγές', 'Επικοινωνία'].map((group) => (
+          <div className="profile-tab-group" key={group}>
+            <span className="profile-tab-group-label">{group}</span>
+            <div className="profile-tab-items">
+              {TABS.filter((t) => t.group === group).map((t) => (
+                <button key={t.key} role="tab" aria-selected={tab === t.key} className={`tab${tab === t.key ? ' active' : ''}`} onClick={() => setTab(t.key)}>
+                  <Icon name={t.icon} /> <span>{t.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
         ))}
       </div>
 
-      <div style={{ marginTop: 20 }}>
+      <div className="profile-content">
         {tab === 'overview' && <Overview customerId={id} data={data} onOpenTab={setTab} onEditCustomer={() => setShowEdit(true)} />}
         {tab === 'contacts' && <ContactsPanel customerId={id} customerType={c.customer_type} />}
         {tab === 'branches' && <BranchesSpaces customerId={id} />}

@@ -77,7 +77,7 @@ export default function Overview({ customerId, data, onOpenTab, onEditCustomer }
   ];
 
   return (
-    <div className="grid-3">
+    <div className="profile-overview-grid">
       {/* LEFT */}
       <div className="stack">
         <div className="card">
