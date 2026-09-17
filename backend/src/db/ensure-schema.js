@@ -42,24 +42,6 @@ async function addColumn(table, column, ddl) {
   console.log(`[schema] added ${table}.${column}`);
 }
 
-async function ensureCustomerFullName() {
-  const { rows } = await query(
-    `SELECT GENERATION_EXPRESSION AS expression
-     FROM information_schema.COLUMNS
-     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'customers' AND COLUMN_NAME = 'full_name'`,
-  );
-  const expression = String(rows[0]?.expression || '').toLowerCase();
-  if (expression.includes('trim(company)')) return;
-  await query(
-    `ALTER TABLE customers MODIFY COLUMN full_name VARCHAR(255)
-     GENERATED ALWAYS AS (
-       CASE WHEN company IS NOT NULL AND TRIM(company) <> ''
-       THEN company ELSE TRIM(CONCAT(first_name, ' ', last_name)) END
-     ) STORED`,
-  );
-  console.log('[schema] updated customers.full_name for company imports');
-}
-
 export async function ensureSchema() {
   await addColumn('tenants', 'status', "VARCHAR(20) NOT NULL DEFAULT 'active'");
   await addColumn('tenants', 'locale', "VARCHAR(10) NOT NULL DEFAULT 'el'");
@@ -80,7 +62,6 @@ export async function ensureSchema() {
   await addColumn('branches', 'customer_erp_id', 'VARCHAR(160) NULL');
   await addColumn('spaces', 'erp_id', 'VARCHAR(160) NULL');
   await addColumn('spaces', 'branch_erp_id', 'VARCHAR(160) NULL');
-  await ensureCustomerFullName();
   await addUniqueIndex('customers', 'uq_customers_tenant_erp_id', 'tenant_id, erp_id');
   // ERP identity is based on ERP IDs, not the human-readable/imported code.
   // Existing installations may still have the inline UNIQUE index named `code`.

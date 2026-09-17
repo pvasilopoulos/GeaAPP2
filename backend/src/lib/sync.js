@@ -110,11 +110,6 @@ function mapEntityRecord(entity, raw, mapping) {
       const fallback = paths.map((path) => getPath(raw, path)).find((value) => value !== undefined && value !== null && value !== '');
       if (fallback !== undefined) data[field] = fallback;
     }
-    if (data.company !== undefined && data.company !== null && String(data.company).trim() !== '') {
-      data.company = String(data.company).trim();
-      data.first_name = '';
-      data.last_name = '';
-    }
   }
   return data;
 }
@@ -211,9 +206,8 @@ async function upsert(conn, table, tenantId, data) {
     await conn.query(
       `INSERT INTO customers (tenant_id, erp_id, code, first_name, last_name, company, email, phone, mobile, tax_id, customer_type, address_line, city, postal_code, status, search_norm)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [tenantId, erpId, data.code || `ERP-${tenantId}-${erpId}`, data.first_name || '',
-        data.last_name || '', data.company, data.email, data.phone, data.mobile, data.tax_id,
-        data.customer_type || (data.company ? 'company' : 'individual'),
+      [tenantId, erpId, data.code || `ERP-${tenantId}-${erpId}`, data.first_name || data.name || data.company || erpId,
+        data.last_name || '', data.company, data.email, data.phone, data.mobile, data.tax_id, data.customer_type || 'individual',
         data.address_line, data.city, data.postal_code, data.status || 'active', normalized],
     );
   } else if (table === 'branches') {
