@@ -43,6 +43,7 @@ const P = {
   telegram: 'M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z',
   sms: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2zM8 9h8M8 13h5',
   viber: 'M5.6 3.8C8.2 2 12.2 2 15.6 3.6c3.2 1.6 5 4.6 5 8.2 0 5.4-4.2 9.2-9.4 9.2h-.4l-4.2 2.2.8-3.4C4.6 17.8 3 14.8 3 11.6c0-3.4 1.2-6 2.6-7.8zM9 10h.01M12 10h.01M15 10h.01',
+  archive: 'M3 6h18v3H3zM5 9v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4',
 };
 
 export default function Icon({ name, size = 18, style, className, strokeWidth = 1.8 }) {

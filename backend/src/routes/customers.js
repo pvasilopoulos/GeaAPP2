@@ -11,6 +11,7 @@ import { parseJson } from '../lib/masterData.js';
 import { CHANNELS, CHANNEL_META, deliverMessage, mergeMessaging } from '../lib/messaging.js';
 import { mergeTenantSettings } from '../lib/tenantSettings.js';
 import { diffRecords, snapshotFields, packDetails, changeSummary, parseDetails } from '../lib/activityDiff.js';
+import { parseNotePayload, noteReminderState } from '../lib/notes.js';
 
 const CUSTOMER_FIELDS = ['first_name', 'last_name', 'email', 'phone', 'mobile', 'company',
   'tax_id', 'customer_type', 'status', 'is_vip', 'date_of_birth', 'address_line', 'city',
@@ -465,34 +466,75 @@ customersRouter.post('/:id/documents', authorize(PERMISSIONS.CUSTOMERS_WRITE), a
   } catch (err) { next(err); }
 });
 
-customersRouter.get('/:id/notes', subResource(
-  `SELECT n.id, n.body, n.title, n.body_html, n.category, n.is_pinned, n.is_archived, n.employee_id, n.created_at, e.full_name AS author_name
-   FROM notes n LEFT JOIN employees e ON e.id = n.employee_id
-   WHERE n.customer_id = ? AND n.is_archived = 0 ORDER BY n.is_pinned DESC, n.created_at DESC LIMIT ? OFFSET ?`));
+function mapNoteRow(row) {
+  const tags = parseJson(row.tags, []) || [];
+  return { ...row, tags, reminder_state: noteReminderState(row.due_at, row.is_archived) };
+}
+
+// GET /:id/notes — supports free-text search, category/tag/pin filters,
+// archive scoping and reminder-due filtering for the customer notes timeline.
+customersRouter.get('/:id/notes', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const limit = clampLimit(req.query.limit, 15, 50);
+    const offset = Number(req.query.offset) || 0;
+    const where = ['n.customer_id = ?'];
+    const params = [id];
+    const archived = String(req.query.archived || '0');
+    if (archived === '1') where.push('n.is_archived = 1');
+    else if (archived !== 'all') where.push('n.is_archived = 0');
+    if (req.query.category) { where.push('n.category = ?'); params.push(String(req.query.category).trim().slice(0, 60)); }
+    if (req.query.pinned === '1') where.push('n.is_pinned = 1');
+    if (req.query.tag) { where.push('JSON_CONTAINS(n.tags, JSON_QUOTE(?))'); params.push(String(req.query.tag).trim().slice(0, 30)); }
+    if (req.query.due === 'overdue') where.push('n.due_at IS NOT NULL AND n.due_at < NOW() AND n.is_archived = 0');
+    else if (req.query.due === 'upcoming') where.push('n.due_at IS NOT NULL AND n.due_at >= NOW()');
+    else if (req.query.due === 'has_due') where.push('n.due_at IS NOT NULL');
+    const q = String(req.query.q || '').trim();
+    if (q) { where.push('(n.title LIKE ? OR n.body LIKE ?)'); params.push(`%${q}%`, `%${q}%`); }
+    params.push(limit + 1, offset);
+    const { rows } = await query(
+      `SELECT n.id, n.body, n.title, n.body_html, n.category, n.is_pinned, n.is_archived, n.due_at, n.tags,
+              n.employee_id, n.created_at, n.updated_at, e.full_name AS author_name
+       FROM notes n LEFT JOIN employees e ON e.id = n.employee_id
+       WHERE ${where.join(' AND ')}
+       ORDER BY n.is_pinned DESC, COALESCE(n.due_at, '9999-12-31') ASC, n.created_at DESC
+       LIMIT ? OFFSET ?`, params);
+    const hasMore = rows.length > limit;
+    const page = rows.slice(0, limit).map(mapNoteRow);
+    res.json({ results: page, hasMore, nextOffset: offset + limit });
+  } catch (err) { next(err); }
+});
 
 customersRouter.post('/:id/notes', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
   try {
     const customerId = Number(req.params.id);
-    const title = String(req.body?.title || '').trim().slice(0, 200);
-    const bodyHtml = String(req.body?.body_html || '').replace(/<script[\s\S]*?<\/script>/gi, '').trim();
-    const body = String(req.body?.body || bodyHtml.replace(/<[^>]+>/g, ' ')).trim();
-    if (!body) return res.status(400).json({ error: 'Η σημείωση δεν μπορεί να είναι κενή' });
+    const parsed = parseNotePayload(req.body);
+    if (parsed.error) return res.status(400).json({ error: parsed.error });
     const r = await query(
-      `INSERT INTO notes (customer_id, body, title, body_html, category, is_pinned, employee_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [customerId, body, title || null, bodyHtml || null, String(req.body?.category || 'general').slice(0, 60), req.body?.is_pinned ? 1 : 0, req.user.id]);
+      `INSERT INTO notes (customer_id, body, title, body_html, category, is_pinned, due_at, tags, employee_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [customerId, parsed.body, parsed.title, parsed.bodyHtml, parsed.category, parsed.isPinned, parsed.dueAt,
+        JSON.stringify(parsed.tags), req.user.id]);
     res.status(201).json({ id: r.rows.insertId });
   } catch (err) { next(err); }
 });
 
 customersRouter.patch('/:id/notes/:noteId', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
   try {
-    const bodyHtml = String(req.body?.body_html || '').replace(/<script[\s\S]*?<\/script>/gi, '').trim();
-    const body = String(req.body?.body || bodyHtml.replace(/<[^>]+>/g, ' ')).trim();
-    if (!body) return res.status(400).json({ error: 'Η σημείωση δεν μπορεί να είναι κενή' });
-    await query(
-      `UPDATE notes SET title = ?, body = ?, body_html = ?, category = ?, is_pinned = ? WHERE id = ? AND customer_id = ?`,
-      [String(req.body?.title || '').trim().slice(0, 200) || null, body, bodyHtml || null, String(req.body?.category || 'general').slice(0, 60), req.body?.is_pinned ? 1 : 0, Number(req.params.noteId), Number(req.params.id)]);
+    const parsed = parseNotePayload(req.body, { partial: true });
+    if (parsed.error) return res.status(400).json({ error: parsed.error });
+    const fields = [];
+    const params = [];
+    if (parsed.title !== undefined) { fields.push('title = ?'); params.push(parsed.title); }
+    if (parsed.body !== undefined) { fields.push('body = ?', 'body_html = ?'); params.push(parsed.body, parsed.bodyHtml); }
+    if (parsed.category !== undefined) { fields.push('category = ?'); params.push(parsed.category); }
+    if (parsed.isPinned !== undefined) { fields.push('is_pinned = ?'); params.push(parsed.isPinned); }
+    if (parsed.isArchived !== undefined) { fields.push('is_archived = ?'); params.push(parsed.isArchived); }
+    if (parsed.dueAt !== undefined) { fields.push('due_at = ?'); params.push(parsed.dueAt); }
+    if (parsed.tags !== undefined) { fields.push('tags = ?'); params.push(JSON.stringify(parsed.tags)); }
+    if (!fields.length) return res.json({ ok: true });
+    params.push(Number(req.params.noteId), Number(req.params.id));
+    await query(`UPDATE notes SET ${fields.join(', ')} WHERE id = ? AND customer_id = ?`, params);
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
