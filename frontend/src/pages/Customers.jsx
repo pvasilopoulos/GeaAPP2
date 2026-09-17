@@ -220,6 +220,9 @@ export default function Customers({ onOpenCustomer }) {
     const values = typeof customer.custom_fields === 'string' ? (() => { try { return JSON.parse(customer.custom_fields); } catch { return {}; } })() : (customer.custom_fields || {});
     return values[key];
   };
+  const visibleColumns = columnOrder
+    .map((key) => availableColumns.find((column) => column.key === key))
+    .filter((column) => column && !hiddenColumns.includes(column.key));
   const tableGrid = visibleColumns.map((column) => {
     if (column.key === 'name') return 'minmax(250px, 2.4fr)';
     if (column.key === 'actions') return '42px';
@@ -227,9 +230,6 @@ export default function Customers({ onOpenCustomer }) {
     if (column.key === 'last_visit') return 'minmax(130px, 1.1fr)';
     return 'minmax(110px, 1fr)';
   }).join(' ');
-  const visibleColumns = columnOrder
-    .map((key) => availableColumns.find((column) => column.key === key))
-    .filter((column) => column && !hiddenColumns.includes(column.key));
   const viewConfig = () => ({ filters, columns: columnOrder, hiddenColumns, sort, sortDir, pageSize });
   const saveView = async () => {
     const name = viewName.trim() || window.prompt('Όνομα λίστας', activeView?.name || '');
