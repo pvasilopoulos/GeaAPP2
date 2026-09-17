@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api.js';
 import Icon from '../Icon.jsx';
@@ -17,6 +17,8 @@ export default function BranchesSpaces({ customerId }) {
   const [drawerSpace, setDrawerSpace] = useState(null);
   const [branchForm, setBranchForm] = useState(null); // {branch?}
   const [spaceForm, setSpaceForm] = useState(null);    // {branchId, space?}
+  const [spacesOpen, setSpacesOpen] = useState(true);
+  const [visitsOpen, setVisitsOpen] = useState(true);
 
   const { data, isLoading } = useQuery({
     queryKey: ['c-branches', customerId],
@@ -25,6 +27,11 @@ export default function BranchesSpaces({ customerId }) {
   const { data: meta } = useQuery({ queryKey: ['meta'], queryFn: ({ signal }) => api.meta({ signal }) });
   const mapProvider = meta?.tenant?.settings?.map_provider || 'google';
   const mapsApiKey = meta?.tenant?.settings?.google_maps_api_key || '';
+  const preferences = meta?.tenant?.settings?.view_preferences?.branch_detail || {};
+  useEffect(() => {
+    setSpacesOpen(preferences.spaces_expanded !== false);
+    setVisitsOpen(preferences.visits_expanded !== false);
+  }, [preferences.spaces_expanded, preferences.visits_expanded]);
   const visitsQ = useQuery({
     queryKey: ['c-visits', customerId, 'bs'],
     queryFn: ({ signal }) => api.customerVisits(customerId, { limit: 50 }, { signal }),
@@ -233,11 +240,11 @@ function BranchDetail({ selected, canWrite, mapProvider, mapsApiKey, branchVisit
           </div>
         </header>
 
-        <div className="bd-kpis">
+        {preferences.show_kpis !== false && <div className="bd-kpis">
           <div className="bd-kpi"><Icon name="grid" size={16} /><div><div className="v">{formatNumber(selected.spaces.length)}</div><div className="l">Χώροι</div></div></div>
           <div className="bd-kpi"><Icon name="pin" size={16} /><div><div className="v">{formatNumber(selected.visits_count)}</div><div className="l">Επισκέψεις</div></div></div>
           <div className="bd-kpi"><Icon name="wallet" size={16} /><div><div className="v">{formatCurrency(selected.total_value)}</div><div className="l">Αξία</div></div></div>
-        </div>
+        </div>}
 
         <div className="bd-split">
           <div className="bd-facts">
@@ -247,8 +254,8 @@ function BranchDetail({ selected, canWrite, mapProvider, mapsApiKey, branchVisit
             <Fact icon="users" label="Υπεύθυνος" value={selected.manager_name} />
           </div>
           <div className="bd-aside">
-            <HoursStrip hours={selected.opening_hours} />
-            {embed && (
+            {preferences.show_hours !== false && <HoursStrip hours={selected.opening_hours} />}
+            {preferences.show_map !== false && embed && (
               <div className="bd-map">
                 <iframe title="Χάρτης" src={embed} loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
                 <a className="bd-map-open" href={href} target="_blank" rel="noreferrer">Άνοιγμα σε {providerName}</a>
@@ -257,14 +264,18 @@ function BranchDetail({ selected, canWrite, mapProvider, mapsApiKey, branchVisit
           </div>
         </div>
 
-        <div className="bd-section">
+        {preferences.show_spaces !== false && <div className="bd-section">
           <div className="bd-section-h">
             <div>
               <div className="section-title" style={{ margin: 0 }}>Χώροι</div>
               <div className="muted" style={{ fontSize: 12.5, marginTop: 2 }}>{selected.spaces.length} στον χώρο εργασίας του πελάτη</div>
             </div>
-            {canWrite && <button className="btn btn-sm btn-accent" onClick={onAddSpace}><Icon name="plus" size={14} /> Προσθήκη</button>}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-sm" onClick={() => setSpacesOpen((v) => !v)}>{spacesOpen ? 'Απόκρυψη' : 'Εμφάνιση'}</button>
+              {canWrite && <button className="btn btn-sm btn-accent" onClick={onAddSpace}><Icon name="plus" size={14} /> Προσθήκη</button>}
+            </div>
           </div>
+          {spacesOpen && <>
           {selected.spaces.length === 0 ? (
             <div className="bd-empty">Δεν υπάρχουν χώροι σε αυτό το υποκατάστημα.</div>
           ) : (
@@ -291,10 +302,13 @@ function BranchDetail({ selected, canWrite, mapProvider, mapsApiKey, branchVisit
               ))}
             </div>
           )}
+          </>}
         </div>
+        }
 
-        <div className="bd-section">
-          <div className="section-title" style={{ marginBottom: 8 }}>Πρόσφατες επισκέψεις</div>
+        {preferences.show_visits !== false && <div className="bd-section">
+          <div className="bd-section-h"><div className="section-title" style={{ margin: 0 }}>Πρόσφατες επισκέψεις</div><button className="btn btn-sm" onClick={() => setVisitsOpen((v) => !v)}>{visitsOpen ? 'Απόκρυψη' : 'Εμφάνιση'}</button></div>
+          {visitsOpen && <>
           {visitsLoading ? <Skeleton h={80} /> : branchVisits.length === 0 ? (
             <div className="bd-empty">Χωρίς επισκέψεις σε αυτό το υποκατάστημα.</div>
           ) : (
@@ -311,7 +325,9 @@ function BranchDetail({ selected, canWrite, mapProvider, mapsApiKey, branchVisit
               ))}
             </div>
           )}
+          </>}
         </div>
+        }
       </div>
     </div>
   );

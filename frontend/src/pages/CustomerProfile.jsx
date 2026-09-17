@@ -28,7 +28,9 @@ const TABS = [
 
 export default function CustomerProfile({ customerId, tabId, onBack }) {
   const id = customerId;
-  const [tab, setTab] = useState('overview');
+  const { data: meta } = useQuery({ queryKey: ['meta'], queryFn: ({ signal }) => api.meta({ signal }) });
+  const viewPreferences = meta?.tenant?.settings?.view_preferences;
+  const [tab, setTab] = useState(viewPreferences?.customer_profile?.default_tab || 'overview');
   const [showEdit, setShowEdit] = useState(false);
   const renameTab = useTabs((s) => s.renameTab);
   const closeTab = useTabs((s) => s.closeTab);
@@ -53,6 +55,10 @@ export default function CustomerProfile({ customerId, tabId, onBack }) {
   useEffect(() => {
     if (data?.customer && tabId) renameTab(tabId, data.customer.full_name);
   }, [data, tabId, renameTab]);
+  useEffect(() => {
+    const preferred = viewPreferences?.customer_profile?.default_tab;
+    if (preferred && visibleTabKey(preferred, viewPreferences)) setTab(preferred);
+  }, [viewPreferences]);
 
   if (isLoading) return <ProfileSkeleton />;
   if (isError || !data) {
@@ -65,7 +71,12 @@ export default function CustomerProfile({ customerId, tabId, onBack }) {
       </div>
     );
   }
+
+  function visibleTabKey(key, preferences) {
+    return key === 'overview' || preferences?.customer_profile?.[`show_${key}`] !== false;
+  }
   const c = data.customer;
+  const visibleTabs = TABS.filter((item) => item.key === 'overview' || viewPreferences?.customer_profile?.[`show_${item.key}`] !== false);
   const joined = new Date(c.registered_at);
 
   return (
@@ -128,7 +139,7 @@ export default function CustomerProfile({ customerId, tabId, onBack }) {
           <div className="profile-tab-group" key={group}>
             <span className="profile-tab-group-label">{group}</span>
             <div className="profile-tab-items">
-              {TABS.filter((t) => t.group === group).map((t) => (
+              {visibleTabs.filter((t) => t.group === group).map((t) => (
                 <button key={t.key} role="tab" aria-selected={tab === t.key} className={`tab${tab === t.key ? ' active' : ''}`} onClick={() => setTab(t.key)}>
                   <Icon name={t.icon} /> <span>{t.label}</span>
                 </button>

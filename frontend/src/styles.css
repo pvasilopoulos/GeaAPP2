@@ -685,6 +685,9 @@ a.bd-fact:hover b { color: var(--accent); }
 .settings-section-head h2 { margin: 4px 0 3px; font-size: 21px; letter-spacing: -.02em; }
 .settings-section-head .muted { font-size: 13px; }
 .settings-section-icon { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 13px; background: var(--accent-soft); color: var(--accent); flex: none; }
+.settings-subsection { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border); }
+.settings-subsection .section-title { margin-bottom: 8px; }
+.settings-help { font-size: 12.5px; margin: -3px 0 10px; }
 .settings-body { min-width: 0; }
 
 .people-tabs { display: flex; gap: 6px; margin-bottom: 14px; }

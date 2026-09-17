@@ -3,7 +3,7 @@ import { mergeMessaging } from './messaging.js';
 export const APP_SETTING_KEYS = [
   'default_country', 'date_format', 'week_starts_on',
   'default_customer_status', 'require_email', 'strict_duplicates',
-  'voice_lang', 'allow_vip', 'map_provider',
+  'voice_lang', 'allow_vip', 'map_provider', 'view_preferences',
 ];
 
 export const MAP_PROVIDER_IDS = ['google', 'osm', 'apple', 'bing'];
@@ -19,6 +19,28 @@ export const DEFAULT_TENANT_SETTINGS = {
   allow_vip: true,
   map_provider: 'google',
   google_maps_api_key: '',
+  view_preferences: {
+    customer_profile: {
+      default_tab: 'overview',
+      show_contacts: true,
+      show_branches: true,
+      show_bookings: true,
+      show_payments: true,
+      show_communications: true,
+      show_documents: true,
+      show_notes: true,
+      show_activity: true,
+    },
+    branch_detail: {
+      show_hours: true,
+      show_map: true,
+      show_kpis: true,
+      show_spaces: true,
+      show_visits: true,
+      spaces_expanded: true,
+      visits_expanded: true,
+    },
+  },
 };
 
 export const DEFAULT_PLATFORM_SETTINGS = {
@@ -41,11 +63,16 @@ export function mergeTenantSettings(raw) {
   const parsed = parseJson(raw, {}) || {};
   const map_provider = MAP_PROVIDER_IDS.includes(parsed.map_provider) ? parsed.map_provider : DEFAULT_TENANT_SETTINGS.map_provider;
   const google_maps_api_key = parsed.google_maps_api_key == null ? '' : String(parsed.google_maps_api_key);
+  const rawViews = parsed.view_preferences && typeof parsed.view_preferences === 'object' ? parsed.view_preferences : {};
   return {
     ...DEFAULT_TENANT_SETTINGS,
     ...parsed,
     map_provider,
     google_maps_api_key,
+    view_preferences: {
+      customer_profile: { ...DEFAULT_TENANT_SETTINGS.view_preferences.customer_profile, ...(rawViews.customer_profile || {}) },
+      branch_detail: { ...DEFAULT_TENANT_SETTINGS.view_preferences.branch_detail, ...(rawViews.branch_detail || {}) },
+    },
     messaging: mergeMessaging(parsed.messaging),
   };
 }
@@ -79,7 +106,12 @@ export function applyAppSettingsPatch(current, body) {
   const merged = mergeTenantSettings(current);
   const patch = {};
   for (const k of APP_SETTING_KEYS) {
-    if (src[k] !== undefined) patch[k] = src[k];
+    if (src[k] !== undefined) patch[k] = k === 'view_preferences'
+      ? {
+        customer_profile: { ...merged.view_preferences.customer_profile, ...(src[k]?.customer_profile || {}) },
+        branch_detail: { ...merged.view_preferences.branch_detail, ...(src[k]?.branch_detail || {}) },
+      }
+      : src[k];
   }
   const next = mergeTenantSettings({ ...merged, ...patch, messaging: merged.messaging });
   const incomingKey = src.google_maps_api_key;
