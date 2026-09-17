@@ -101,7 +101,7 @@ export default function AppPanel() {
         {[
           ['show_hours', 'Εμφάνιση ωραρίου'], ['show_map', 'Εμφάνιση χάρτη'],
           ['show_kpis', 'Εμφάνιση KPIs'], ['show_spaces', 'Εμφάνιση χώρων'],
-          ['show_visits', 'Εμφάνιση πρόσφατων επισκέψεων'], ['spaces_expanded', 'Οι χώροι να εμφανίζονται expanded'],
+          ['branch_expanded', 'Το detail υποκαταστήματος να ανοίγει αρχικά'], ['show_visits', 'Εμφάνιση πρόσφατων επισκέψεων'], ['spaces_expanded', 'Οι χώροι να εμφανίζονται expanded'],
           ['visits_expanded', 'Οι επισκέψεις να εμφανίζονται expanded'],
         ].map(([key, label]) => <label style={chk} key={key}><input type="checkbox" checked={f.view_preferences?.branch_detail?.[key] !== false} onChange={setView('branch_detail', key)} /> {label}</label>)}
       </div>

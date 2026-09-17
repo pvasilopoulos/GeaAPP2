@@ -34,13 +34,14 @@ export const DEFAULT_TENANT_SETTINGS = {
       show_branch_invoices: true,
     },
     branch_detail: {
+      branch_expanded: false,
       show_hours: false,
       show_map: false,
       show_kpis: true,
       show_spaces: true,
       show_visits: true,
-      spaces_expanded: true,
-      visits_expanded: true,
+      spaces_expanded: false,
+      visits_expanded: false,
     },
   },
 };

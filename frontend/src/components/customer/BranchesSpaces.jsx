@@ -17,8 +17,9 @@ export default function BranchesSpaces({ customerId }) {
   const [drawerSpace, setDrawerSpace] = useState(null);
   const [branchForm, setBranchForm] = useState(null); // {branch?}
   const [spaceForm, setSpaceForm] = useState(null);    // {branchId, space?}
-  const [spacesOpen, setSpacesOpen] = useState(true);
-  const [visitsOpen, setVisitsOpen] = useState(true);
+  const [branchOpen, setBranchOpen] = useState(false);
+  const [spacesOpen, setSpacesOpen] = useState(false);
+  const [visitsOpen, setVisitsOpen] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['c-branches', customerId],
@@ -29,6 +30,7 @@ export default function BranchesSpaces({ customerId }) {
   const mapsApiKey = meta?.tenant?.settings?.google_maps_api_key || '';
   const preferences = meta?.tenant?.settings?.view_preferences?.branch_detail || {};
   useEffect(() => {
+    setBranchOpen(preferences.branch_expanded === true);
     setSpacesOpen(preferences.spaces_expanded !== false);
     setVisitsOpen(preferences.visits_expanded !== false);
   }, [preferences.spaces_expanded, preferences.visits_expanded]);
@@ -83,6 +85,17 @@ export default function BranchesSpaces({ customerId }) {
     <div className="bs-layout">
       {/* LEFT PANEL */}
       <div className="stack">
+        <div className="card branch-summary">
+          <div className="card-head"><h3><Icon name="layers" /> Συνολική εικόνα</h3><span className="muted">Όλα τα υποκαταστήματα του πελάτη</span></div>
+          <div className="card-pad">
+            <div className="stat-grid">
+              <MiniOverview icon="building" v={formatNumber(totals.branches)} l="Υποκαταστήματα" />
+              <MiniOverview icon="grid" v={formatNumber(totals.spaces)} l="Σύνολο χώρων" />
+              <MiniOverview icon="pin" v={formatNumber(totals.visits)} l="Επισκέψεις" />
+              <MiniOverview icon="wallet" v={formatCurrency(totals.value)} l="Συνολική αξία" />
+            </div>
+          </div>
+        </div>
         <div className="card branch-directory">
           <div className="card-head">
             <h3><Icon name="building" /> Υποκαταστήματα πελάτη <span className="muted">({branches.length})</span></h3>
@@ -95,7 +108,11 @@ export default function BranchesSpaces({ customerId }) {
             </div>
             <div className="branch-list">
               {filtered.map((b) => (
-                <div key={b.id} className={`branch-item${selected?.id === b.id ? ' active' : ''}`} onClick={() => setSelectedId(b.id)}>
+                <div key={b.id} className={`branch-item${selected?.id === b.id && branchOpen ? ' active' : ''}`} onClick={() => {
+                  const isSame = selected?.id === b.id;
+                  setSelectedId(b.id);
+                  setBranchOpen(!isSame || !branchOpen);
+                }}>
                   {b.image_url ? <BranchThumb src={b.image_url} name={b.name} size={64} /> : (
                     <div className="branch-tile-placeholder"><Icon name="building" size={22} /></div>
                   )}
@@ -104,28 +121,17 @@ export default function BranchesSpaces({ customerId }) {
                     <div className="ad">{b.address_line}, {b.city}</div>
                     <div className="st"><StatusBadge status={b.status || 'active'} /> · {formatNumber(b.spaces.length)} χώροι · {formatNumber(b.visits_count)} επισκέψεις</div>
                   </div>
-                  <Icon name="chevronRight" size={16} style={{ color: 'var(--text-3)' }} />
+                  <span className="branch-tile-action">{selected?.id === b.id && branchOpen ? 'Απόκρυψη' : 'Προβολή'} <Icon name={selected?.id === b.id && branchOpen ? 'chevronDown' : 'chevronRight'} size={14} /></span>
                 </div>
               ))}
             </div>
           </div>
         </div>
 
-        <div className="card">
-          <div className="card-head"><h3><Icon name="layers" /> Συνολική εικόνα</h3></div>
-          <div className="card-pad">
-            <div className="stat-grid">
-              <MiniOverview icon="building" v={formatNumber(totals.branches)} l="Υποκαταστήματα" />
-              <MiniOverview icon="grid" v={formatNumber(totals.spaces)} l="Σύνολο χώρων" />
-              <MiniOverview icon="pin" v={formatNumber(totals.visits)} l="Επισκέψεις" />
-              <MiniOverview icon="wallet" v={formatCurrency(totals.value)} l="Συνολική αξία" />
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* RIGHT PANEL */}
-      {selected && (
+      {selected && branchOpen && (
         <BranchDetail
           selected={selected}
           canWrite={canWrite}
