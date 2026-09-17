@@ -4,6 +4,7 @@ import { getPath, mapRecord, validateMappings } from './mapping.js';
 import { retryDelay } from './schedulerPolicy.js';
 import { parseEncodedJson } from './responseEncoding.js';
 import { normalizeFields } from './normalize.js';
+import { valueColumns } from './customFields.js';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -84,32 +85,91 @@ function searchNorm(table, data) {
     return normalizeFields(data.code, data.first_name, data.last_name, data.company, data.email, data.phone, data.mobile, data.tax_id, data.address_line, data.city);
   }
 
-  function mapEntityRecord(entity, raw, mapping) {
-    const data = mapRecord(raw, mapping);
-    if (entity === 'customers') {
-      const aliases = {
-        erp_id: ['customer_id', 'id'],
-        code: ['code'],
-        company: ['company_name', 'trade_name'],
-        address_line: ['address_street', 'address'],
-        postal_code: ['address_postal', 'postal_code', 'postalCode'],
-        city: ['address_city', 'city'],
-        mobile: ['mobile', 'mobile_phone'],
-        tax_id: ['vat_number', 'tax_id'],
-        customer_type: ['customer_type'],
-        email: ['email'],
-        phone: ['phone'],
-        status: ['status'],
-      };
-      for (const [field, paths] of Object.entries(aliases)) {
-        if (data[field] !== undefined && data[field] !== null && data[field] !== '') continue;
-        const fallback = paths.map((path) => getPath(raw, path)).find((value) => value !== undefined && value !== null && value !== '');
-        if (fallback !== undefined) data[field] = fallback;
-      }
-    }
-    return data;
-  }
   return normalizeFields(data.code, data.name, data.address_line, data.city, data.phone, data.space_type, data.status);
+}
+
+function mapEntityRecord(entity, raw, mapping) {
+  const data = mapRecord(raw, mapping);
+  if (entity === 'customers') {
+    const aliases = {
+      erp_id: ['customer_id', 'id'],
+      code: ['code'],
+      company: ['company_name', 'trade_name'],
+      address_line: ['address_street', 'address'],
+      postal_code: ['address_postal', 'postal_code', 'postalCode'],
+      city: ['address_city', 'city'],
+      mobile: ['mobile', 'mobile_phone'],
+      tax_id: ['vat_number', 'tax_id'],
+      customer_type: ['customer_type'],
+      email: ['email'],
+      phone: ['phone'],
+      status: ['status'],
+    };
+    for (const [field, paths] of Object.entries(aliases)) {
+      if (data[field] !== undefined && data[field] !== null && data[field] !== '') continue;
+      const fallback = paths.map((path) => getPath(raw, path)).find((value) => value !== undefined && value !== null && value !== '');
+      if (fallback !== undefined) data[field] = fallback;
+    }
+  }
+  return data;
+}
+
+async function loadCustomDefinitions(conn, tenantId, entity) {
+  const [rows] = await conn.query(
+    'SELECT id, `key`, field_type FROM custom_field_definitions WHERE tenant_id = ? AND entity_type = ? AND active = 1',
+    [tenantId, entity],
+  );
+  return rows;
+}
+
+function mapCustomFields(raw, mapping, definitions) {
+  const configured = mapping?.custom_fields;
+  if (!configured || typeof configured !== 'object') return {};
+  const byKey = new Map(definitions.map((definition) => [String(definition.key), definition]));
+  const byId = new Map(definitions.map((definition) => [String(definition.id), definition]));
+  const values = {};
+  for (const [field, path] of Object.entries(configured)) {
+    const definition = byKey.get(String(field)) || byId.get(String(field));
+    if (!definition || !path) continue;
+    const value = getPath(raw, path);
+    if (value !== undefined) values[definition.id] = value;
+  }
+  return values;
+}
+
+async function saveMappedCustomFields(conn, entity, entityId, values) {
+  if (!entityId || !Object.keys(values).length) return;
+  const metadata = {
+    customers: { table: 'customer_custom_field_values', column: 'customer_id' },
+    branches: { table: 'branch_custom_field_values', column: 'branch_id' },
+    spaces: { table: 'space_custom_field_values', column: 'space_id' },
+  }[entity];
+  if (!metadata) return;
+  const [definitions] = await conn.query(
+    'SELECT id, field_type FROM custom_field_definitions WHERE id IN (?)',
+    [Object.keys(values).map(Number)],
+  );
+  const byId = new Map(definitions.map((definition) => [String(definition.id), definition]));
+  for (const [definitionId, rawValue] of Object.entries(values)) {
+    const definition = byId.get(String(definitionId));
+    if (!definition) continue;
+    const columns = valueColumns(definition.field_type, rawValue);
+    if (Object.values(columns).every((value) => value === null)) {
+      await conn.query(
+        `DELETE FROM ${metadata.table} WHERE ${metadata.column} = ? AND field_definition_id = ?`,
+        [entityId, definitionId],
+      );
+    } else {
+      await conn.query(
+        `INSERT INTO ${metadata.table}
+          (${metadata.column}, field_definition_id, text_value, number_value, date_value, boolean_value, json_value)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE text_value = VALUES(text_value), number_value = VALUES(number_value),
+           date_value = VALUES(date_value), boolean_value = VALUES(boolean_value), json_value = VALUES(json_value)`,
+        [entityId, definitionId, columns.text_value, columns.number_value, columns.date_value, columns.boolean_value, columns.json_value],
+      );
+    }
+  }
 }
 
 async function findByErpId(conn, table, tenantId, erpId, fullRow = false) {
@@ -221,9 +281,14 @@ export async function runSync(tenantId, connectorId) {
       try {
         const customers = new Map();
         const branches = new Map();
+        const customDefinitions = {};
+        for (const entity of Object.keys(ENTITY_FIELDS)) {
+          customDefinitions[entity] = await loadCustomDefinitions(conn, tenantId, entity);
+        }
         for (const raw of entities.customers) {
           const data = mapEntityRecord('customers', raw, mappings.customers);
           const id = await upsert(conn, 'customers', tenantId, data);
+          await saveMappedCustomFields(conn, 'customers', id, mapCustomFields(raw, mappings.customers, customDefinitions.customers));
           customers.set(String(data.erp_id), id);
           upserted += 1;
         }
@@ -231,6 +296,7 @@ export async function runSync(tenantId, connectorId) {
           const data = mapEntityRecord('branches', raw, mappings.branches);
           data.customer_id = await resolveCustomer(conn, tenantId, customers, data);
           const id = await upsert(conn, 'branches', tenantId, data);
+          await saveMappedCustomFields(conn, 'branches', id, mapCustomFields(raw, mappings.branches, customDefinitions.branches));
           branches.set(String(data.erp_id), id);
           upserted += 1;
         }
@@ -239,7 +305,8 @@ export async function runSync(tenantId, connectorId) {
           const parent = await resolveBranch(conn, tenantId, branches, data);
           data.branch_id = parent.branchId;
           data.customer_id = parent.customerId;
-          await upsert(conn, 'spaces', tenantId, data);
+          const id = await upsert(conn, 'spaces', tenantId, data);
+          await saveMappedCustomFields(conn, 'spaces', id, mapCustomFields(raw, mappings.spaces, customDefinitions.spaces));
           upserted += 1;
         }
         await conn.commit();
