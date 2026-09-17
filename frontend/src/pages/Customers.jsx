@@ -137,6 +137,7 @@ export default function Customers({ onOpenCustomer }) {
   const [viewName, setViewName] = useState('');
   const [dragColumn, setDragColumn] = useState(null);
   const [customFieldColumns, setCustomFieldColumns] = useState([]);
+  const [columnSearch, setColumnSearch] = useState('');
 
   const { data: meta } = useQuery({ queryKey: ['meta'], queryFn: ({ signal }) => api.meta({ signal }) });
   useEffect(() => {
@@ -209,6 +210,12 @@ export default function Customers({ onOpenCustomer }) {
     }
   };
   const availableColumns = [...new Map([...COLUMNS, ...DATABASE_COLUMNS.map(([key, label]) => ({ key, label })), ...customFieldColumns].map((column) => [column.key, column])).values()];
+  const columnGroups = [
+    { key: 'main', label: 'Βασικά στοιχεία', columns: availableColumns.filter((column) => COLUMNS.some((base) => base.key === column.key)) },
+    { key: 'database', label: 'Πεδία βάσης', columns: availableColumns.filter((column) => DATABASE_COLUMNS.some(([key]) => key === column.key)) },
+    { key: 'custom', label: 'Custom πεδία', columns: availableColumns.filter((column) => column.customKey) },
+  ];
+  const normalizedColumnSearch = columnSearch.trim().toLocaleLowerCase('el-GR');
   const customValue = (customer, key) => {
     const values = typeof customer.custom_fields === 'string' ? (() => { try { return JSON.parse(customer.custom_fields); } catch { return {}; } })() : (customer.custom_fields || {});
     return values[key];
@@ -308,16 +315,29 @@ export default function Customers({ onOpenCustomer }) {
         <button className="btn" onClick={() => setShowColumns((open) => !open)}><Icon name="settings" size={15} /> Στήλες</button>
         {showColumns && (
           <div className="customer-columns-menu">
-            <b>Στήλες</b>
-            {availableColumns.map((column) => {
-              const key = column.key;
-              if (!column || key === 'actions') return null;
-              return <label key={key}><input type="checkbox" checked={!hiddenColumns.includes(key) && columnOrder.includes(key)} onChange={() => {
-                setHiddenColumns((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
-                if (!columnOrder.includes(key)) setColumnOrder((current) => [...current, key]);
-              }} /> {column.label}</label>;
-            })}
-            <button className="btn btn-sm btn-ghost" onClick={() => { setColumnOrder(DEFAULT_COLUMNS); setHiddenColumns([]); }}>Επαναφορά</button>
+            <div className="customer-columns-menu-head"><b>Στήλες</b><span>{visibleColumns.length}/{availableColumns.length}</span></div>
+            <input className="customer-columns-search" value={columnSearch} onChange={(event) => setColumnSearch(event.target.value)} placeholder="Αναζήτηση πεδίου…" />
+            <div className="customer-columns-actions">
+              <button type="button" onClick={() => setHiddenColumns([])}>Όλες</button>
+              <button type="button" onClick={() => setHiddenColumns(availableColumns.filter((column) => column.key !== 'name' && column.key !== 'actions').map((column) => column.key))}>Καμία</button>
+            </div>
+            <div className="customer-columns-list">
+              {columnGroups.map((group) => {
+                const columns = group.columns.filter((column) => column.key !== 'actions' && (!normalizedColumnSearch || column.label.toLocaleLowerCase('el-GR').includes(normalizedColumnSearch) || column.key.toLocaleLowerCase().includes(normalizedColumnSearch)));
+                if (!columns.length) return null;
+                return <div key={group.key} className="customer-columns-group">
+                  <small>{group.label}</small>
+                  {columns.map((column) => {
+                    const key = column.key;
+                    return <label key={key}><input type="checkbox" checked={!hiddenColumns.includes(key) && columnOrder.includes(key)} onChange={() => {
+                      setHiddenColumns((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
+                      if (!columnOrder.includes(key)) setColumnOrder((current) => [...current, key]);
+                    }} /> <span>{column.label}</span></label>;
+                  })}
+                </div>;
+              })}
+            </div>
+            <button className="btn btn-sm btn-ghost" onClick={() => { setColumnOrder(DEFAULT_COLUMNS); setHiddenColumns([]); setColumnSearch(''); }}>Επαναφορά</button>
           </div>
         )}
         <button className="btn btn-accent" onClick={saveView}><Icon name="bookmark" size={15} /> {activeView ? 'Αποθήκευση' : 'Αποθήκευση λίστας'}</button>
