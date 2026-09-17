@@ -7,6 +7,12 @@ export const SORTS = {
   value:      { expr: 'c.total_value',     dir: 'DESC', cmp: '<' },
   created:    { expr: 'c.created_at',       dir: 'DESC', cmp: '<' },
   name:       { expr: 'c.full_name',        dir: 'ASC',  cmp: '>' },
+  code:       { expr: 'c.code',             dir: 'ASC',  cmp: '>' },
+  city:       { expr: 'c.city',             dir: 'ASC',  cmp: '>' },
+  status:     { expr: 'c.status',           dir: 'ASC',  cmp: '>' },
+  branches:   { expr: 'c.branches_count',   dir: 'DESC', cmp: '<' },
+  spaces:     { expr: 'c.spaces_count',     dir: 'DESC', cmp: '<' },
+  bookings:   { expr: 'c.bookings_count',   dir: 'DESC', cmp: '<' },
 };
 
 // Builds shared WHERE predicates + params from request query filters.
@@ -29,10 +35,14 @@ export function buildFilters(req) {
   if (req.query.isVip === 'true') where.push('c.is_vip = 1');
   if (req.query.employeeId) where.push(`c.assigned_employee_id = ${push(Number(req.query.employeeId))}`);
   if (req.query.city) where.push(`c.city = ${push(req.query.city)}`);
+  if (req.query.email) where.push(`LOWER(c.email) LIKE ${push(`%${String(req.query.email).toLowerCase()}%`)}`);
+  if (req.query.phone) where.push(`(c.phone LIKE ${push(`%${req.query.phone}%`)} OR c.mobile LIKE ${push(`%${req.query.phone}%`)})`);
+  if (req.query.erpId) where.push(`c.erp_id LIKE ${push(`%${req.query.erpId}%`)}`);
   if (req.query.createdFrom) where.push(`c.registered_at >= ${push(req.query.createdFrom)}`);
   if (req.query.createdTo) where.push(`c.registered_at <= ${push(`${req.query.createdTo} 23:59:59`)}`);
   if (req.query.lastVisitFrom) where.push(`c.last_visit_at >= ${push(req.query.lastVisitFrom)}`);
   if (req.query.lastVisitTo) where.push(`c.last_visit_at <= ${push(`${req.query.lastVisitTo} 23:59:59`)}`);
+  if (req.query.noVisits === 'true') where.push('c.last_visit_at IS NULL');
   if (req.query.valueMin) where.push(`c.total_value >= ${push(Number(req.query.valueMin))}`);
   if (req.query.valueMax) where.push(`c.total_value <= ${push(Number(req.query.valueMax))}`);
   if (req.query.minBranches) where.push(`c.branches_count >= ${push(Number(req.query.minBranches))}`);

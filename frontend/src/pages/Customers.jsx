@@ -35,13 +35,21 @@ const SORTS = [
   { value: 'name', label: 'Όνομα' },
   { value: 'value', label: 'Αξία' },
   { value: 'created', label: 'Ημ. εγγραφής' },
+  { value: 'code', label: 'Κωδικός' },
+  { value: 'city', label: 'Πόλη' },
+  { value: 'status', label: 'Κατάσταση' },
+  { value: 'branches', label: 'Υποκαταστήματα' },
+  { value: 'spaces', label: 'Χώροι' },
+  { value: 'bookings', label: 'Κρατήσεις' },
 ];
 const DEFAULT_COLUMNS = COLUMNS.map((column) => column.key);
 
 const EMPTY_FILTERS = {
   status: [], customerType: '', tag: '', isVip: false, employeeId: '', city: '',
+  email: '', phone: '', erpId: '',
   branchCity: '', spaceType: '', createdFrom: '', createdTo: '', lastVisitFrom: '',
   lastVisitTo: '', valueMin: '', valueMax: '', minBranches: '', minSpaces: '',
+  noVisits: false,
 };
 
 function useDebounced(value, delay = 250) {
@@ -110,6 +118,10 @@ function activeChips(filters, meta) {
   if (filters.isVip) chips.push({ id: 'vip', label: 'VIP', clear: (f) => ({ ...f, isVip: false }) });
   if (filters.employeeId) { const e = (meta?.employees || []).find((x) => String(x.id) === String(filters.employeeId)); chips.push({ id: 'emp', label: `Υπεύθυνος: ${e?.full_name || filters.employeeId}`, clear: (f) => ({ ...f, employeeId: '' }) }); }
   if (filters.city) chips.push({ id: 'city', label: `Πόλη: ${filters.city}`, clear: (f) => ({ ...f, city: '' }) });
+  if (filters.email) chips.push({ id: 'email', label: `Email: ${filters.email}`, clear: (f) => ({ ...f, email: '' }) });
+  if (filters.phone) chips.push({ id: 'phone', label: `Τηλέφωνο: ${filters.phone}`, clear: (f) => ({ ...f, phone: '' }) });
+  if (filters.erpId) chips.push({ id: 'erp', label: `ERP ID: ${filters.erpId}`, clear: (f) => ({ ...f, erpId: '' }) });
+  if (filters.noVisits) chips.push({ id: 'no-visits', label: 'Χωρίς επίσκεψη', clear: (f) => ({ ...f, noVisits: false }) });
   if (filters.branchCity) chips.push({ id: 'bcity', label: `Υποκ. πόλη: ${filters.branchCity}`, clear: (f) => ({ ...f, branchCity: '' }) });
   if (filters.spaceType) chips.push({ id: 'stype', label: `Χώρος: ${filters.spaceType}`, clear: (f) => ({ ...f, spaceType: '' }) });
   if (filters.createdFrom || filters.createdTo) chips.push({ id: 'created', label: `Εγγραφή: ${filters.createdFrom || '…'} – ${filters.createdTo || '…'}`, clear: (f) => ({ ...f, createdFrom: '', createdTo: '' }) });
@@ -174,12 +186,16 @@ export default function Customers({ onOpenCustomer }) {
     isVip: filters.isVip ? 'true' : undefined,
     employeeId: filters.employeeId || undefined,
     city: filters.city || undefined,
+    email: filters.email || undefined,
+    phone: filters.phone || undefined,
+    erpId: filters.erpId || undefined,
     branchCity: filters.branchCity || undefined,
     spaceType: filters.spaceType || undefined,
     createdFrom: filters.createdFrom || undefined,
     createdTo: filters.createdTo || undefined,
     lastVisitFrom: filters.lastVisitFrom || undefined,
     lastVisitTo: filters.lastVisitTo || undefined,
+    noVisits: filters.noVisits ? 'true' : undefined,
     valueMin: filters.valueMin || undefined,
     valueMax: filters.valueMax || undefined,
     minBranches: filters.minBranches || undefined,
@@ -306,11 +322,14 @@ export default function Customers({ onOpenCustomer }) {
         <button className={`filter-chip${chips.length ? ' active' : ''}`} onClick={() => setShowFilters(true)}>
           <Icon name="filter" size={15} /> Φίλτρα {chips.length > 0 && <span className="pill" style={{ background: 'var(--accent)', color: '#fff', border: 'none' }}>{chips.length}</span>}
         </button>
-        <div className="filter-chip">
+        <div className="filter-chip sort-control">
           <Icon name="chart" size={15} />
           <select value={sort} onChange={(e) => setSort(e.target.value)}>
             {SORTS.map((s) => <option key={s.value} value={s.value}>Ταξ.: {s.label}</option>)}
           </select>
+          <button type="button" className="sort-direction" title={sortDir === 'ASC' ? 'Αύξουσα σειρά' : 'Φθίνουσα σειρά'} onClick={() => setSortDir((direction) => direction === 'ASC' ? 'DESC' : 'ASC')}>
+            <Icon name="chevronDown" size={13} style={{ transform: sortDir === 'ASC' ? 'rotate(180deg)' : undefined }} />
+          </button>
         </div>
         <div className="filter-chip">
           <Icon name="layers" size={15} />

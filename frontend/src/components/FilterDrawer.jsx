@@ -23,8 +23,17 @@ export default function FilterDrawer({ filters, meta, onSet, onClear, onClose })
     const cur = filters.status || [];
     onSet('status', cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v]);
   };
+  const quickFilters = [
+    ['active', 'Ενεργοί', { status: ['active'] }],
+    ['vip', 'VIP', { isVip: true }],
+    ['companies', 'Εταιρείες', { customerType: 'company' }],
+    ['noVisits', 'Χωρίς επίσκεψη', { noVisits: true }],
+  ];
   return (
-    <Drawer title="Φίλτρα" subtitle="Περιορίστε τα αποτελέσματα" onClose={onClose}>
+    <Drawer title="Φίλτρα" subtitle="Συνδυάστε κριτήρια για στοχευμένες λίστες" onClose={onClose}>
+      <div className="filter-quick-grid">
+        {quickFilters.map(([key, label, values]) => <button type="button" key={key} className="filter-quick-button" onClick={() => Object.entries(values).forEach(([field, value]) => onSet(field, value))}>{label}</button>)}
+      </div>
       <Group title="Πελάτης">
         <Field label="Κατάσταση">
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -49,6 +58,11 @@ export default function FilterDrawer({ filters, meta, onSet, onClear, onClose })
             </select>
           </Field>
         </Row>
+        <Row>
+          <Field label="Email"><input style={inp} value={filters.email} onChange={(e) => onSet('email', e.target.value)} placeholder="π.χ. info@εταιρεία.gr" /></Field>
+          <Field label="Τηλέφωνο / κινητό"><input style={inp} value={filters.phone} onChange={(e) => onSet('phone', e.target.value)} placeholder="π.χ. 210…" /></Field>
+        </Row>
+        <Field label="ERP ID"><input style={inp} value={filters.erpId} onChange={(e) => onSet('erpId', e.target.value)} placeholder="Ακριβής ή μερικός αριθμός ERP" /></Field>
         <Row>
           <Field label="Υπεύθυνος">
             <select style={inp} value={filters.employeeId} onChange={(e) => onSet('employeeId', e.target.value)}>
