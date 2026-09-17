@@ -26,6 +26,7 @@ const SORTS = [
   { value: 'value', label: 'Αξία' },
   { value: 'created', label: 'Ημ. εγγραφής' },
 ];
+const DEFAULT_COLUMNS = COLUMNS.map((column) => column.key);
 
 const EMPTY_FILTERS = {
   status: [], customerType: '', tag: '', isVip: false, employeeId: '', city: '',
@@ -118,11 +119,35 @@ export default function Customers({ onOpenCustomer }) {
   const [pageSize, setPageSize] = useState(50);
   const [showFilters, setShowFilters] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [columnOrder, setColumnOrder] = useState(DEFAULT_COLUMNS);
+  const [hiddenColumns, setHiddenColumns] = useState([]);
+  const [showColumns, setShowColumns] = useState(false);
+  const [views, setViews] = useState([]);
+  const [activeView, setActiveView] = useState(null);
+  const [viewName, setViewName] = useState('');
+  const [dragColumn, setDragColumn] = useState(null);
 
   const { data: meta } = useQuery({ queryKey: ['meta'], queryFn: ({ signal }) => api.meta({ signal }) });
   const canExport = useAuth((s) => s.hasPerm(PERMS.CUSTOMERS_EXPORT));
   const canWrite = useAuth((s) => s.hasPerm(PERMS.CUSTOMERS_WRITE));
   const qc = useQueryClient();
+  useEffect(() => {
+    api.customerViews().then((response) => {
+      setViews(response.views || []);
+      const preferred = (response.views || []).find((view) => view.is_default);
+      if (preferred) {
+        setActiveView(preferred);
+        const config = preferred.config || {};
+        if (config.filters) setFilters({ ...EMPTY_FILTERS, ...config.filters });
+        if (config.columns) setColumnOrder(config.columns);
+        if (config.hiddenColumns) setHiddenColumns(config.hiddenColumns);
+        if (config.sort) setSort(config.sort);
+        if (config.sortDir) setSortDir(config.sortDir);
+        if (config.pageSize) setPageSize(config.pageSize);
+      }
+    }).catch(() => {});
+  }, []);
+  const [sortDir, setSortDir] = useState('DESC');
 
   const filterParams = useMemo(() => ({
     q: q.trim() || undefined,
@@ -143,7 +168,8 @@ export default function Customers({ onOpenCustomer }) {
     minBranches: filters.minBranches || undefined,
     minSpaces: filters.minSpaces || undefined,
     sort: sort !== 'last_visit' ? sort : undefined,
-  }), [q, filters, sort]);
+    sortDir,
+  }), [q, filters, sort, sortDir]);
 
   useEffect(() => { setPage(1); }, [filterParams, pageSize]);
 
@@ -159,7 +185,58 @@ export default function Customers({ onOpenCustomer }) {
   const tookMs = data?.tookMs;
   const chips = activeChips(filters, meta);
   const set = (k, v) => setFilters((f) => ({ ...f, [k]: v }));
-  const toggleSort = (key) => setSort(key);
+  const toggleSort = (key) => {
+    if (sort === key) setSortDir((direction) => direction === 'ASC' ? 'DESC' : 'ASC');
+    else {
+      setSort(key);
+      setSortDir(SORTS.find((item) => item.value === key)?.value === 'name' ? 'ASC' : 'DESC');
+    }
+  };
+  const visibleColumns = columnOrder
+    .map((key) => COLUMNS.find((column) => column.key === key))
+    .filter((column) => column && !hiddenColumns.includes(column.key));
+  const viewConfig = () => ({ filters, columns: columnOrder, hiddenColumns, sort, sortDir, pageSize });
+  const saveView = async () => {
+    const name = viewName.trim() || window.prompt('Όνομα λίστας', activeView?.name || '');
+    if (!name) return;
+    const response = activeView
+      ? await api.updateCustomerView(activeView.id, { name, config: viewConfig() })
+      : await api.createCustomerView({ name, config: viewConfig() });
+    const saved = response.view;
+    setViews((current) => activeView ? current.map((view) => view.id === saved.id ? saved : view) : [...current, saved]);
+    setActiveView(saved);
+    setViewName('');
+  };
+  const deleteView = async () => {
+    if (!activeView || !window.confirm(`Διαγραφή της προβολής «${activeView.name}»;`)) return;
+    await api.deleteCustomerView(activeView.id);
+    setViews((current) => current.filter((view) => view.id !== activeView.id));
+    setActiveView(null);
+  };
+  const applyView = (view) => {
+    if (!view) {
+      setActiveView(null);
+      return;
+    }
+    const config = view.config || {};
+    setActiveView(view);
+    setFilters({ ...EMPTY_FILTERS, ...(config.filters || {}) });
+    setColumnOrder(config.columns || DEFAULT_COLUMNS);
+    setHiddenColumns(config.hiddenColumns || []);
+    setSort(config.sort || 'last_visit');
+    setSortDir(config.sortDir || 'DESC');
+    setPageSize(config.pageSize || 50);
+  };
+  const dragEnd = (target) => {
+    if (!dragColumn || dragColumn === target) return;
+    setColumnOrder((current) => {
+      const next = [...current];
+      const from = next.indexOf(dragColumn); const to = next.indexOf(target);
+      next.splice(from, 1); next.splice(to, 0, dragColumn);
+      return next;
+    });
+    setDragColumn(null);
+  };
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);
 
@@ -200,6 +277,27 @@ export default function Customers({ onOpenCustomer }) {
             {SORTS.map((s) => <option key={s.value} value={s.value}>Ταξ.: {s.label}</option>)}
           </select>
         </div>
+        <div className="filter-chip">
+          <Icon name="layers" size={15} />
+          <select value={activeView?.id || ''} onChange={(e) => applyView(views.find((view) => String(view.id) === e.target.value))}>
+            <option value="">Προβολή: Προσωρινή</option>
+            {views.map((view) => <option key={view.id} value={view.id}>{view.name}</option>)}
+          </select>
+        </div>
+        <button className="btn" onClick={() => setShowColumns((open) => !open)}><Icon name="settings" size={15} /> Στήλες</button>
+        {showColumns && (
+          <div className="customer-columns-menu">
+            <b>Στήλες</b>
+            {columnOrder.map((key) => {
+              const column = COLUMNS.find((item) => item.key === key);
+              if (!column || key === 'actions') return null;
+              return <label key={key}><input type="checkbox" checked={!hiddenColumns.includes(key)} onChange={() => setHiddenColumns((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key])} /> {column.label}</label>;
+            })}
+            <button className="btn btn-sm btn-ghost" onClick={() => { setColumnOrder(DEFAULT_COLUMNS); setHiddenColumns([]); }}>Επαναφορά</button>
+          </div>
+        )}
+        <button className="btn btn-accent" onClick={saveView}><Icon name="bookmark" size={15} /> {activeView ? 'Αποθήκευση' : 'Αποθήκευση λίστας'}</button>
+        {activeView && <button className="btn btn-ghost danger-action" title="Διαγραφή προβολής" onClick={deleteView}><Icon name="x" size={15} /></button>}
       </div>
 
       {chips.length > 0 && (
@@ -217,16 +315,16 @@ export default function Customers({ onOpenCustomer }) {
       <div className="results-meta">
         <span><b style={{ color: 'var(--text)' }}>{formatNumber(total)}</b> αποτελέσματα</span>
         {tookMs != null && <span className="took">αναζήτηση σε {tookMs} ms</span>}
-        <span style={{ marginLeft: 'auto' }}>Ταξινόμηση: {SORTS.find((s) => s.value === sort)?.label}</span>
+        <span style={{ marginLeft: 'auto' }}>Ταξινόμηση: {SORTS.find((s) => s.value === sort)?.label} ({sortDir === 'ASC' ? 'Α-Ω' : 'Ω-Α'})</span>
       </div>
 
       <div className="table-wrap">
         <div className="thead">
-          {COLUMNS.map((c) => (
-            <div key={c.key} className={c.sort ? 'sortable' : ''} style={c.key === 'actions' ? { textAlign: 'right' } : undefined}
+          {visibleColumns.map((c) => (
+            <div key={c.key} draggable onDragStart={() => setDragColumn(c.key)} onDragOver={(event) => event.preventDefault()} onDrop={() => dragEnd(c.key)} className={c.sort ? 'sortable' : ''} style={c.key === 'actions' ? { textAlign: 'right' } : undefined}
               onClick={c.sort ? () => toggleSort(c.sort) : undefined}>
               {c.label}
-              {c.sort && sort === c.sort && <Icon name="chevronDown" size={13} />}
+              {c.sort && sort === c.sort && <Icon name="chevronDown" size={13} style={{ transform: sortDir === 'ASC' ? 'rotate(180deg)' : undefined }} />}
             </div>
           ))}
         </div>
@@ -245,20 +343,20 @@ export default function Customers({ onOpenCustomer }) {
         ) : (
           rows.map((c) => (
             <div className="trow" key={c.id} onClick={() => onOpenCustomer(c)}>
-              <div className="cust-cell">
+            {visibleColumns.map((column) => column.key === 'name' ? <div className="cust-cell" key={column.key}>
                 <Avatar name={c.full_name} src={c.avatar_url} size={38} fallback={false} />
                 <div style={{ minWidth: 0 }}>
                   <div className="nm">{c.full_name} {c.is_vip ? <span style={{ color: 'var(--gold)' }}>★</span> : null}</div>
                   <div className="sub">{c.company || TYPE_LABELS[c.customer_type]} · {c.city}</div>
                 </div>
               </div>
-              <div className="mono muted">{c.code}</div>
-              <div><StatusBadge status={c.status} /></div>
-              <div className="mono">{formatNumber(c.branches_count)} · {formatNumber(c.spaces_count)}</div>
-              <div className="muted">{formatDate(c.last_visit_at)}</div>
-              <div className="mono">{formatNumber(c.bookings_count)}</div>
-              <div className="num">{formatCurrency(c.total_value)}</div>
-              <div style={{ textAlign: 'right', color: 'var(--text-3)' }}><Icon name="chevronRight" size={16} /></div>
+              : column.key === 'code' ? <div className="mono muted" key={column.key}>{c.code}</div>
+                : column.key === 'status' ? <div key={column.key}><StatusBadge status={c.status} /></div>
+                  : column.key === 'branches' ? <div className="mono" key={column.key}>{formatNumber(c.branches_count)} · {formatNumber(c.spaces_count)}</div>
+                    : column.key === 'last_visit' ? <div className="muted" key={column.key}>{formatDate(c.last_visit_at)}</div>
+                      : column.key === 'bookings' ? <div className="mono" key={column.key}>{formatNumber(c.bookings_count)}</div>
+                        : column.key === 'value' ? <div className="num" key={column.key}>{formatCurrency(c.total_value)}</div>
+                          : <div key={column.key} style={{ textAlign: 'right', color: 'var(--text-3)' }}><Icon name="chevronRight" size={16} /></div>)}
             </div>
           ))
         )}

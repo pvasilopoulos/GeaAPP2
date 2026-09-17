@@ -15,6 +15,7 @@ DROP TABLE IF EXISTS customer_custom_field_values;
 DROP TABLE IF EXISTS branch_custom_field_values;
 DROP TABLE IF EXISTS space_custom_field_values;
 DROP TABLE IF EXISTS custom_field_definitions;
+DROP TABLE IF EXISTS customer_saved_views;
 DROP TABLE IF EXISTS activities;
 DROP TABLE IF EXISTS communications;
 DROP TABLE IF EXISTS documents;
@@ -166,6 +167,21 @@ CREATE TABLE customers (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Multiple contacts per customer (company stakeholders, extra people).
+CREATE TABLE customer_saved_views (
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  tenant_id BIGINT NOT NULL,
+  user_id BIGINT NOT NULL,
+  name VARCHAR(160) NOT NULL,
+  config_json JSON NOT NULL,
+  is_default TINYINT(1) NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_saved_view_user_name (tenant_id, user_id, name),
+  KEY idx_saved_view_user (tenant_id, user_id, updated_at),
+  CONSTRAINT fk_saved_view_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+  CONSTRAINT fk_saved_view_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE customer_contacts (
   id          BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
   tenant_id   BIGINT NOT NULL,

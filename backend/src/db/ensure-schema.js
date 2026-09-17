@@ -101,6 +101,21 @@ export async function ensureSchema() {
       CONSTRAINT fk_sync_runs_connector FOREIGN KEY (connector_id) REFERENCES connectors(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
   }
+  if (!(await tableExists('customer_saved_views'))) {
+    await query(`CREATE TABLE customer_saved_views (
+      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      tenant_id BIGINT NOT NULL, user_id BIGINT NOT NULL,
+      name VARCHAR(160) NOT NULL, config_json JSON NOT NULL,
+      is_default TINYINT(1) NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_saved_view_user_name (tenant_id, user_id, name),
+      KEY idx_saved_view_user (tenant_id, user_id, updated_at),
+      CONSTRAINT fk_saved_view_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      CONSTRAINT fk_saved_view_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    console.log('[schema] created customer_saved_views');
+  }
 
   const admins = await query('SELECT COUNT(*) AS c FROM users WHERE is_platform_admin = 1');
   if (!Number(admins.rows[0].c)) {

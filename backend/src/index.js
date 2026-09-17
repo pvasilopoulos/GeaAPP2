@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import { pool } from './db.js';
 import { customersRouter } from './routes/customers.js';
+import { customerViewsRouter } from './routes/customerViews.js';
 import { metaRouter } from './routes/meta.js';
 import { searchRouter } from './routes/search.js';
 import { branchesRouter } from './routes/branches.js';
@@ -58,6 +59,7 @@ app.use('/api/search', searchRouter);
 // by the `/:id` route.
 app.use('/api/customers', exportRouter);
 app.use('/api/customers', customersRouter);
+app.use('/api/customer-views', customerViewsRouter);
 app.use('/api/branches', branchesRouter);
 app.use('/api/spaces', spacesRouter);
 app.use('/api/custom-fields', customFieldsRouter);

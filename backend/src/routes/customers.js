@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { query } from '../db.js';
 import { encodeCursor, decodeCursor, clampLimit } from '../lib/cursor.js';
-import { SORTS, buildFilters } from '../lib/customerFilters.js';
+import { buildFilters, resolveSort } from '../lib/customerFilters.js';
 import { authorize } from '../middleware/auth.js';
 import { PERMISSIONS } from '../lib/permissions.js';
 import { normalizeFields } from '../lib/normalize.js';
@@ -45,9 +45,7 @@ customersRouter.get('/search', async (req, res, next) => {
 
     // Default ordering is by most recent visit; the FULLTEXT/LIKE search
     // predicate (if any) is applied in the WHERE by buildFilters().
-    let sortKey = req.query.sort && SORTS[req.query.sort] ? req.query.sort : 'last_visit';
-    const cfg = SORTS[sortKey];
-    const idDir = cfg.dir === 'ASC' ? 'ASC' : 'DESC';
+    const { key: sortKey, cfg, idDir } = resolveSort(req);
 
     const listCols = `c.id, c.code, c.full_name, c.email, c.phone, c.mobile, c.company,
              c.customer_type, c.status, c.is_vip, c.city, c.avatar_url,
@@ -72,7 +70,7 @@ customersRouter.get('/search', async (req, res, next) => {
       return res.json({
         results: rows, page, pageSize, total,
         totalPages: Math.max(1, Math.ceil(total / pageSize)),
-        sort: sortKey, tookMs: Date.now() - t0,
+        sort: sortKey, sortDir: cfg.dir, tookMs: Date.now() - t0,
       });
     }
 
@@ -103,7 +101,7 @@ customersRouter.get('/search', async (req, res, next) => {
     const nextCursor = hasMore && last ? encodeCursor({ v: last.__cursor_val, id: last.id }) : null;
     page.forEach((r) => delete r.__cursor_val);
 
-    res.json({ results: page, nextCursor, hasMore, sort: sortKey, tookMs: Date.now() - t0 });
+    res.json({ results: page, nextCursor, hasMore, sort: sortKey, sortDir: cfg.dir, tookMs: Date.now() - t0 });
   } catch (err) {
     next(err);
   }

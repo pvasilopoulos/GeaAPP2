@@ -56,5 +56,7 @@ export function buildFilters(req) {
 export function resolveSort(req) {
   const key = req.query.sort && SORTS[req.query.sort] ? req.query.sort : 'last_visit';
   const cfg = SORTS[key];
-  return { key, cfg, idDir: cfg.dir === 'ASC' ? 'ASC' : 'DESC' };
+  const direction = String(req.query.sortDir || '').toUpperCase();
+  const dir = direction === 'ASC' || direction === 'DESC' ? direction : cfg.dir;
+  return { key, cfg: { ...cfg, dir, cmp: dir === 'ASC' ? '>' : '<' }, idDir: dir };
 }
