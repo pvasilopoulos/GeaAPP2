@@ -79,7 +79,14 @@ export default function CustomerProfile({ customerId, tabId, onBack }) {
     return key === 'overview' || preferences?.customer_profile?.[`show_${key}`] !== false;
   }
   const c = data.customer;
-  const visibleTabs = TABS.filter((item) => item.key === 'overview' || viewPreferences?.customer_profile?.[`show_${item.key}`] !== false);
+  const configuredTabs = Array.isArray(viewPreferences?.customer_profile?.tabs)
+    ? viewPreferences.customer_profile.tabs
+      .map((configured) => ({ ...TABS.find((item) => item.key === configured.key), ...configured }))
+      .filter((item) => item.key)
+    : TABS;
+  const visibleTabs = configuredTabs
+    .filter((item) => item.key === 'overview' || (item.enabled !== false && viewPreferences?.customer_profile?.[`show_${item.key}`] !== false))
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const joined = new Date(c.registered_at);
 
   return (

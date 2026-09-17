@@ -32,6 +32,19 @@ export const DEFAULT_TENANT_SETTINGS = {
       show_activity: true,
       show_branch_actions: true,
       show_branch_invoices: true,
+      tabs: [
+        { key: 'overview', label: 'Σύνοψη', icon: 'home', group: 'Πελάτης', enabled: true },
+        { key: 'contacts', label: 'Επαφές', icon: 'users', group: 'Πελάτης', enabled: true },
+        { key: 'branches', label: 'Υποκαταστήματα & Χώροι', icon: 'building', group: 'Πελάτης', enabled: true },
+        { key: 'bookings', label: 'Κρατήσεις', icon: 'calendar', group: 'Συναλλαγές', enabled: true },
+        { key: 'payments', label: 'Πληρωμές', icon: 'wallet', group: 'Συναλλαγές', enabled: true },
+        { key: 'communications', label: 'Επικοινωνίες', icon: 'message', group: 'Επικοινωνία', enabled: true },
+        { key: 'documents', label: 'Έγγραφα', icon: 'file', group: 'Επικοινωνία', enabled: true },
+        { key: 'notes', label: 'Σημειώσεις', icon: 'note', group: 'Επικοινωνία', enabled: true },
+        { key: 'activity', label: 'Δραστηριότητα', icon: 'activity', group: 'Επικοινωνία', enabled: true },
+        { key: 'branch_actions', label: 'Ενέργειες ανά υποκατάστημα', icon: 'activity', group: 'Συναλλαγές', enabled: true },
+        { key: 'branch_invoices', label: 'Τιμολόγια ανά υποκατάστημα', icon: 'file', group: 'Συναλλαγές', enabled: true },
+      ],
     },
     branch_detail: {
       branch_expanded: false,
@@ -73,7 +86,13 @@ export function mergeTenantSettings(raw) {
     map_provider,
     google_maps_api_key,
     view_preferences: {
-      customer_profile: { ...DEFAULT_TENANT_SETTINGS.view_preferences.customer_profile, ...(rawViews.customer_profile || {}) },
+      customer_profile: {
+        ...DEFAULT_TENANT_SETTINGS.view_preferences.customer_profile,
+        ...(rawViews.customer_profile || {}),
+        tabs: Array.isArray(rawViews.customer_profile?.tabs)
+          ? rawViews.customer_profile.tabs.map((tab, index) => ({ ...tab, order: tab.order ?? index }))
+          : DEFAULT_TENANT_SETTINGS.view_preferences.customer_profile.tabs,
+      },
       branch_detail: { ...DEFAULT_TENANT_SETTINGS.view_preferences.branch_detail, ...(rawViews.branch_detail || {}) },
     },
     messaging: mergeMessaging(parsed.messaging),
@@ -111,7 +130,11 @@ export function applyAppSettingsPatch(current, body) {
   for (const k of APP_SETTING_KEYS) {
     if (src[k] !== undefined) patch[k] = k === 'view_preferences'
       ? {
-        customer_profile: { ...merged.view_preferences.customer_profile, ...(src[k]?.customer_profile || {}) },
+        customer_profile: {
+          ...merged.view_preferences.customer_profile,
+          ...(src[k]?.customer_profile || {}),
+          ...(Array.isArray(src[k]?.customer_profile?.tabs) ? { tabs: src[k].customer_profile.tabs } : {}),
+        },
         branch_detail: { ...merged.view_preferences.branch_detail, ...(src[k]?.branch_detail || {}) },
       }
       : src[k];
