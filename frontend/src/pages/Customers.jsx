@@ -164,6 +164,7 @@ export default function Customers({ onOpenCustomer }) {
   const [views, setViews] = useState([]);
   const [activeView, setActiveView] = useState(null);
   const [viewName, setViewName] = useState('');
+  const [viewVisibility, setViewVisibility] = useState('personal');
   const [dragColumn, setDragColumn] = useState(null);
   const [customFieldColumns, setCustomFieldColumns] = useState([]);
   const [columnSearch, setColumnSearch] = useState('');
@@ -191,6 +192,7 @@ export default function Customers({ onOpenCustomer }) {
       const preferred = (response.views || []).find((view) => view.is_default);
       if (preferred) {
         setActiveView(preferred);
+        setViewVisibility(preferred.visibility || 'personal');
         const config = preferred.config || {};
         if (config.filters) setFilters({ ...EMPTY_FILTERS, ...config.filters });
         if (config.columns) setColumnOrder(config.columns);
@@ -296,13 +298,33 @@ export default function Customers({ onOpenCustomer }) {
   const saveView = async () => {
     const name = viewName.trim() || window.prompt('Όνομα λίστας', activeView?.name || '');
     if (!name) return;
-    const response = activeView
-      ? await api.updateCustomerView(activeView.id, { name, config: viewConfig() })
-      : await api.createCustomerView({ name, config: viewConfig() });
+    const response = activeView?.is_owner
+      ? await api.updateCustomerView(activeView.id, { name, config: viewConfig(), visibility: viewVisibility })
+      : await api.createCustomerView({ name, config: viewConfig(), visibility: viewVisibility });
     const saved = response.view;
-    setViews((current) => activeView ? current.map((view) => view.id === saved.id ? saved : view) : [...current, saved]);
+    setViews((current) => activeView?.is_owner ? current.map((view) => view.id === saved.id ? saved : view) : [...current, saved]);
     setActiveView(saved);
     setViewName('');
+  };
+  const renameView = async () => {
+    if (!activeView?.is_owner) return;
+    const name = window.prompt('Νέο όνομα προβολής', activeView.name);
+    if (!name || name.trim() === activeView.name) return;
+    const response = await api.updateCustomerView(activeView.id, { name: name.trim() });
+    setViews((current) => current.map((view) => view.id === response.view.id ? response.view : view));
+    setActiveView(response.view);
+  };
+  const duplicateView = async () => {
+    if (!activeView) return;
+    const response = await api.duplicateCustomerView(activeView.id, { visibility: 'personal' });
+    setViews((current) => [...current, response.view]);
+    applyView(response.view);
+  };
+  const setDefaultView = async () => {
+    if (!activeView?.is_owner) return;
+    const response = await api.updateCustomerView(activeView.id, { is_default: !activeView.is_default });
+    setViews((current) => current.map((view) => view.id === response.view.id ? response.view : (response.view.is_default && view.visibility === response.view.visibility && (view.visibility === 'shared' || view.user_id === response.view.user_id) ? { ...view, is_default: 0 } : view)));
+    setActiveView(response.view);
   };
   const deleteView = async () => {
     if (!activeView || !window.confirm(`Διαγραφή της προβολής «${activeView.name}»;`)) return;
@@ -313,10 +335,12 @@ export default function Customers({ onOpenCustomer }) {
   const applyView = (view) => {
     if (!view) {
       setActiveView(null);
+      setViewVisibility('personal');
       return;
     }
     const config = view.config || {};
     setActiveView(view);
+    setViewVisibility(view.visibility || 'personal');
     setFilters({ ...EMPTY_FILTERS, ...(config.filters || {}) });
     setColumnOrder(config.columns || DEFAULT_COLUMNS);
     setHiddenColumns(config.hiddenColumns || []);
@@ -380,11 +404,18 @@ export default function Customers({ onOpenCustomer }) {
             <Icon name="chevronDown" size={13} style={{ transform: sortDir === 'ASC' ? 'rotate(180deg)' : undefined }} />
           </button>
         </div>
-        <div className="filter-chip">
+        <div className="filter-chip customer-view-control">
           <Icon name="layers" size={15} />
           <select value={activeView?.id || ''} onChange={(e) => applyView(views.find((view) => String(view.id) === e.target.value))}>
             <option value="">Προβολή: Προσωρινή</option>
-            {views.map((view) => <option key={view.id} value={view.id}>{view.name}</option>)}
+            {views.map((view) => <option key={view.id} value={view.id}>{view.visibility === 'shared' ? 'Κοινή · ' : ''}{view.name}</option>)}
+          </select>
+        </div>
+        <div className="filter-chip customer-view-scope">
+          <Icon name="globe" size={15} />
+          <select value={viewVisibility} onChange={(e) => setViewVisibility(e.target.value)} aria-label="Εμβέλεια αποθήκευσης">
+            <option value="personal">Προσωπική</option>
+            <option value="shared">Κοινή ομάδα</option>
           </select>
         </div>
         <div className="customer-columns-anchor" ref={columnsMenuRef}>
@@ -440,8 +471,11 @@ export default function Customers({ onOpenCustomer }) {
           </div>
           )}
         </div>
-        <button className="btn btn-accent" onClick={saveView}><Icon name="bookmark" size={15} /> {activeView ? 'Αποθήκευση' : 'Αποθήκευση λίστας'}</button>
-        {activeView && <button className="btn btn-ghost danger-action" title="Διαγραφή προβολής" onClick={deleteView}><Icon name="x" size={15} /></button>}
+        <button className="btn btn-accent" onClick={saveView}><Icon name="bookmark" size={15} /> {activeView?.is_owner ? 'Αποθήκευση' : 'Αποθήκευση ως νέα'}</button>
+        {activeView?.is_owner && <button className="btn btn-sm" title="Μετονομασία προβολής" onClick={renameView}><Icon name="edit" size={14} /></button>}
+        {activeView && <button className="btn btn-sm" title="Διπλότυπο" onClick={duplicateView}><Icon name="copy" size={14} /></button>}
+        {activeView?.is_owner && <button className={`btn btn-sm${activeView.is_default ? ' btn-accent' : ''}`} title={activeView.is_default ? 'Κατάργηση προεπιλογής' : 'Ορισμός ως προεπιλογή'} onClick={setDefaultView}><Icon name="star" size={14} /></button>}
+        {activeView?.is_owner && <button className="btn btn-ghost danger-action" title="Διαγραφή προβολής" onClick={deleteView}><Icon name="x" size={15} /></button>}
       </div>
 
       {chips.length > 0 && (
@@ -516,6 +550,25 @@ export default function Customers({ onOpenCustomer }) {
             </div>
           })
         )}
+      </div>
+
+      <div className="customer-card-list">
+        {rows.map((c) => {
+          const displayName = c.company || c.full_name || 'Χωρίς όνομα';
+          return <button className="customer-card" key={c.id} type="button" onClick={() => onOpenCustomer(c)}>
+            <div className="customer-card-top">
+              <Avatar name={displayName} src={c.avatar_url} size={42} fallback={false} />
+              <div className="customer-card-title"><strong>{displayName}</strong><span>{c.code || 'Χωρίς κωδικό'}</span></div>
+              <Icon name="chevronRight" size={17} />
+            </div>
+            <div className="customer-card-meta">
+              <StatusBadge status={c.status} />
+              <span>{formatNumber(c.branches_count)} υποκ. · {formatNumber(c.spaces_count)} χώροι</span>
+              <span>{formatNumber(c.bookings_count)} κρατήσεις</span>
+              <strong>{formatCurrency(c.total_value)}</strong>
+            </div>
+          </button>;
+        })}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14, flexWrap: 'wrap', gap: 12 }}>

@@ -91,6 +91,7 @@ export const api = {
   customerViews: (opts) => get('/customer-views', opts),
   createCustomerView: (payload) => send('POST', '/customer-views', payload),
   updateCustomerView: (id, payload) => send('PATCH', `/customer-views/${id}`, payload),
+  duplicateCustomerView: (id, payload) => send('POST', `/customer-views/${id}/duplicate`, payload),
   deleteCustomerView: (id) => send('DELETE', `/customer-views/${id}`),
   countCustomers: (params, opts) => get(`/customers/count${qs(params)}`, opts),
   globalSearch: (q, opts) => get(`/search/global${qs({ q })}`, opts),
