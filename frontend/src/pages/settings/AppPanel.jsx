@@ -46,19 +46,6 @@ export default function AppPanel() {
     <form className="card card-pad" onSubmit={submit} style={{ maxWidth: 640 }}>
       {err && <div className="auth-error">{err}</div>}
       {msg && <div className="voice-msg ok" style={{ marginBottom: 10 }}>{msg}</div>}
-      <div className="section-title" style={{ marginTop: 0 }}>Προεπιλογές πελατών</div>
-      <div className="field-group"><label>Προεπιλεγμένη χώρα</label><input style={inp} value={f.default_country} onChange={set('default_country')} /></div>
-      <div className="field-group"><label>Προεπιλεγμένη κατάσταση νέου πελάτη</label>
-        <select style={inp} value={f.default_customer_status} onChange={set('default_customer_status')}>
-          <option value="active">Ενεργός</option>
-          <option value="prospect">Υποψήφιος</option>
-          <option value="inactive">Ανενεργός</option>
-        </select>
-      </div>
-      <label style={chk}><input type="checkbox" checked={!!f.require_email} onChange={set('require_email')} /> Υποχρεωτικό email στον πελάτη</label>
-      <label style={chk}><input type="checkbox" checked={!!f.strict_duplicates} onChange={set('strict_duplicates')} /> Αυστηρός έλεγχος διπλοεγγραφών (χωρίς «δημιουργία ούτως ή άλλως»)</label>
-      <label style={chk}><input type="checkbox" checked={!!f.allow_vip} onChange={set('allow_vip')} /> Ενεργό VIP</label>
-
       <div className="section-title">Εμφάνιση</div>
       <div className="field-group"><label>Μορφή ημερομηνίας</label>
         <select style={inp} value={f.date_format} onChange={set('date_format')}>
@@ -78,32 +65,6 @@ export default function AppPanel() {
           <option value="el-GR">Ελληνικά</option>
           <option value="en-US">English</option>
         </select>
-      </div>
-      <div className="settings-subsection">
-        <div className="section-title">Προβολή καρτέλας πελάτη</div>
-        <div className="muted settings-help">Ορίστε ποιες ενότητες εμφανίζονται και ποια ανοίγει πρώτη.</div>
-        <div className="field-group"><label>Αρχικό tab</label>
-          <select style={inp} value={f.view_preferences?.customer_profile?.default_tab || 'overview'} onChange={setView('customer_profile', 'default_tab')}>
-            <option value="overview">Σύνοψη</option><option value="contacts">Επαφές</option><option value="branches">Υποκαταστήματα &amp; Χώροι</option><option value="bookings">Κρατήσεις</option><option value="activity">Δραστηριότητα</option>
-          </select>
-        </div>
-        {[
-          ['show_contacts', 'Εμφάνιση Επαφών'], ['show_branches', 'Εμφάνιση Υποκαταστημάτων & Χώρων'],
-          ['show_bookings', 'Εμφάνιση Κρατήσεων'], ['show_payments', 'Εμφάνιση Πληρωμών'],
-          ['show_communications', 'Εμφάνιση Επικοινωνιών'], ['show_documents', 'Εμφάνιση Εγγράφων'],
-          ['show_notes', 'Εμφάνιση Σημειώσεων'], ['show_activity', 'Εμφάνιση Δραστηριότητας'],
-          ['show_branch_actions', 'Εμφάνιση Ενεργειών ανά υποκατάστημα'], ['show_branch_invoices', 'Εμφάνιση Τιμολογίων ανά υποκατάστημα'],
-        ].map(([key, label]) => <label style={chk} key={key}><input type="checkbox" checked={f.view_preferences?.customer_profile?.[key] !== false} onChange={setView('customer_profile', key)} /> {label}</label>)}
-      </div>
-      <div className="settings-subsection">
-        <div className="section-title">Προβολή υποκαταστήματος</div>
-        <div className="muted settings-help">Ελέγξτε τα blocks που εμφανίζονται μετά την επιλογή tile.</div>
-        {[
-          ['show_hours', 'Εμφάνιση ωραρίου'], ['show_map', 'Εμφάνιση χάρτη'],
-          ['show_kpis', 'Εμφάνιση KPIs'], ['show_spaces', 'Εμφάνιση χώρων'],
-          ['branch_expanded', 'Το detail υποκαταστήματος να ανοίγει αρχικά'], ['show_visits', 'Εμφάνιση πρόσφατων επισκέψεων'], ['spaces_expanded', 'Οι χώροι να εμφανίζονται expanded'],
-          ['visits_expanded', 'Οι επισκέψεις να εμφανίζονται expanded'],
-        ].map(([key, label]) => <label style={chk} key={key}><input type="checkbox" checked={f.view_preferences?.branch_detail?.[key] !== false} onChange={setView('branch_detail', key)} /> {label}</label>)}
       </div>
       <div className="section-title">Χάρτες</div>
       <div className="field-group"><label>Άνοιγμα τοποθεσίας με</label>

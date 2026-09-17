@@ -34,6 +34,16 @@ export default function CustomersPanel() {
   return (
     <div className="settings-module-panel">
       {message && <div className="voice-msg ok">{message}</div>}
+      <div className="section-title" style={{ marginTop: 0 }}>Προεπιλογές πελατών</div>
+      <div className="field-group"><label>Προεπιλεγμένη χώρα</label><input className="settings-control" value={value.default_country || ''} onChange={(event) => onChange({ ...value, default_country: event.target.value })} /></div>
+      <div className="field-group"><label>Προεπιλεγμένη κατάσταση νέου πελάτη</label>
+        <select className="settings-control" value={value.default_customer_status || 'active'} onChange={(event) => onChange({ ...value, default_customer_status: event.target.value })}>
+          <option value="active">Ενεργός</option><option value="prospect">Υποψήφιος</option><option value="inactive">Ανενεργός</option>
+        </select>
+      </div>
+      <label className="settings-check"><input type="checkbox" checked={!!value.require_email} onChange={(event) => onChange({ ...value, require_email: event.target.checked })} /> Υποχρεωτικό email</label>
+      <label className="settings-check"><input type="checkbox" checked={!!value.strict_duplicates} onChange={(event) => onChange({ ...value, strict_duplicates: event.target.checked })} /> Αυστηρός έλεγχος διπλοεγγραφών</label>
+      <label className="settings-check"><input type="checkbox" checked={!!value.allow_vip} onChange={(event) => onChange({ ...value, allow_vip: event.target.checked })} /> Ενεργό VIP</label>
       <div className="section-title" style={{ marginTop: 0 }}>Καρτέλα πελάτη</div>
       <div className="muted settings-help">Ενεργοποιήστε τα tabs, αλλάξτε το όνομά τους και καθορίστε τη σειρά εμφάνισης.</div>
       <div className="field-group">
