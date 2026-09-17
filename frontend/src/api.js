@@ -17,7 +17,7 @@ async function handle(res) {
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Request failed: ${res.status}`);
+    throw new Error(body.detail ? `${body.error || 'Request failed'}: ${body.detail}` : (body.error || `Request failed: ${res.status}`));
   }
   return res.json();
 }

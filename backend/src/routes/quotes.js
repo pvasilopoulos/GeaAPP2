@@ -29,6 +29,20 @@ function totals(lines = []) {
   }, { subtotal: 0, tax_total: 0, total: 0 });
 }
 
+async function insertQuoteLine(quoteId, line) {
+  const values = [quoteId, line.line_order, line.description || 'Γραμμή', Number(line.quantity) || 1, Number(line.unit_price) || 0, Number(line.discount_percent) || 0, Number(line.tax_percent ?? 24), Number(line.line_total) || 0];
+  try {
+    await query(
+      `INSERT INTO quote_lines (quote_id, line_order, description, quantity, unit_price, discount_percent, tax_percent, line_total, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [...values, line.metadata ? JSON.stringify(line.metadata) : null]);
+  } catch (error) {
+    if (error?.code !== 'ER_BAD_FIELD_ERROR' && error?.errno !== 1054) throw error;
+    await query(
+      `INSERT INTO quote_lines (quote_id, line_order, description, quantity, unit_price, discount_percent, tax_percent, line_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      values);
+  }
+}
+
 quotesRouter.get('/', async (req, res, next) => {
   try {
     const { rows } = await query(
@@ -96,9 +110,7 @@ quotesRouter.post('/', authorize(PERMISSIONS.QUOTES_CREATE), async (req, res, ne
       `INSERT INTO quotes (tenant_id, series, quote_number, quote_date, customer_id, branch_id, email_template, payment_terms, valid_until, seller_id, reference_start_year, reference_end_year, payment_due_date, send_email, status, status_updated_at, status_updated_by, subtotal, tax_total, total, created_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?)`,
       [req.user.tenantId, b.series || 'ΠΡΟΣ', number, b.quoteDate, b.customerId, b.branchId || null, b.emailTemplate || null, b.paymentTerms || null, b.validUntil || null, b.sellerId || null, b.referenceStartYear || null, b.referenceEndYear || null, b.paymentDueDate || null, b.sendEmail ? 1 : 0, b.sendEmail ? 'ready' : 'draft', req.user.id, calculated.subtotal, calculated.tax_total, calculated.total, req.user.id]);
-    for (const line of lines) await query(
-      `INSERT INTO quote_lines (quote_id, line_order, description, quantity, unit_price, discount_percent, tax_percent, line_total, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [r.rows.insertId, line.line_order, line.description || 'Γραμμή', Number(line.quantity) || 1, Number(line.unit_price) || 0, Number(line.discount_percent) || 0, Number(line.tax_percent ?? 24), Number(line.line_total) || 0, line.metadata ? JSON.stringify(line.metadata) : null]);
+    for (const line of lines) await insertQuoteLine(r.rows.insertId, line);
     res.status(201).json({ id: r.rows.insertId, ...calculated });
   } catch (err) { next(err); }
 });
@@ -116,9 +128,7 @@ quotesRouter.patch('/:id', authorize(PERMISSIONS.QUOTES_EDIT), async (req, res, 
       `UPDATE quotes SET series = ?, quote_number = ?, quote_date = ?, customer_id = ?, branch_id = ?, email_template = ?, payment_terms = ?, valid_until = ?, seller_id = ?, reference_start_year = ?, reference_end_year = ?, payment_due_date = ?, send_email = ?, subtotal = ?, tax_total = ?, total = ?, updated_at = NOW() WHERE id = ? AND tenant_id = ?`,
       [b.series || existing.series, Number(b.quoteNumber) || existing.quote_number, b.quoteDate, b.customerId, b.branchId || null, b.emailTemplate || null, b.paymentTerms || null, b.validUntil || null, b.sellerId || null, b.referenceStartYear || null, b.referenceEndYear || null, b.paymentDueDate || null, b.sendEmail ? 1 : 0, calculated.subtotal, calculated.tax_total, calculated.total, id, req.user.tenantId]);
     await query('DELETE FROM quote_lines WHERE quote_id = ?', [id]);
-    for (const line of lines) await query(
-      `INSERT INTO quote_lines (quote_id, line_order, description, quantity, unit_price, discount_percent, tax_percent, line_total, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, line.line_order, line.description || 'Γραμμή', Number(line.quantity) || 1, Number(line.unit_price) || 0, Number(line.discount_percent) || 0, Number(line.tax_percent ?? 24), Number(line.line_total) || 0, line.metadata ? JSON.stringify(line.metadata) : null]);
+    for (const line of lines) await insertQuoteLine(id, line);
     res.json({ id, ...calculated });
   } catch (err) { next(err); }
 });
