@@ -59,8 +59,8 @@ export function EmptyState({ icon = 'grid', title, hint }) {
 export function Drawer({ title, subtitle, onClose, children, wide = false }) {
   return (
     <>
-      <div className="drawer-backdrop" onClick={onClose} />
-      <aside className={`drawer${wide ? ' drawer-wide' : ''}`}>
+      <div className="drawer-backdrop" onClick={onClose} aria-hidden="true" />
+      <aside className={`drawer${wide ? ' drawer-wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
         <div className="drawer-head">
           <div>
             <div style={{ fontSize: 16, fontWeight: 700 }}>{title}</div>

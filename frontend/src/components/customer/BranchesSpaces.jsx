@@ -349,7 +349,7 @@ function BranchDetail({
 }
 
 function SpaceDrawer({ customerId, space, canWrite, onClose, onEdit, onDeleted }) {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['space-usage', customerId, space.id],
     queryFn: ({ signal }) => api.spaceUsage(customerId, space.id, { signal }),
   });
@@ -359,7 +359,9 @@ function SpaceDrawer({ customerId, space, canWrite, onClose, onEdit, onDeleted }
   };
   return (
     <Drawer title={space.name} subtitle={space.space_type} onClose={onClose}>
-      {isLoading ? <Skeleton h={200} /> : (
+      {isLoading ? <Skeleton h={200} /> : isError || !data?.space ? (
+        <EmptyState icon="grid" title="Δεν ήταν δυνατή η φόρτωση του χώρου" hint="Κλείστε το παράθυρο και δοκιμάστε ξανά." />
+      ) : (
         <>
           {canWrite && (
             <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
