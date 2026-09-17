@@ -4,10 +4,10 @@
 // while well-known aliases are used to populate the standard, calculable quote fields.
 
 export const QUOTE_LINE_ALIASES = {
-  description: ['description', 'name', 'title', 'item_name'],
-  quantity: ['quantity', 'qty'],
-  unit_price: ['unit_price', 'price', 'unitPrice', 'amount', 'value'],
-  discount_percent: ['discount_percent', 'discount'],
+  description: ['description', 'name', 'title', 'item_name', 'ProductName', 'productName'],
+  quantity: ['quantity', 'qty', 'QTY1', 'qty1'],
+  unit_price: ['unit_price', 'price', 'unitPrice', 'amount', 'value', 'PRICE', 'priceValue'],
+  discount_percent: ['discount_percent', 'discount', 'DISC1PRC', 'disc1Prc'],
   tax_percent: ['tax_percent', 'tax', 'vat'],
 };
 

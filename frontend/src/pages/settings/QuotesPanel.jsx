@@ -6,7 +6,7 @@ import { api } from '../../api.js';
 const DEFAULT = {
   url: '', method: 'POST',
   body_template: '{"customerId":"{{customerId}}","branchId":"{{branchId}}","referenceStartYear":"{{referenceStartYear}}","referenceEndYear":"{{referenceEndYear}}","paymentDueDate":"{{paymentDueDate}}"}',
-  headers: '{}', response_path: 'lines',
+  headers: '{}', response_path: 'data.lines',
 };
 
 export default function QuotesPanel() {

@@ -70,7 +70,12 @@ quotesRouter.post('/resolve-lines', authorize(PERMISSIONS.QUOTES_FETCH_LINES), a
     } finally { clearTimeout(timer); }
     if (!response.ok) return res.status(502).json({ error: `Το ERP API επέστρεψε HTTP ${response.status}` });
     const payload = await response.json();
-    const lines = String(config.response_path || 'lines').split('.').reduce((value, key) => value?.[key], payload);
+    const configuredPath = String(config.response_path || 'data.lines').trim();
+    let lines = configuredPath.split('.').filter(Boolean).reduce((value, key) => value?.[key], payload);
+    // ERP responses commonly wrap the line array in { data: { lines: [...] } }.
+    // Keep the configured path authoritative, but accept this standard envelope
+    // when older settings still contain the legacy `lines` path.
+    if (!Array.isArray(lines) && configuredPath === 'lines') lines = payload?.data?.lines;
     if (!Array.isArray(lines)) return res.status(502).json({ error: 'Το response του ERP δεν περιέχει array γραμμών στο JSON path που ορίστηκε' });
     res.json({ lines: mapErpLinesToQuoteLines(lines) });
   } catch (err) { next(err); }

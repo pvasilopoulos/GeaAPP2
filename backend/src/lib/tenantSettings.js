@@ -27,7 +27,7 @@ export const DEFAULT_TENANT_SETTINGS = {
     method: 'POST',
     body_template: '{"customerId":"{{customerId}}","branchId":"{{branchId}}","referenceStartYear":"{{referenceStartYear}}","referenceEndYear":"{{referenceEndYear}}","paymentDueDate":"{{paymentDueDate}}"}',
     headers: '{}',
-    response_path: 'lines',
+    response_path: 'data.lines',
   },
   google_maps_api_key: '',
   view_preferences: {
