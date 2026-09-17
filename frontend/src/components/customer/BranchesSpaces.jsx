@@ -131,6 +131,7 @@ export default function BranchesSpaces({ customerId }) {
           canWrite={canWrite}
           mapProvider={mapProvider}
           mapsApiKey={mapsApiKey}
+          preferences={preferences}
           branchVisits={branchVisits}
           visitsLoading={visitsQ.isLoading}
           onEdit={() => setBranchForm({ branch: selected })}
@@ -206,7 +207,7 @@ function HoursStrip({ hours }) {
   );
 }
 
-function BranchDetail({ selected, canWrite, mapProvider, mapsApiKey, branchVisits, visitsLoading, onEdit, onDelete, onAddSpace, onOpenSpace }) {
+function BranchDetail({ selected, canWrite, mapProvider, mapsApiKey, preferences = {}, branchVisits, visitsLoading, onEdit, onDelete, onAddSpace, onOpenSpace }) {
   const href = mapUrl(selected, mapProvider);
   const embed = mapEmbedUrl(selected, mapProvider, mapsApiKey);
   const providerName = mapProviderLabel(mapProvider);
