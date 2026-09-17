@@ -99,14 +99,20 @@ export async function ensureSchema() {
       reference_start_year INT, reference_end_year INT, payment_due_date DATE,
       send_email TINYINT(1) NOT NULL DEFAULT 0, email_sent TINYINT(1) NOT NULL DEFAULT 0,
       email_sent_at DATETIME NULL, status VARCHAR(20) NOT NULL DEFAULT 'draft',
+      status_error TEXT NULL, status_updated_at DATETIME NULL, status_updated_by BIGINT NULL,
+      pdf_generated_at DATETIME NULL,
       subtotal DECIMAL(12,2) NOT NULL DEFAULT 0, tax_total DECIMAL(12,2) NOT NULL DEFAULT 0,
       total DECIMAL(12,2) NOT NULL DEFAULT 0, created_by BIGINT NULL,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       UNIQUE KEY uq_quotes_series_number (tenant_id, series, quote_number),
       KEY idx_quotes_customer (tenant_id, customer_id, created_at),
-      CONSTRAINT fk_quotes_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      CONSTRAINT fk_quotes_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
   }
+  await addColumn('quotes', 'status_error', 'TEXT NULL');
+  await addColumn('quotes', 'status_updated_at', 'DATETIME NULL');
+  await addColumn('quotes', 'status_updated_by', 'BIGINT NULL');
+  await addColumn('quotes', 'pdf_generated_at', 'DATETIME NULL');
   if (!(await tableExists('quote_lines'))) {
     await query(`CREATE TABLE quote_lines (
       id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, quote_id BIGINT NOT NULL,

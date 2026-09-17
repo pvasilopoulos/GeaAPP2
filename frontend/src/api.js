@@ -82,6 +82,19 @@ export const api = {
   resolveQuoteLines: (payload) => send('POST', '/quotes/resolve-lines', payload),
   createQuote: (payload) => send('POST', '/quotes', payload),
   updateQuote: (id, payload) => send('PATCH', `/quotes/${id}`, payload),
+  updateQuoteStatus: (id, status) => send('POST', `/quotes/${id}/status`, { status }),
+  sendQuoteEmail: (id, payload = {}) => send('POST', `/quotes/${id}/send`, payload),
+  async downloadQuotePdf(id) {
+    const res = await fetch(`/api/quotes/${id}/pdf`, { headers: authHeaders() });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Η λήψη PDF απέτυχε');
+    const blob = await res.blob();
+    const cd = res.headers.get('Content-Disposition') || '';
+    const m = cd.match(/filename="?([^"]+)"?/);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = m ? m[1] : `quote-${id}.pdf`;
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  },
   connectorRuns: (id, opts) => get(`/connectors/${id}/runs`, opts),
   messagingChannels: (opts) => get('/settings/messaging/channels', opts),
   sendCustomerMessage: (id, payload) => send('POST', `/customers/${id}/messages`, payload),
