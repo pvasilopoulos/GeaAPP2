@@ -192,6 +192,8 @@ CREATE TABLE customers (
   total_value      DECIMAL(12,2) NOT NULL DEFAULT 0,
   last_visit_at    DATETIME NULL,
   next_booking_at  DATETIME NULL,
+  next_action_at   DATETIME NULL,
+  next_action_note VARCHAR(200) NULL,
   last_visit_sort  DATETIME NOT NULL DEFAULT '1000-01-01 00:00:00',
   search_norm      VARCHAR(768) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT '',
   KEY idx_customers_status (tenant_id, status),
@@ -492,6 +494,26 @@ CREATE TABLE activities (
   KEY idx_act_customer_time (customer_id, created_at),
   KEY idx_act_tenant_created (tenant_id, created_at),
   CONSTRAINT fk_act_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE follow_ups (
+  id                   BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  tenant_id            BIGINT NOT NULL,
+  customer_id          BIGINT NOT NULL,
+  title                VARCHAR(200) NOT NULL,
+  description          VARCHAR(1000) NULL,
+  due_at               DATETIME NOT NULL,
+  status               VARCHAR(20) NOT NULL DEFAULT 'open',
+  assigned_employee_id BIGINT NULL,
+  created_by           BIGINT NULL,
+  completed_at         DATETIME NULL,
+  created_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_followups_tenant_due (tenant_id, status, due_at),
+  KEY idx_followups_customer_due (customer_id, status, due_at),
+  CONSTRAINT fk_followups_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+  CONSTRAINT fk_followups_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+  CONSTRAINT fk_followups_employee FOREIGN KEY (assigned_employee_id) REFERENCES employees(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------------

@@ -26,6 +26,7 @@ import { tenantsRouter } from './routes/tenants.js';
 import { settingsRouter } from './routes/settings.js';
 import { connectorsRouter } from './routes/connectors.js';
 import { startScheduler } from './lib/scheduler.js';
+import { followUpsRouter } from './routes/followUps.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -60,6 +61,7 @@ app.use('/api/search', searchRouter);
 // by the `/:id` route.
 app.use('/api/customers', exportRouter);
 app.use('/api/customers', customersRouter);
+app.use('/api/follow-ups', followUpsRouter);
 app.use('/api/customer-views', customerViewsRouter);
 app.use('/api/branches', branchesRouter);
 app.use('/api/spaces', spacesRouter);

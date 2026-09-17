@@ -14,7 +14,8 @@ import { diffRecords, snapshotFields, packDetails, changeSummary, parseDetails }
 
 const CUSTOMER_FIELDS = ['first_name', 'last_name', 'email', 'phone', 'mobile', 'company',
   'tax_id', 'customer_type', 'status', 'is_vip', 'date_of_birth', 'address_line', 'city',
-  'postal_code', 'country', 'profile_note', 'assigned_employee_id', 'avatar_url'];
+  'postal_code', 'country', 'profile_note', 'assigned_employee_id', 'avatar_url',
+  'next_action_at', 'next_action_note'];
 
 function customerSearchNorm(r) {
   return normalizeFields(r.first_name, r.last_name, r.email, r.phone, r.mobile, r.company, r.tax_id, r.code, r.address_line, r.city, r.postal_code);
@@ -357,6 +358,19 @@ customersRouter.get('/:id/activities', subResource(
    LEFT JOIN spaces s ON s.id = a.space_id
    WHERE a.customer_id = ? ORDER BY a.created_at DESC LIMIT ? OFFSET ?`,
   (r) => ({ ...r, details: parseDetails(r.details) })));
+
+customersRouter.get('/:id/follow-ups', async (req, res, next) => {
+  try {
+    const { rows } = await query(
+      `SELECT f.id, f.title, f.description, f.due_at, f.status, f.completed_at,
+              f.assigned_employee_id, e.full_name AS assigned_employee
+       FROM follow_ups f LEFT JOIN employees e ON e.id = f.assigned_employee_id
+       WHERE f.customer_id = ? AND f.tenant_id = ? ORDER BY f.status = 'open' DESC, f.due_at ASC`,
+      [Number(req.params.id), req.user.tenantId]);
+    res.json({ results: rows });
+  } catch (err) { next(err); }
+});
+
 
 customersRouter.get('/:id/bookings', subResource(
   `SELECT b.id, b.starts_at, b.ends_at, b.status, b.amount, br.name AS branch_name, s.name AS space_name
