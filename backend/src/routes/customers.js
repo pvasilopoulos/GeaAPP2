@@ -47,11 +47,11 @@ customersRouter.get('/search', async (req, res, next) => {
     // predicate (if any) is applied in the WHERE by buildFilters().
     const { key: sortKey, cfg, idDir } = resolveSort(req);
 
-    const listCols = `c.id, c.code, c.full_name, c.email, c.phone, c.mobile, c.company,
-             c.customer_type, c.status, c.is_vip, c.city, c.avatar_url,
-             c.branches_count, c.spaces_count, c.bookings_count, c.visits_count,
-             c.total_value, c.last_visit_at, c.next_booking_at,
-             e.full_name AS assigned_employee`;
+    const customFields = `(SELECT COALESCE(JSON_OBJECTAGG(d.key, COALESCE(v.text_value, v.number_value, v.date_value, v.boolean_value, v.json_value)), JSON_OBJECT())
+      FROM custom_field_definitions d
+      LEFT JOIN customer_custom_field_values v ON v.field_definition_id = d.id AND v.customer_id = c.id
+      WHERE d.tenant_id = c.tenant_id AND d.entity_type = 'customer' AND d.active = 1) AS custom_fields`;
+    const listCols = `c.*, e.full_name AS assigned_employee, ${customFields}`;
 
     // Page-based pagination (numbered pages) when `page` is provided.
     if (req.query.page !== undefined) {
@@ -83,11 +83,7 @@ customersRouter.get('/search', async (req, res, next) => {
     }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const sql = `
-      SELECT c.id, c.code, c.full_name, c.email, c.phone, c.mobile, c.company,
-             c.customer_type, c.status, c.is_vip, c.city, c.avatar_url,
-             c.branches_count, c.spaces_count, c.bookings_count, c.visits_count,
-             c.total_value, c.last_visit_at, c.next_booking_at,
-             e.full_name AS assigned_employee,
+      SELECT c.*, e.full_name AS assigned_employee, ${customFields},
              ${selectCursor}
       FROM customers c
       LEFT JOIN employees e ON e.id = c.assigned_employee_id

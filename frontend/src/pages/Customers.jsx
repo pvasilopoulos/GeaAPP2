@@ -19,6 +19,16 @@ const COLUMNS = [
   { key: 'value', label: 'Αξία', sort: 'value' },
   { key: 'actions', label: '' },
 ];
+const DATABASE_COLUMNS = [
+  ['id', 'ID'], ['erp_id', 'ERP ID'], ['first_name', 'Όνομα'], ['last_name', 'Επώνυμο'],
+  ['email', 'Email'], ['phone', 'Τηλέφωνο'], ['mobile', 'Κινητό'], ['company', 'Επωνυμία'],
+  ['tax_id', 'ΑΦΜ'], ['customer_type', 'Τύπος πελάτη'], ['is_vip', 'VIP'], ['date_of_birth', 'Ημ. γέννησης'],
+  ['address_line', 'Διεύθυνση'], ['city', 'Πόλη'], ['postal_code', 'ΤΚ'], ['country', 'Χώρα'],
+  ['profile_note', 'Σημειώσεις'], ['assigned_employee_id', 'ID υπευθύνου'], ['registered_at', 'Ημ. εγγραφής'],
+  ['created_at', 'Δημιουργήθηκε'], ['updated_at', 'Τελευταία ενημέρωση'], ['branches_count', 'Υποκαταστήματα'],
+  ['spaces_count', 'Χώροι'], ['bookings_count', 'Κρατήσεις'], ['visits_count', 'Επισκέψεις'],
+  ['total_value', 'Συνολική αξία'], ['last_visit_at', 'Τελ. επίσκεψη'], ['next_booking_at', 'Επόμενη κράτηση'],
+];
 const PAGE_SIZES = [25, 50, 100];
 const SORTS = [
   { value: 'last_visit', label: 'Τελ. επίσκεψη' },
@@ -126,8 +136,14 @@ export default function Customers({ onOpenCustomer }) {
   const [activeView, setActiveView] = useState(null);
   const [viewName, setViewName] = useState('');
   const [dragColumn, setDragColumn] = useState(null);
+  const [customFieldColumns, setCustomFieldColumns] = useState([]);
 
   const { data: meta } = useQuery({ queryKey: ['meta'], queryFn: ({ signal }) => api.meta({ signal }) });
+  useEffect(() => {
+    api.metaCustomFields('customer').then((response) => setCustomFieldColumns(
+      (response.fields || []).map((field) => ({ key: `custom:${field.key}`, label: field.name, customKey: field.key })),
+    )).catch(() => {});
+  }, []);
   const canExport = useAuth((s) => s.hasPerm(PERMS.CUSTOMERS_EXPORT));
   const canWrite = useAuth((s) => s.hasPerm(PERMS.CUSTOMERS_WRITE));
   const qc = useQueryClient();
@@ -192,8 +208,13 @@ export default function Customers({ onOpenCustomer }) {
       setSortDir(SORTS.find((item) => item.value === key)?.value === 'name' ? 'ASC' : 'DESC');
     }
   };
+  const availableColumns = [...new Map([...COLUMNS, ...DATABASE_COLUMNS.map(([key, label]) => ({ key, label })), ...customFieldColumns].map((column) => [column.key, column])).values()];
+  const customValue = (customer, key) => {
+    const values = typeof customer.custom_fields === 'string' ? (() => { try { return JSON.parse(customer.custom_fields); } catch { return {}; } })() : (customer.custom_fields || {});
+    return values[key];
+  };
   const visibleColumns = columnOrder
-    .map((key) => COLUMNS.find((column) => column.key === key))
+    .map((key) => availableColumns.find((column) => column.key === key))
     .filter((column) => column && !hiddenColumns.includes(column.key));
   const viewConfig = () => ({ filters, columns: columnOrder, hiddenColumns, sort, sortDir, pageSize });
   const saveView = async () => {
@@ -288,10 +309,13 @@ export default function Customers({ onOpenCustomer }) {
         {showColumns && (
           <div className="customer-columns-menu">
             <b>Στήλες</b>
-            {columnOrder.map((key) => {
-              const column = COLUMNS.find((item) => item.key === key);
+            {availableColumns.map((column) => {
+              const key = column.key;
               if (!column || key === 'actions') return null;
-              return <label key={key}><input type="checkbox" checked={!hiddenColumns.includes(key)} onChange={() => setHiddenColumns((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key])} /> {column.label}</label>;
+              return <label key={key}><input type="checkbox" checked={!hiddenColumns.includes(key) && columnOrder.includes(key)} onChange={() => {
+                setHiddenColumns((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
+                if (!columnOrder.includes(key)) setColumnOrder((current) => [...current, key]);
+              }} /> {column.label}</label>;
             })}
             <button className="btn btn-sm btn-ghost" onClick={() => { setColumnOrder(DEFAULT_COLUMNS); setHiddenColumns([]); }}>Επαναφορά</button>
           </div>
@@ -356,7 +380,8 @@ export default function Customers({ onOpenCustomer }) {
                     : column.key === 'last_visit' ? <div className="muted" key={column.key}>{formatDate(c.last_visit_at)}</div>
                       : column.key === 'bookings' ? <div className="mono" key={column.key}>{formatNumber(c.bookings_count)}</div>
                         : column.key === 'value' ? <div className="num" key={column.key}>{formatCurrency(c.total_value)}</div>
-                          : <div key={column.key} style={{ textAlign: 'right', color: 'var(--text-3)' }}><Icon name="chevronRight" size={16} /></div>)}
+                          : column.key === 'actions' ? <div key={column.key} style={{ textAlign: 'right', color: 'var(--text-3)' }}><Icon name="chevronRight" size={16} /></div>
+                            : <div key={column.key} className={typeof (column.customKey ? customValue(c, column.customKey) : c[column.key]) === 'number' ? 'num' : 'muted'}>{String(column.customKey ? customValue(c, column.customKey) ?? '' : c[column.key] ?? '')}</div>)}
             </div>
           ))
         )}
