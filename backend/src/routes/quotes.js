@@ -98,7 +98,7 @@ quotesRouter.post('/', authorize(PERMISSIONS.QUOTES_CREATE), async (req, res, ne
       [req.user.tenantId, b.series || 'ΠΡΟΣ', number, b.quoteDate, b.customerId, b.branchId || null, b.emailTemplate || null, b.paymentTerms || null, b.validUntil || null, b.sellerId || null, b.referenceStartYear || null, b.referenceEndYear || null, b.paymentDueDate || null, b.sendEmail ? 1 : 0, b.sendEmail ? 'ready' : 'draft', req.user.id, calculated.subtotal, calculated.tax_total, calculated.total, req.user.id]);
     for (const line of lines) await query(
       `INSERT INTO quote_lines (quote_id, line_order, description, quantity, unit_price, discount_percent, tax_percent, line_total, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [r.rows.insertId, line.line_order, line.description || 'Γραμμή', line.quantity || 1, line.unit_price || 0, line.discount_percent || 0, line.tax_percent ?? 24, line.line_total, line.metadata ? JSON.stringify(line.metadata) : null]);
+      [r.rows.insertId, line.line_order, line.description || 'Γραμμή', Number(line.quantity) || 1, Number(line.unit_price) || 0, Number(line.discount_percent) || 0, Number(line.tax_percent ?? 24), Number(line.line_total) || 0, line.metadata ? JSON.stringify(line.metadata) : null]);
     res.status(201).json({ id: r.rows.insertId, ...calculated });
   } catch (err) { next(err); }
 });
@@ -118,7 +118,7 @@ quotesRouter.patch('/:id', authorize(PERMISSIONS.QUOTES_EDIT), async (req, res, 
     await query('DELETE FROM quote_lines WHERE quote_id = ?', [id]);
     for (const line of lines) await query(
       `INSERT INTO quote_lines (quote_id, line_order, description, quantity, unit_price, discount_percent, tax_percent, line_total, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, line.line_order, line.description || 'Γραμμή', line.quantity || 1, line.unit_price || 0, line.discount_percent || 0, line.tax_percent ?? 24, line.line_total, line.metadata ? JSON.stringify(line.metadata) : null]);
+      [id, line.line_order, line.description || 'Γραμμή', Number(line.quantity) || 1, Number(line.unit_price) || 0, Number(line.discount_percent) || 0, Number(line.tax_percent ?? 24), Number(line.line_total) || 0, line.metadata ? JSON.stringify(line.metadata) : null]);
     res.json({ id, ...calculated });
   } catch (err) { next(err); }
 });
