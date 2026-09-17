@@ -107,6 +107,7 @@ CREATE TABLE quote_lines (
   discount_percent DECIMAL(6,2) NOT NULL DEFAULT 0,
   tax_percent DECIMAL(6,2) NOT NULL DEFAULT 24,
   line_total DECIMAL(12,2) NOT NULL DEFAULT 0,
+  metadata JSON NULL,
   CONSTRAINT fk_quote_lines_quote FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
