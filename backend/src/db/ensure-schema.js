@@ -130,10 +130,12 @@ export async function ensureSchema() {
       line_order INT NOT NULL DEFAULT 0, description VARCHAR(500) NOT NULL,
       quantity DECIMAL(12,3) NOT NULL DEFAULT 1, unit_price DECIMAL(12,2) NOT NULL DEFAULT 0,
       discount_percent DECIMAL(6,2) NOT NULL DEFAULT 0, tax_percent DECIMAL(6,2) NOT NULL DEFAULT 24,
-      line_total DECIMAL(12,2) NOT NULL DEFAULT 0,
+      line_total DECIMAL(12,2) NOT NULL DEFAULT 0, metadata JSON NULL,
       CONSTRAINT fk_quote_lines_quote FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
   }
+  // Preserves the full raw ERP line object dynamically (spec: /quotes/resolve-lines).
+  await addColumn('quote_lines', 'metadata', 'JSON NULL');
   await addUniqueIndex('customers', 'uq_customers_tenant_erp_id', 'tenant_id, erp_id');
   // ERP identity is based on ERP IDs, not the human-readable/imported code.
   // Existing installations may still have the inline UNIQUE index named `code`.

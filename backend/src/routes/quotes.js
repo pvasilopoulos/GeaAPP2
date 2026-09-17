@@ -9,6 +9,7 @@ import PDFDocument from 'pdfkit';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { QUOTE_STATUSES, QUOTE_STATUS_TRANSITIONS } from '../lib/quoteWorkflow.js';
+import { mapErpLinesToQuoteLines } from '../lib/quoteLineMapping.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FONT = path.resolve(__dirname, '../../assets/fonts/DejaVuSans.ttf');
@@ -71,7 +72,7 @@ quotesRouter.post('/resolve-lines', authorize(PERMISSIONS.QUOTES_FETCH_LINES), a
     const payload = await response.json();
     const lines = String(config.response_path || 'lines').split('.').reduce((value, key) => value?.[key], payload);
     if (!Array.isArray(lines)) return res.status(502).json({ error: 'Το response του ERP δεν περιέχει array γραμμών στο JSON path που ορίστηκε' });
-    res.json({ lines });
+    res.json({ lines: mapErpLinesToQuoteLines(lines) });
   } catch (err) { next(err); }
 });
 
@@ -87,8 +88,8 @@ quotesRouter.post('/', authorize(PERMISSIONS.QUOTES_CREATE), async (req, res, ne
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?)`,
       [req.user.tenantId, b.series || 'ΠΡΟΣ', number, b.quoteDate, b.customerId, b.branchId || null, b.emailTemplate || null, b.paymentTerms || null, b.validUntil || null, b.sellerId || null, b.referenceStartYear || null, b.referenceEndYear || null, b.paymentDueDate || null, b.sendEmail ? 1 : 0, b.sendEmail ? 'ready' : 'draft', req.user.id, calculated.subtotal, calculated.tax_total, calculated.total, req.user.id]);
     for (const line of lines) await query(
-      `INSERT INTO quote_lines (quote_id, line_order, description, quantity, unit_price, discount_percent, tax_percent, line_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [r.rows.insertId, line.line_order, line.description || 'Γραμμή', line.quantity || 1, line.unit_price || 0, line.discount_percent || 0, line.tax_percent ?? 24, line.line_total]);
+      `INSERT INTO quote_lines (quote_id, line_order, description, quantity, unit_price, discount_percent, tax_percent, line_total, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [r.rows.insertId, line.line_order, line.description || 'Γραμμή', line.quantity || 1, line.unit_price || 0, line.discount_percent || 0, line.tax_percent ?? 24, line.line_total, line.metadata ? JSON.stringify(line.metadata) : null]);
     res.status(201).json({ id: r.rows.insertId, ...calculated });
   } catch (err) { next(err); }
 });
@@ -107,8 +108,8 @@ quotesRouter.patch('/:id', authorize(PERMISSIONS.QUOTES_EDIT), async (req, res, 
       [b.series || existing.series, Number(b.quoteNumber) || existing.quote_number, b.quoteDate, b.customerId, b.branchId || null, b.emailTemplate || null, b.paymentTerms || null, b.validUntil || null, b.sellerId || null, b.referenceStartYear || null, b.referenceEndYear || null, b.paymentDueDate || null, b.sendEmail ? 1 : 0, calculated.subtotal, calculated.tax_total, calculated.total, id, req.user.tenantId]);
     await query('DELETE FROM quote_lines WHERE quote_id = ?', [id]);
     for (const line of lines) await query(
-      `INSERT INTO quote_lines (quote_id, line_order, description, quantity, unit_price, discount_percent, tax_percent, line_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, line.line_order, line.description || 'Γραμμή', line.quantity || 1, line.unit_price || 0, line.discount_percent || 0, line.tax_percent ?? 24, line.line_total]);
+      `INSERT INTO quote_lines (quote_id, line_order, description, quantity, unit_price, discount_percent, tax_percent, line_total, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, line.line_order, line.description || 'Γραμμή', line.quantity || 1, line.unit_price || 0, line.discount_percent || 0, line.tax_percent ?? 24, line.line_total, line.metadata ? JSON.stringify(line.metadata) : null]);
     res.json({ id, ...calculated });
   } catch (err) { next(err); }
 });
