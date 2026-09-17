@@ -220,6 +220,13 @@ export default function Customers({ onOpenCustomer }) {
     const values = typeof customer.custom_fields === 'string' ? (() => { try { return JSON.parse(customer.custom_fields); } catch { return {}; } })() : (customer.custom_fields || {});
     return values[key];
   };
+  const tableGrid = visibleColumns.map((column) => {
+    if (column.key === 'name') return 'minmax(250px, 2.4fr)';
+    if (column.key === 'actions') return '42px';
+    if (column.key === 'branches') return 'minmax(120px, 1.35fr)';
+    if (column.key === 'last_visit') return 'minmax(130px, 1.1fr)';
+    return 'minmax(110px, 1fr)';
+  }).join(' ');
   const visibleColumns = columnOrder
     .map((key) => availableColumns.find((column) => column.key === key))
     .filter((column) => column && !hiddenColumns.includes(column.key));
@@ -312,13 +319,14 @@ export default function Customers({ onOpenCustomer }) {
             {views.map((view) => <option key={view.id} value={view.id}>{view.name}</option>)}
           </select>
         </div>
-        <button className="btn" onClick={() => setShowColumns((open) => !open)}><Icon name="settings" size={15} /> Στήλες</button>
-        {showColumns && (
-          <div className="customer-columns-menu">
+        <div className="customer-columns-anchor">
+          <button className={`btn${showColumns ? ' is-active' : ''}`} onClick={() => setShowColumns((open) => !open)}><Icon name="settings" size={15} /> Στήλες <span className="customer-columns-count">{visibleColumns.length}</span></button>
+          {showColumns && (
+          <div className="customer-columns-menu" role="dialog" aria-label="Επιλογή στηλών">
             <div className="customer-columns-menu-head"><b>Στήλες</b><span>{visibleColumns.length}/{availableColumns.length}</span></div>
             <input className="customer-columns-search" value={columnSearch} onChange={(event) => setColumnSearch(event.target.value)} placeholder="Αναζήτηση πεδίου…" />
             <div className="customer-columns-actions">
-              <button type="button" onClick={() => setHiddenColumns([])}>Όλες</button>
+              <button type="button" onClick={() => { setColumnOrder(availableColumns.map((column) => column.key)); setHiddenColumns([]); }}>Όλες</button>
               <button type="button" onClick={() => setHiddenColumns(availableColumns.filter((column) => column.key !== 'name' && column.key !== 'actions').map((column) => column.key))}>Καμία</button>
             </div>
             <div className="customer-columns-list">
@@ -339,7 +347,8 @@ export default function Customers({ onOpenCustomer }) {
             </div>
             <button className="btn btn-sm btn-ghost" onClick={() => { setColumnOrder(DEFAULT_COLUMNS); setHiddenColumns([]); setColumnSearch(''); }}>Επαναφορά</button>
           </div>
-        )}
+          )}
+        </div>
         <button className="btn btn-accent" onClick={saveView}><Icon name="bookmark" size={15} /> {activeView ? 'Αποθήκευση' : 'Αποθήκευση λίστας'}</button>
         {activeView && <button className="btn btn-ghost danger-action" title="Διαγραφή προβολής" onClick={deleteView}><Icon name="x" size={15} /></button>}
       </div>
@@ -363,7 +372,7 @@ export default function Customers({ onOpenCustomer }) {
       </div>
 
       <div className="table-wrap">
-        <div className="thead">
+        <div className="thead" style={{ gridTemplateColumns: tableGrid }}>
           {visibleColumns.map((c) => (
             <div key={c.key} draggable onDragStart={() => setDragColumn(c.key)} onDragOver={(event) => event.preventDefault()} onDrop={() => dragEnd(c.key)} className={c.sort ? 'sortable' : ''} style={c.key === 'actions' ? { textAlign: 'right' } : undefined}
               onClick={c.sort ? () => toggleSort(c.sort) : undefined}>
@@ -376,7 +385,7 @@ export default function Customers({ onOpenCustomer }) {
         {isLoading ? (
           <div style={{ padding: 8 }}>
             {Array.from({ length: 10 }).map((_, i) => (
-              <div className="trow" key={i} style={{ cursor: 'default' }}>
+              <div className="trow" key={i} style={{ cursor: 'default', gridTemplateColumns: tableGrid }}>
                 <div className="cust-cell"><Skeleton w={38} h={38} style={{ borderRadius: '50%' }} /><Skeleton w={140} /></div>
                 <Skeleton w={70} /><Skeleton w={80} /><Skeleton w={60} /><Skeleton w={70} /><Skeleton w={40} /><Skeleton w={60} /><span />
               </div>
@@ -386,7 +395,7 @@ export default function Customers({ onOpenCustomer }) {
           <EmptyState icon="users" title="Δεν βρέθηκαν πελάτες" hint="Δοκιμάστε διαφορετικά κριτήρια αναζήτησης ή φίλτρα." />
         ) : (
           rows.map((c) => (
-            <div className="trow" key={c.id} onClick={() => onOpenCustomer(c)}>
+            <div className="trow" key={c.id} style={{ gridTemplateColumns: tableGrid }} onClick={() => onOpenCustomer(c)}>
             {visibleColumns.map((column) => column.key === 'name' ? <div className="cust-cell" key={column.key}>
                 <Avatar name={c.full_name} src={c.avatar_url} size={38} fallback={false} />
                 <div style={{ minWidth: 0 }}>
