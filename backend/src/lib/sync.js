@@ -151,7 +151,7 @@ export async function runSync(tenantId, connectorId) {
     throw error;
   }
   const mappings = parseJson(connector.mappings);
-  const validation = validateMappings(mappings);
+  const validation = validateMappings(mappings, targetEntity);
   if (validation.length) throw new Error(validation.join('; '));
 
   const run = await query(

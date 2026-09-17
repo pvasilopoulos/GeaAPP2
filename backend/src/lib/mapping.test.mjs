@@ -5,4 +5,6 @@ assert.equal(getPath({ rows: [{ name: 'x' }] }, 'rows[0].name'), 'x');
 assert.deepEqual(mapRecord({ id: 3, name: 'A' }, { erp_id: 'id', label: 'name' }), { erp_id: 3, label: 'A' });
 assert.ok(validateMappings({}).length);
 assert.equal(validateMappings({ customers: { erp_id: 'id', name: 'name' }, branches: { erp_id: 'id', name: 'n' }, spaces: { erp_id: 'id', name: 'n' } }).length, 0);
+assert.equal(validateMappings({ customers: { erp_id: 'customer_id', code: 'code', company: 'company_name' } }, 'customers').length, 0);
+assert.deepEqual(validateMappings({ customers: { erp_id: 'customer_id' } }, 'customers'), ['customers.code or customers.name mapping is required']);
 console.log('mapping tests passed');

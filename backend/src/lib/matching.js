@@ -4,3 +4,9 @@ export function ensureParent(record, parentField, parentId) {
   if (!parentId) throw new Error(`Missing ${parentField} parent`);
   return { ...record, [parentField]: parentId };
 }
+
+export function requireErpId(record, field, entity) {
+  const value = normalizeErpId(record?.[field]);
+  if (!value) throw new Error(`${entity}.${field} is empty`);
+  return value;
+}

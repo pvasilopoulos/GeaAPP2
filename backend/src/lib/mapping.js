@@ -3,9 +3,11 @@ export function getPath(value, path) {
   const parts = String(path).replace(/\[([^\]]+)\]/g, '.$1').split('.').filter(Boolean);
   return parts.reduce((v, p) => v == null ? undefined : v[p], value);
 }
-export function validateMappings(mappings = {}) {
+export function validateMappings(mappings = {}, targetEntity = null) {
   const errors = [];
-  for (const entity of ['customers', 'branches', 'spaces']) {
+  const entities = targetEntity && ['customers', 'branches', 'spaces'].includes(targetEntity)
+    ? [targetEntity] : ['customers', 'branches', 'spaces'];
+  for (const entity of entities) {
     const map = mappings[entity];
     if (!map || typeof map !== 'object') { errors.push(`${entity} mapping is required`); continue; }
     if (!map.erp_id) errors.push(`${entity}.erp_id mapping is required`);
