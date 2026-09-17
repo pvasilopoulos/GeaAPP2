@@ -132,6 +132,10 @@ export default function BranchesSpaces({ customerId }) {
           mapProvider={mapProvider}
           mapsApiKey={mapsApiKey}
           preferences={preferences}
+          spacesOpen={spacesOpen}
+          visitsOpen={visitsOpen}
+          onToggleSpaces={() => setSpacesOpen((value) => !value)}
+          onToggleVisits={() => setVisitsOpen((value) => !value)}
           branchVisits={branchVisits}
           visitsLoading={visitsQ.isLoading}
           onEdit={() => setBranchForm({ branch: selected })}
@@ -207,7 +211,11 @@ function HoursStrip({ hours }) {
   );
 }
 
-function BranchDetail({ selected, canWrite, mapProvider, mapsApiKey, preferences = {}, branchVisits, visitsLoading, onEdit, onDelete, onAddSpace, onOpenSpace }) {
+function BranchDetail({
+  selected, canWrite, mapProvider, mapsApiKey, preferences = {},
+  spacesOpen, visitsOpen, onToggleSpaces, onToggleVisits,
+  branchVisits, visitsLoading, onEdit, onDelete, onAddSpace, onOpenSpace,
+}) {
   const href = mapUrl(selected, mapProvider);
   const embed = mapEmbedUrl(selected, mapProvider, mapsApiKey);
   const providerName = mapProviderLabel(mapProvider);
@@ -272,7 +280,7 @@ function BranchDetail({ selected, canWrite, mapProvider, mapsApiKey, preferences
               <div className="muted" style={{ fontSize: 12.5, marginTop: 2 }}>{selected.spaces.length} στον χώρο εργασίας του πελάτη</div>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn btn-sm" onClick={() => setSpacesOpen((v) => !v)}>{spacesOpen ? 'Απόκρυψη' : 'Εμφάνιση'}</button>
+              <button className="btn btn-sm" onClick={onToggleSpaces}>{spacesOpen ? 'Απόκρυψη' : 'Εμφάνιση'}</button>
               {canWrite && <button className="btn btn-sm btn-accent" onClick={onAddSpace}><Icon name="plus" size={14} /> Προσθήκη</button>}
             </div>
           </div>
@@ -308,7 +316,7 @@ function BranchDetail({ selected, canWrite, mapProvider, mapsApiKey, preferences
         }
 
         {preferences.show_visits !== false && <div className="bd-section">
-          <div className="bd-section-h"><div className="section-title" style={{ margin: 0 }}>Πρόσφατες επισκέψεις</div><button className="btn btn-sm" onClick={() => setVisitsOpen((v) => !v)}>{visitsOpen ? 'Απόκρυψη' : 'Εμφάνιση'}</button></div>
+          <div className="bd-section-h"><div className="section-title" style={{ margin: 0 }}>Πρόσφατες επισκέψεις</div><button className="btn btn-sm" onClick={onToggleVisits}>{visitsOpen ? 'Απόκρυψη' : 'Εμφάνιση'}</button></div>
           {visitsOpen && <>
           {visitsLoading ? <Skeleton h={80} /> : branchVisits.length === 0 ? (
             <div className="bd-empty">Χωρίς επισκέψεις σε αυτό το υποκατάστημα.</div>
