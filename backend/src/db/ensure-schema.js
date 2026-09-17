@@ -70,6 +70,33 @@ export async function ensureSchema() {
   await addColumn('notes', 'category', "VARCHAR(60) NOT NULL DEFAULT 'general'");
   await addColumn('notes', 'is_pinned', 'TINYINT(1) NOT NULL DEFAULT 0');
   await addColumn('notes', 'is_archived', 'TINYINT(1) NOT NULL DEFAULT 0');
+  if (!(await tableExists('quotes'))) {
+    await query(`CREATE TABLE quotes (
+      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, tenant_id BIGINT NOT NULL,
+      series VARCHAR(30) NOT NULL, quote_number INT NOT NULL, quote_date DATE NOT NULL,
+      customer_id BIGINT NOT NULL, branch_id BIGINT NULL, email_template VARCHAR(100),
+      payment_terms VARCHAR(160), valid_until DATE, seller_id BIGINT NULL,
+      reference_start_year INT, reference_end_year INT, payment_due_date DATE,
+      send_email TINYINT(1) NOT NULL DEFAULT 0, email_sent TINYINT(1) NOT NULL DEFAULT 0,
+      email_sent_at DATETIME NULL, status VARCHAR(20) NOT NULL DEFAULT 'draft',
+      subtotal DECIMAL(12,2) NOT NULL DEFAULT 0, tax_total DECIMAL(12,2) NOT NULL DEFAULT 0,
+      total DECIMAL(12,2) NOT NULL DEFAULT 0, created_by BIGINT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_quotes_series_number (tenant_id, series, quote_number),
+      KEY idx_quotes_customer (tenant_id, customer_id, created_at),
+      CONSTRAINT fk_quotes_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+  }
+  if (!(await tableExists('quote_lines'))) {
+    await query(`CREATE TABLE quote_lines (
+      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, quote_id BIGINT NOT NULL,
+      line_order INT NOT NULL DEFAULT 0, description VARCHAR(500) NOT NULL,
+      quantity DECIMAL(12,3) NOT NULL DEFAULT 1, unit_price DECIMAL(12,2) NOT NULL DEFAULT 0,
+      discount_percent DECIMAL(6,2) NOT NULL DEFAULT 0, tax_percent DECIMAL(6,2) NOT NULL DEFAULT 24,
+      line_total DECIMAL(12,2) NOT NULL DEFAULT 0,
+      CONSTRAINT fk_quote_lines_quote FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+  }
   await addUniqueIndex('customers', 'uq_customers_tenant_erp_id', 'tenant_id, erp_id');
   // ERP identity is based on ERP IDs, not the human-readable/imported code.
   // Existing installations may still have the inline UNIQUE index named `code`.

@@ -13,6 +13,7 @@ import Customers from './pages/Customers.jsx';
 import CustomerProfile from './pages/CustomerProfile.jsx';
 import Settings from './pages/Settings.jsx';
 import Placeholder from './pages/Placeholder.jsx';
+import Quotes from './pages/Quotes.jsx';
 
 // Sidebar entries → open (or activate) a workspace tab. `perm` gates visibility.
 const NAV = [
@@ -27,13 +28,14 @@ const NAV = [
   { id: 'documents', type: 'documents', label: 'Έγγραφα', icon: 'file' },
   { id: 'branch-actions', type: 'branch-actions', label: 'Ενέργειες ανά υποκατάστημα', icon: 'activity' },
   { id: 'invoices', type: 'invoices', label: 'Τιμολόγια', icon: 'file' },
+  { id: 'quotes', type: 'quotes', label: 'Προσφορές', icon: 'file' },
   { id: 'settings', type: 'settings', label: 'Ρυθμίσεις', icon: 'settings', perms: [PERMS.SETTINGS_MANAGE, PERMS.USERS_MANAGE, PERMS.ROLES_MANAGE, PERMS.TENANT_MANAGE, PERMS.TENANTS_PLATFORM] },
 ];
 
 const NAV_GROUPS = [
   { id: 'workspace', label: 'Workspace', items: ['dashboard', 'calendar', 'reports'] },
   { id: 'customers', label: 'Πελατειακή διαχείριση', items: ['customers', 'branches', 'spaces', 'branch-actions', 'invoices'] },
-  { id: 'operations', label: 'Λειτουργίες', items: ['bookings', 'communications', 'documents'] },
+  { id: 'operations', label: 'Λειτουργίες', items: ['bookings', 'quotes', 'communications', 'documents'] },
   { id: 'admin', label: 'Διαχείριση', items: ['settings'] },
 ];
 
@@ -127,6 +129,7 @@ function TabContent({ tab }) {
     case 'customers': return <Customers onOpenCustomer={openCustomer} />;
     case 'customer': return <CustomerProfile customerId={tab.customerId} tabId={tab.id} onBack={() => activateTab('customers')} />;
     case 'settings': return <Settings />;
+    case 'quotes': return <Quotes />;
     case 'users': return <Settings initialCat="users" />;
     default: return <Placeholder title={tab.title} icon={tab.icon} />;
   }
