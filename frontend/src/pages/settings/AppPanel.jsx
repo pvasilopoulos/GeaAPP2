@@ -92,6 +92,7 @@ export default function AppPanel() {
           ['show_bookings', 'Εμφάνιση Κρατήσεων'], ['show_payments', 'Εμφάνιση Πληρωμών'],
           ['show_communications', 'Εμφάνιση Επικοινωνιών'], ['show_documents', 'Εμφάνιση Εγγράφων'],
           ['show_notes', 'Εμφάνιση Σημειώσεων'], ['show_activity', 'Εμφάνιση Δραστηριότητας'],
+          ['show_branch_actions', 'Εμφάνιση Ενεργειών ανά υποκατάστημα'], ['show_branch_invoices', 'Εμφάνιση Τιμολογίων ανά υποκατάστημα'],
         ].map(([key, label]) => <label style={chk} key={key}><input type="checkbox" checked={f.view_preferences?.customer_profile?.[key] !== false} onChange={setView('customer_profile', key)} /> {label}</label>)}
       </div>
       <div className="settings-subsection">

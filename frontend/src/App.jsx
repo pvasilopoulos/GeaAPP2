@@ -25,7 +25,16 @@ const NAV = [
   { id: 'reports', type: 'reports', label: 'Αναφορές', icon: 'chart' },
   { id: 'communications', type: 'communications', label: 'Επικοινωνίες', icon: 'message' },
   { id: 'documents', type: 'documents', label: 'Έγγραφα', icon: 'file' },
+  { id: 'branch-actions', type: 'branch-actions', label: 'Ενέργειες ανά υποκατάστημα', icon: 'activity' },
+  { id: 'invoices', type: 'invoices', label: 'Τιμολόγια', icon: 'file' },
   { id: 'settings', type: 'settings', label: 'Ρυθμίσεις', icon: 'settings', perms: [PERMS.SETTINGS_MANAGE, PERMS.USERS_MANAGE, PERMS.ROLES_MANAGE, PERMS.TENANT_MANAGE, PERMS.TENANTS_PLATFORM] },
+];
+
+const NAV_GROUPS = [
+  { id: 'workspace', label: 'Workspace', items: ['dashboard', 'calendar', 'reports'] },
+  { id: 'customers', label: 'Πελατειακή διαχείριση', items: ['customers', 'branches', 'spaces', 'branch-actions', 'invoices'] },
+  { id: 'operations', label: 'Λειτουργίες', items: ['bookings', 'communications', 'documents'] },
+  { id: 'admin', label: 'Διαχείριση', items: ['settings'] },
 ];
 
 function isIosDevice() {
@@ -141,13 +150,20 @@ export default function App() {
           SpaceHub
         </div>
         <div className="nav-group">
-          {nav.map((n) => (
-            <button key={n.id} className={`nav-item${activeId === n.id ? ' active' : ''}`}
-              onClick={() => openNavTab(n)}>
-              <Icon name={n.icon} />
-              {n.label}
-            </button>
-          ))}
+          {NAV_GROUPS.map((group) => {
+            const items = group.items.map((id) => nav.find((n) => n.id === id)).filter(Boolean);
+            if (!items.length) return null;
+            return <div className="nav-section" key={group.id}>
+              <div className="nav-section-label">{group.label}</div>
+              {items.map((n) => (
+                <button key={n.id} className={`nav-item${activeId === n.id ? ' active' : ''}`}
+                  onClick={() => openNavTab(n)}>
+                  <Icon name={n.icon} />
+                  {n.label}
+                </button>
+              ))}
+            </div>;
+          })}
         </div>
         <div className="sidebar-footer">
           <Avatar name={user?.fullName} size={34} />

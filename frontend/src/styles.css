@@ -91,6 +91,8 @@ input, select { font-family: inherit; font-size: 14px; }
   box-shadow: var(--shadow-sm);
 }
 .nav-group { display: flex; flex-direction: column; gap: 2px; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.nav-section { display: flex; flex-direction: column; gap: 2px; margin-bottom: 12px; }
+.nav-section-label { padding: 5px 12px 4px; color: var(--text-3); font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .nav-item {
   display: flex; align-items: center; gap: 11px;
   padding: 9px 11px; border-radius: var(--radius-sm);
@@ -400,6 +402,18 @@ input, select { font-family: inherit; font-size: 14px; }
 .branch-directory .card-head .muted { margin-left: 4px; font-size: 12px; font-weight: 400; }
 
 .branch-detail { margin-top: 16px; overflow: hidden; border-radius: 15px !important; }
+.branch-module-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.branch-module-card { overflow: hidden; }
+.branch-module-card .card-head { align-items: center; }
+.branch-module-card .card-head h3 { min-width: 0; }
+.branch-module-list { padding: 4px 16px 10px; }
+.branch-module-row { display: flex; gap: 10px; align-items: flex-start; padding: 11px 0; border-bottom: 1px solid var(--surface-2); }
+.branch-module-row:last-child { border-bottom: none; }
+.branch-module-row b, .branch-module-row small { display: block; }
+.branch-module-row b { font-size: 13px; }
+.branch-module-row small { margin-top: 3px; color: var(--text-3); font-size: 11.5px; }
+.branch-module-icon { display: grid; place-items: center; width: 28px; height: 28px; flex: none; border-radius: 8px; background: var(--accent-soft); color: var(--accent); }
+.branch-module-empty { min-height: 240px; display: grid; place-items: center; }
 .branch-detail .hero { display: flex; gap: 16px; align-items: flex-start; }
 .bd-cover { height: 168px; background: var(--surface-2); position: relative; }
 .bd-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -820,6 +834,8 @@ a.bd-fact:hover b { color: var(--accent); }
   .bd-actions .btn:not(.btn-icon) { flex: 1; justify-content: center; }
   .bd-section { margin-top: 22px; padding-top: 18px; }
   .content { padding: 12px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+  .nav-section-label { padding-left: 8px; }
+  .branch-module-grid { grid-template-columns: 1fr; }
   .user-btn .who { display: none; }
   h1 { font-size: 18px; }
 }
