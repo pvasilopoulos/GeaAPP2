@@ -86,18 +86,19 @@ function searchNorm(table, data) {
   return normalizeFields(data.code, data.name, data.address_line, data.city, data.phone, data.space_type, data.status);
 }
 
-async function findByErpId(conn, table, tenantId, erpId) {
-  const [rows] = await conn.query(`SELECT id FROM ${table} WHERE tenant_id = ? AND erp_id = ? LIMIT 1`, [tenantId, erpId]);
-  return rows[0]?.id || null;
+async function findByErpId(conn, table, tenantId, erpId, fullRow = false) {
+  const [rows] = await conn.query(`SELECT ${fullRow ? '*' : 'id'} FROM ${table} WHERE tenant_id = ? AND erp_id = ? LIMIT 1`, [tenantId, erpId]);
+  return rows[0] || null;
 }
 
 async function upsert(conn, table, tenantId, data) {
   const erpId = String(data.erp_id || '').trim();
   if (!erpId) throw new Error(`${table}.erp_id is empty`);
-  const existingId = await findByErpId(conn, table, tenantId, erpId);
+  const existing = await findByErpId(conn, table, tenantId, erpId, true);
+  const existingId = existing?.id || null;
   const fields = ENTITY_FIELDS[table].filter((field) => data[field] !== undefined);
   const values = fields.map((field) => data[field]);
-  const normalized = searchNorm(table, data);
+  const normalized = searchNorm(table, { ...existing, ...data });
 
   if (existingId) {
     if (fields.length) {
@@ -132,19 +133,19 @@ async function upsert(conn, table, tenantId, data) {
         data.name || erpId, data.space_type, data.status || 'available', normalized],
     );
   }
-  return findByErpId(conn, table, tenantId, erpId);
+  return (await findByErpId(conn, table, tenantId, erpId))?.id;
 }
 
 async function resolveCustomer(conn, tenantId, current, data) {
   const erpId = data.customer_erp_id || data.customer_id;
-  const customerId = current.get(String(erpId)) || await findByErpId(conn, 'customers', tenantId, erpId);
+  const customerId = current.get(String(erpId)) || (await findByErpId(conn, 'customers', tenantId, erpId))?.id;
   if (!customerId) throw new Error(`Branch ${data.erp_id} references unknown customer ${erpId}`);
   return customerId;
 }
 
 async function resolveBranch(conn, tenantId, current, data) {
   const erpId = data.branch_erp_id || data.branch_id;
-  const branchId = current.get(String(erpId)) || await findByErpId(conn, 'branches', tenantId, erpId);
+  const branchId = current.get(String(erpId)) || (await findByErpId(conn, 'branches', tenantId, erpId))?.id;
   if (!branchId) throw new Error(`Space ${data.erp_id} references unknown branch ${erpId}`);
   const [rows] = await conn.query('SELECT customer_id FROM branches WHERE id = ? AND tenant_id = ?', [branchId, tenantId]);
   if (!rows.length) throw new Error(`Space ${data.erp_id} references an invalid branch`);
