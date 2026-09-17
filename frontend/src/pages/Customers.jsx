@@ -43,6 +43,21 @@ const SORTS = [
   { value: 'bookings', label: 'Κρατήσεις' },
 ];
 const DEFAULT_COLUMNS = COLUMNS.map((column) => column.key);
+const IDENTITY_FIELDS = [
+  ['customer_type', 'Τύπος πελάτη'],
+  ['city', 'Πόλη'],
+  ['email', 'Email'],
+  ['phone', 'Τηλέφωνο'],
+  ['mobile', 'Κινητό'],
+  ['code', 'Κωδικός'],
+  ['erp_id', 'ERP ID'],
+  ['tax_id', 'ΑΦΜ'],
+  ['status', 'Κατάσταση'],
+  ['branches_count', 'Υποκαταστήματα'],
+  ['spaces_count', 'Χώροι'],
+  ['last_visit_at', 'Τελ. επίσκεψη'],
+];
+const DEFAULT_IDENTITY_FIELDS = ['customer_type', 'city'];
 
 const EMPTY_FILTERS = {
   status: [], customerType: '', tag: '', isVip: false, employeeId: '', city: '',
@@ -150,6 +165,7 @@ export default function Customers({ onOpenCustomer }) {
   const [dragColumn, setDragColumn] = useState(null);
   const [customFieldColumns, setCustomFieldColumns] = useState([]);
   const [columnSearch, setColumnSearch] = useState('');
+  const [identityFields, setIdentityFields] = useState(DEFAULT_IDENTITY_FIELDS);
 
   const { data: meta } = useQuery({ queryKey: ['meta'], queryFn: ({ signal }) => api.meta({ signal }) });
   useEffect(() => {
@@ -173,6 +189,7 @@ export default function Customers({ onOpenCustomer }) {
         if (config.sort) setSort(config.sort);
         if (config.sortDir) setSortDir(config.sortDir);
         if (config.pageSize) setPageSize(config.pageSize);
+        if (config.identityFields) setIdentityFields(config.identityFields);
       }
     }).catch(() => {});
   }, []);
@@ -246,7 +263,7 @@ export default function Customers({ onOpenCustomer }) {
     if (column.key === 'last_visit') return 'minmax(130px, 1.1fr)';
     return 'minmax(110px, 1fr)';
   }).join(' ');
-  const viewConfig = () => ({ filters, columns: columnOrder, hiddenColumns, sort, sortDir, pageSize });
+  const viewConfig = () => ({ filters, columns: columnOrder, hiddenColumns, sort, sortDir, pageSize, identityFields });
   const saveView = async () => {
     const name = viewName.trim() || window.prompt('Όνομα λίστας', activeView?.name || '');
     if (!name) return;
@@ -277,6 +294,7 @@ export default function Customers({ onOpenCustomer }) {
     setSort(config.sort || 'last_visit');
     setSortDir(config.sortDir || 'DESC');
     setPageSize(config.pageSize || 50);
+    setIdentityFields(config.identityFields || DEFAULT_IDENTITY_FIELDS);
   };
   const dragEnd = (target) => {
     if (!dragColumn || dragColumn === target) return;
@@ -349,6 +367,25 @@ export default function Customers({ onOpenCustomer }) {
               <button type="button" onClick={() => setHiddenColumns(availableColumns.filter((column) => column.key !== 'name' && column.key !== 'actions').map((column) => column.key))}>Καμία</button>
             </div>
             <div className="customer-columns-list">
+              <div className="customer-columns-group identity-fields-group">
+                <small>Κάτω από το όνομα · σύρετε για σειρά</small>
+                {IDENTITY_FIELDS.map(([key, label]) => {
+                  const selected = identityFields.includes(key);
+                  return <label key={key} draggable={selected} className={selected ? 'identity-field-option' : ''} onDragStart={() => selected && setDragColumn(`identity:${key}`)} onDragOver={(event) => event.preventDefault()} onDrop={() => {
+                    if (!dragColumn?.startsWith('identity:') || dragColumn === `identity:${key}`) return;
+                    setIdentityFields((current) => {
+                      const next = [...current]; const from = next.indexOf(dragColumn.slice(9)); const to = next.indexOf(key);
+                      if (from < 0 || to < 0) return current;
+                      next.splice(from, 1); next.splice(to, 0, dragColumn.slice(9)); return next;
+                    });
+                    setDragColumn(null);
+                  }}>
+                    <input type="checkbox" checked={selected} onChange={() => setIdentityFields((current) => selected ? current.filter((item) => item !== key) : [...current, key])} />
+                    <span>{label}</span>
+                    {selected && <Icon name="menu" size={13} />}
+                  </label>;
+                })}
+              </div>
               {columnGroups.map((group) => {
                 const columns = group.columns.filter((column) => column.key !== 'actions' && (!normalizedColumnSearch || column.label.toLocaleLowerCase('el-GR').includes(normalizedColumnSearch) || column.key.toLocaleLowerCase().includes(normalizedColumnSearch)));
                 if (!columns.length) return null;
@@ -364,7 +401,7 @@ export default function Customers({ onOpenCustomer }) {
                 </div>;
               })}
             </div>
-            <button className="btn btn-sm btn-ghost" onClick={() => { setColumnOrder(DEFAULT_COLUMNS); setHiddenColumns([]); setColumnSearch(''); }}>Επαναφορά</button>
+            <button className="btn btn-sm btn-ghost" onClick={() => { setColumnOrder(DEFAULT_COLUMNS); setHiddenColumns([]); setIdentityFields(DEFAULT_IDENTITY_FIELDS); setColumnSearch(''); }}>Επαναφορά</button>
           </div>
           )}
         </div>
@@ -415,7 +452,14 @@ export default function Customers({ onOpenCustomer }) {
         ) : (
           rows.map((c) => {
             const displayName = c.company || c.full_name || 'Χωρίς όνομα';
-            const identityMeta = [TYPE_LABELS[c.customer_type], c.city].filter(Boolean).join(' · ');
+            const identityValues = {
+              customer_type: TYPE_LABELS[c.customer_type],
+              status: STATUS_LABELS[c.status],
+              branches_count: c.branches_count != null ? `${formatNumber(c.branches_count)} υποκ.` : '',
+              spaces_count: c.spaces_count != null ? `${formatNumber(c.spaces_count)} χώροι` : '',
+              last_visit_at: c.last_visit_at ? formatDate(c.last_visit_at) : '',
+            };
+            const identityMeta = identityFields.map((field) => identityValues[field] ?? c[field]).filter((value) => value !== undefined && value !== null && value !== '').join(' · ');
             return <div className="trow" key={c.id} style={{ gridTemplateColumns: tableGrid }} onClick={() => onOpenCustomer(c)}>
             {visibleColumns.map((column) => column.key === 'name' ? <div className="cust-cell" key={column.key}>
                 <Avatar name={displayName} src={c.avatar_url} size={38} fallback={false} />
