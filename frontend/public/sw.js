@@ -23,7 +23,7 @@ self.addEventListener('message', (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
     await Promise.all(keys.map((k) => caches.delete(k)));
-    await caches.open(VERSION).then((cache) => cache.addAll(PRECACHE));
+    await caches.open(VERSION).then((cache) => Promise.all(PRECACHE.map((url) => cache.add(url).catch(() => {}))));
     await self.skipWaiting();
   })());
 });
