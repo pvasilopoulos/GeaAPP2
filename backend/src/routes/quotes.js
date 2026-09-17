@@ -82,3 +82,23 @@ quotesRouter.post('/', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, 
     res.status(201).json({ id: r.rows.insertId, ...calculated });
   } catch (err) { next(err); }
 });
+
+quotesRouter.patch('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const id = Number(req.params.id);
+    const lines = Array.isArray(b.lines) ? b.lines.map((line, index) => ({ ...line, line_order: index })) : [];
+    if (!b.customerId || !b.quoteDate) return res.status(400).json({ error: 'Πελάτης και ημερομηνία είναι υποχρεωτικά' });
+    const existing = (await query('SELECT id FROM quotes WHERE id = ? AND tenant_id = ?', [id, req.user.tenantId])).rows[0];
+    if (!existing) return res.status(404).json({ error: 'Η προσφορά δεν βρέθηκε' });
+    const calculated = totals(lines);
+    await query(
+      `UPDATE quotes SET series = ?, quote_number = ?, quote_date = ?, customer_id = ?, branch_id = ?, email_template = ?, payment_terms = ?, valid_until = ?, seller_id = ?, reference_start_year = ?, reference_end_year = ?, payment_due_date = ?, send_email = ?, status = ?, subtotal = ?, tax_total = ?, total = ?, updated_at = NOW() WHERE id = ? AND tenant_id = ?`,
+      [b.series || '7001', Number(b.quoteNumber), b.quoteDate, b.customerId, b.branchId || null, b.emailTemplate || null, b.paymentTerms || null, b.validUntil || null, b.sellerId || null, b.referenceStartYear || null, b.referenceEndYear || null, b.paymentDueDate || null, b.sendEmail ? 1 : 0, b.sendEmail ? 'ready' : 'draft', calculated.subtotal, calculated.tax_total, calculated.total, id, req.user.tenantId]);
+    await query('DELETE FROM quote_lines WHERE quote_id = ?', [id]);
+    for (const line of lines) await query(
+      `INSERT INTO quote_lines (quote_id, line_order, description, quantity, unit_price, discount_percent, tax_percent, line_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, line.line_order, line.description || 'Γραμμή', line.quantity || 1, line.unit_price || 0, line.discount_percent || 0, line.tax_percent ?? 24, line.line_total]);
+    res.json({ id, ...calculated });
+  } catch (err) { next(err); }
+});

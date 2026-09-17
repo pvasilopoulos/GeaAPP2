@@ -80,6 +80,7 @@ export const api = {
   quote: (id, opts) => get(`/quotes/${id}`, opts),
   resolveQuoteLines: (payload) => send('POST', '/quotes/resolve-lines', payload),
   createQuote: (payload) => send('POST', '/quotes', payload),
+  updateQuote: (id, payload) => send('PATCH', `/quotes/${id}`, payload),
   connectorRuns: (id, opts) => get(`/connectors/${id}/runs`, opts),
   messagingChannels: (opts) => get('/settings/messaging/channels', opts),
   sendCustomerMessage: (id, payload) => send('POST', `/customers/${id}/messages`, payload),

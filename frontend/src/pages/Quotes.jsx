@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api.js';
 import Icon from '../components/Icon.jsx';
@@ -15,25 +15,35 @@ function SearchSelect({ label, value, selectedLabel, disabled, onSelect, queryFn
 }
 
 export default function Quotes() {
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(null);
   const quotes = useQuery({ queryKey: ['quotes'], queryFn: ({ signal }) => api.quotes({ signal }) });
-  if (editing) return <QuoteEditor onBack={() => setEditing(false)} onSaved={() => { setEditing(false); quotes.refetch(); }} />;
+  if (editing) return <QuoteEditor quoteId={editing === true ? null : editing} onBack={() => setEditing(null)} onSaved={() => { setEditing(null); quotes.refetch(); }} />;
   return <div className="quotes-page">
     <div className="page-head"><div><h1>Προσφορές</h1><div className="sub">Δημιουργία, παρακολούθηση και αποστολή προσφορών</div></div><button className="btn btn-primary" onClick={() => setEditing(true)}><Icon name="plus" size={16} /> Νέα προσφορά</button></div>
     <div className="quotes-summary"><div><span>Σύνολο</span><b>{quotes.data?.results?.length || 0}</b></div><div><span>Πρόχειρες</span><b>{quotes.data?.results?.filter((q) => q.status === 'draft').length || 0}</b></div><div><span>Απεσταλμένες</span><b>{quotes.data?.results?.filter((q) => q.email_sent).length || 0}</b></div></div>
-    <div className="quotes-table">{(quotes.data?.results || []).map((quote) => <div className="quote-row" key={quote.id}><div className="quote-number">{quote.series}-{quote.quote_number}</div><div><b>{quote.company || quote.customer_name}</b><span>{quote.branch_name || 'Όλα τα υποκαταστήματα'} · {formatDate(quote.quote_date)}</span></div><div><span className={`quote-status ${quote.status}`}>{quote.status === 'draft' ? 'Πρόχειρη' : 'Έτοιμη'}</span></div><strong>{formatCurrency(quote.total)}</strong><Icon name="chevronRight" size={16} /></div>)}</div>
+    <div className="quotes-table">{(quotes.data?.results || []).map((quote) => <button className="quote-row" key={quote.id} type="button" onClick={() => setEditing(quote.id)}><div className="quote-number">{quote.series}-{quote.quote_number}</div><div><b>{quote.company || quote.customer_name}</b><span>{quote.branch_name || 'Όλα τα υποκαταστήματα'} · {formatDate(quote.quote_date)}</span></div><div><span className={`quote-status ${quote.status}`}>{quote.status === 'draft' ? 'Πρόχειρη' : 'Έτοιμη'}</span></div><strong>{formatCurrency(quote.total)}</strong><Icon name="chevronRight" size={16} /></button>)}</div>
   </div>;
 }
 
-function QuoteEditor({ onBack, onSaved }) {
+function QuoteEditor({ quoteId, onBack, onSaved }) {
   const qc = useQueryClient();
   const [form, setForm] = useState(initial);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [selectedBranch, setSelectedBranch] = useState(null);
   const [lines, setLines] = useState([]);
   const [loadingLines, setLoadingLines] = useState(false);
   const [saving, setSaving] = useState(false);
   const branches = useQuery({ queryKey: ['quote-branches', form.customerId], queryFn: ({ signal }) => api.branches({ customerId: form.customerId, limit: 100 }, { signal }), enabled: !!form.customerId });
   const meta = useQuery({ queryKey: ['meta'], queryFn: ({ signal }) => api.meta({ signal }) });
+  const quote = useQuery({ queryKey: ['quote', quoteId], queryFn: ({ signal }) => api.quote(quoteId, { signal }), enabled: !!quoteId });
+  useEffect(() => {
+    if (!quote.data?.quote) return;
+    const current = quote.data.quote;
+    setForm({ series: current.series, quoteNumber: current.quote_number, quoteDate: String(current.quote_date).slice(0, 10), customerId: current.customer_id, branchId: current.branch_id || '', emailTemplate: current.email_template || 'SALES - Προσφορά // EVENTS', paymentTerms: current.payment_terms || 'Επί Πίστωση', validUntil: current.valid_until ? String(current.valid_until).slice(0, 10) : '', sellerId: current.seller_id || '', referenceStartYear: current.reference_start_year || '', referenceEndYear: current.reference_end_year || '', paymentDueDate: current.payment_due_date ? String(current.payment_due_date).slice(0, 10) : '', sendEmail: !!current.send_email });
+    setSelectedCustomer({ id: current.customer_id, company: current.company, full_name: current.customer_name });
+    setSelectedBranch(current.branch_id ? { id: current.branch_id, name: current.branch_name } : null);
+    setLines(current.lines || []);
+  }, [quote.data]);
   const set = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.type === 'checkbox' ? event.target.checked : event.target.value }));
   const calculate = useMemo(() => lines.reduce((sum, line) => sum + Number(line.line_total || 0), 0), [lines]);
   const loadLines = async () => {
@@ -50,13 +60,13 @@ function QuoteEditor({ onBack, onSaved }) {
     next.line_total = Number((quantity * price * (1 - discount / 100) * (1 + tax / 100)).toFixed(2));
     return next;
   }));
-  const save = async (event) => { event.preventDefault(); setSaving(true); try { await api.createQuote({ ...form, customerId: Number(form.customerId), branchId: form.branchId ? Number(form.branchId) : null, lines }); qc.invalidateQueries({ queryKey: ['quotes'] }); onSaved(); } finally { setSaving(false); } };
-  return <div className="quotes-page quote-editor"><button className="btn btn-ghost btn-sm" onClick={onBack}><Icon name="arrowLeft" size={16} /> Προσφορές</button><div className="quote-editor-head"><div><div className="settings-eyebrow">NEW QUOTE</div><h1>Νέα προσφορά</h1><p>Συμπλήρωσε τα στοιχεία και φόρτωσε τις γραμμές από το API.</p></div><div className="quote-editor-actions"><button className="btn" onClick={onBack}>Ακύρωση</button><button className="btn btn-primary" disabled={saving} onClick={save}>{saving ? <span className="spinner" /> : <Icon name="check" size={15} />} Αποθήκευση</button></div></div>
+  const save = async (event) => { event.preventDefault(); setSaving(true); try { const payload = { ...form, customerId: Number(form.customerId), branchId: form.branchId ? Number(form.branchId) : null, lines }; if (quoteId) await api.updateQuote(quoteId, payload); else await api.createQuote(payload); qc.invalidateQueries({ queryKey: ['quotes'] }); onSaved(); } finally { setSaving(false); } };
+  return <div className="quotes-page quote-editor"><button className="btn btn-ghost btn-sm" onClick={onBack}><Icon name="arrowLeft" size={16} /> Προσφορές</button><div className="quote-editor-head"><div><div className="settings-eyebrow">{quoteId ? 'EDIT QUOTE' : 'NEW QUOTE'}</div><h1>{quoteId ? `Προσφορά ${form.series}-${form.quoteNumber}` : 'Νέα προσφορά'}</h1><p>{quoteId ? 'Προβολή και επεξεργασία καταχωρημένης προσφοράς.' : 'Συμπλήρωσε τα στοιχεία και φόρτωσε τις γραμμές από το API.'}</p></div><div className="quote-editor-actions"><button className="btn" onClick={onBack}>Ακύρωση</button><button className="btn btn-primary" disabled={saving || quote.isLoading} onClick={save}>{saving ? <span className="spinner" /> : <Icon name="check" size={15} />} Αποθήκευση</button></div></div>
     <form onSubmit={save} className="quote-editor-grid"><div className="quote-main">
       <section className="quote-card"><div className="quote-card-head"><h3>Στοιχεία προσφοράς</h3><Icon name="file" size={18} /></div><div className="quote-form-grid">
         <label>Σειρά<select value={form.series} onChange={set('series')}><option>7001</option><option>7002</option></select></label><label>Αριθμός<input value={form.quoteNumber} onChange={set('quoteNumber')} placeholder="Αυτόματο" /></label><label>Ημερομηνία<input type="date" value={form.quoteDate} onChange={set('quoteDate')} /></label>
         <SearchSelect label="Πελάτης" value={form.customerId} selectedLabel={selectedCustomer ? `${selectedCustomer.company || selectedCustomer.full_name} · ${selectedCustomer.code}` : ''} placeholder="Επιλογή πελάτη" onSelect={(customer) => { setSelectedCustomer(customer); setForm((current) => ({ ...current, customerId: customer.id, branchId: '' })); }} queryFn={(term, signal) => api.searchCustomers({ page: 1, limit: 25, q: term, sort: 'name', sortDir: 'ASC' }, { signal })} />
-        <SearchSelect label="Υποκατάστημα" value={form.branchId} selectedLabel={branches.data?.results?.find((branch) => String(branch.id) === String(form.branchId))?.name} placeholder="Όλα τα υποκαταστήματα" disabled={!form.customerId} onSelect={(branch) => setForm((current) => ({ ...current, branchId: branch.id }))} queryFn={(term, signal) => api.branches({ customerId: form.customerId, q: term, limit: 25 }, { signal })} />
+        <SearchSelect label="Υποκατάστημα" value={form.branchId} selectedLabel={selectedBranch?.name || branches.data?.results?.find((branch) => String(branch.id) === String(form.branchId))?.name} placeholder="Όλα τα υποκαταστήματα" disabled={!form.customerId} onSelect={(branch) => { setSelectedBranch(branch); setForm((current) => ({ ...current, branchId: branch.id })); }} queryFn={(term, signal) => api.branches({ customerId: form.customerId, q: term, limit: 25 }, { signal })} />
         <label>Πωλητής<select value={form.sellerId} onChange={set('sellerId')}><option value="">Επιλογή πωλητή</option>{(meta.data?.employees || []).map((employee) => <option key={employee.id} value={employee.id}>{employee.full_name}</option>)}</select></label>
         <label>Email template<select value={form.emailTemplate} onChange={set('emailTemplate')}><option>SALES - Προσφορά // EVENTS</option></select></label>
       </div></section>
