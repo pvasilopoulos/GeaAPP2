@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { query } from '../db.js';
 import { authorize } from '../middleware/auth.js';
 import { PERMISSIONS } from '../lib/permissions.js';
+import { mergeTenantSettings, parseJson } from '../lib/tenantSettings.js';
 
 export const quotesRouter = Router();
 quotesRouter.use(authorize(PERMISSIONS.CUSTOMERS_READ));
@@ -44,8 +45,23 @@ quotesRouter.post('/resolve-lines', authorize(PERMISSIONS.CUSTOMERS_WRITE), asyn
   try {
     const { customerId, branchId, referenceStartYear, referenceEndYear, paymentDueDate } = req.body || {};
     if (!customerId) return res.status(400).json({ error: 'Επιλέξτε πελάτη' });
-    // Stable contract for the UI until the ERP quote-lines endpoint is configured.
-    res.json({ lines: [{ description: `Υπηρεσίες ${referenceStartYear || ''}-${referenceEndYear || ''}`.trim(), quantity: 1, unit_price: 0, discount_percent: 0, tax_percent: 24, branch_id: branchId || null, payment_due_date: paymentDueDate || null }] });
+    const settings = (await query('SELECT settings FROM tenants WHERE id = ?', [req.user.tenantId])).rows[0]?.settings;
+    const config = mergeTenantSettings(settings).quote_api;
+    if (!config?.url) return res.status(422).json({ error: 'Δεν έχει ρυθμιστεί URL στο Ρυθμίσεις → Προσφορές / ERP API' });
+    const values = { customerId, branchId: branchId || null, referenceStartYear: referenceStartYear || null, referenceEndYear: referenceEndYear || null, paymentDueDate: paymentDueDate || null };
+    const rendered = String(config.body_template || '{}').replace(/\{\{(\w+)\}\}/g, (_, key) => JSON.stringify(values[key] ?? ''));
+    const headers = parseJson(config.headers, {});
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30000);
+    let response;
+    try {
+      response = await fetch(config.url, { method: config.method === 'GET' ? 'GET' : 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: config.method === 'GET' ? undefined : rendered, signal: controller.signal });
+    } finally { clearTimeout(timer); }
+    if (!response.ok) return res.status(502).json({ error: `Το ERP API επέστρεψε HTTP ${response.status}` });
+    const payload = await response.json();
+    const lines = String(config.response_path || 'lines').split('.').reduce((value, key) => value?.[key], payload);
+    if (!Array.isArray(lines)) return res.status(502).json({ error: 'Το response του ERP δεν περιέχει array γραμμών στο JSON path που ορίστηκε' });
+    res.json({ lines });
   } catch (err) { next(err); }
 });
 
@@ -66,4 +82,3 @@ quotesRouter.post('/', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, 
     res.status(201).json({ id: r.rows.insertId, ...calculated });
   } catch (err) { next(err); }
 });
-

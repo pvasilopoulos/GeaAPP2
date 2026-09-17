@@ -4,6 +4,7 @@ export const APP_SETTING_KEYS = [
   'default_country', 'date_format', 'week_starts_on',
   'default_customer_status', 'require_email', 'strict_duplicates',
   'voice_lang', 'allow_vip', 'map_provider', 'view_preferences',
+  'quote_api',
 ];
 
 export const MAP_PROVIDER_IDS = ['google', 'osm', 'apple', 'bing'];
@@ -18,6 +19,13 @@ export const DEFAULT_TENANT_SETTINGS = {
   voice_lang: 'el-GR',
   allow_vip: true,
   map_provider: 'google',
+  quote_api: {
+    url: '',
+    method: 'POST',
+    body_template: '{"customerId":"{{customerId}}","branchId":"{{branchId}}","referenceStartYear":"{{referenceStartYear}}","referenceEndYear":"{{referenceEndYear}}","paymentDueDate":"{{paymentDueDate}}"}',
+    headers: '{}',
+    response_path: 'lines',
+  },
   google_maps_api_key: '',
   view_preferences: {
     customer_profile: {
@@ -111,6 +119,7 @@ export function publicAppSettings(raw) {
     ...pickAppKeys(merged),
     google_maps_api_key: '',
     has_google_maps_api_key: !!(merged.google_maps_api_key && String(merged.google_maps_api_key).trim()),
+    quote_api: merged.quote_api,
   };
 }
 

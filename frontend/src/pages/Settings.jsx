@@ -11,11 +11,13 @@ import MessagingPanel from './settings/MessagingPanel.jsx';
 import SecurityPanel from './settings/SecurityPanel.jsx';
 import ConnectorsPanel from './settings/ConnectorsPanel.jsx';
 import CustomersPanel from './settings/CustomersPanel.jsx';
+import QuotesPanel from './settings/QuotesPanel.jsx';
 
 const CATS = [
   { id: 'org', label: 'Οργανισμός', hint: 'Επωνυμία, γλώσσα, νόμισμα', icon: 'building', perms: [PERMS.TENANT_MANAGE, PERMS.SETTINGS_MANAGE] },
   { id: 'app', label: 'Εφαρμογή', hint: 'Προεπιλογές πελατών και εμφάνισης', icon: 'layers', perms: [PERMS.SETTINGS_MANAGE] },
   { id: 'customers', label: 'Customers', hint: 'Tabs, εμφάνιση και προεπιλογές πελατών', icon: 'users', perms: [PERMS.SETTINGS_MANAGE] },
+  { id: 'quotes', label: 'Προσφορές / ERP API', hint: 'Endpoint και JSON για τις γραμμές προσφορών', icon: 'file', perms: [PERMS.SETTINGS_MANAGE] },
   { id: 'messaging', label: 'Μηνύματα', hint: 'Email, Viber, SMS, Telegram', icon: 'message', perms: [PERMS.SETTINGS_MANAGE] },
   { id: 'users', label: 'Χρήστες & Ρόλοι', hint: 'Μέλη οργανισμού και δικαιώματα', icon: 'users', perms: [PERMS.USERS_MANAGE, PERMS.ROLES_MANAGE] },
   { id: 'fields', label: 'Custom Fields', hint: 'Δυναμικά πεδία πελατών / χώρων', icon: 'tag', perms: [PERMS.SETTINGS_MANAGE] },
@@ -26,7 +28,7 @@ const CATS = [
 
 const GROUPS = [
   { id: 'workspace', label: 'Χώρος εργασίας', items: ['org', 'app', 'customers', 'fields'] },
-  { id: 'operations', label: 'Λειτουργίες', items: ['messaging', 'connectors'] },
+  { id: 'operations', label: 'Λειτουργίες', items: ['messaging', 'connectors', 'quotes'] },
   { id: 'access', label: 'Πρόσβαση & ασφάλεια', items: ['users', 'security'] },
   { id: 'platform', label: 'Πλατφόρμα', items: ['tenants'] },
 ];
@@ -87,6 +89,7 @@ export default function Settings({ initialCat } = {}) {
               {active.id === 'org' && <OrgPanel />}
               {active.id === 'app' && <AppPanel />}
               {active.id === 'customers' && <CustomersPanel />}
+              {active.id === 'quotes' && <QuotesPanel />}
               {active.id === 'messaging' && <MessagingPanel />}
               {active.id === 'users' && <Users embedded />}
               {active.id === 'fields' && <CustomFieldsPanel />}
