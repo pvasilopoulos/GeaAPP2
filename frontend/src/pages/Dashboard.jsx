@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api.js';
 import Icon from '../components/Icon.jsx';
 import { Avatar, Skeleton } from '../components/ui.jsx';
@@ -14,6 +14,8 @@ const ACTIVITY_ICONS = {
   note_added: { icon: 'note', bg: 'var(--amber-soft)', fg: 'var(--amber)' },
   visit: { icon: 'pin', bg: '#eaeafe', fg: '#6d28d9' },
   document_uploaded: { icon: 'file', bg: 'var(--surface-2)', fg: 'var(--text-2)' },
+  follow_up_created: { icon: 'bell', bg: 'var(--amber-soft)', fg: 'var(--amber)' },
+  follow_up_completed: { icon: 'check', bg: 'var(--green-soft)', fg: 'var(--green)' },
 };
 
 function Kpi({ label, value, icon }) {
@@ -31,6 +33,7 @@ function Kpi({ label, value, icon }) {
 export default function Dashboard() {
   const openTab = useTabs((s) => s.openTab);
   const user = useAuth((s) => s.user);
+  const qc = useQueryClient();
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['stats'],
     queryFn: ({ signal }) => api.statsOverview({ signal }),
@@ -70,6 +73,10 @@ export default function Dashboard() {
       </div>
 
       <div className="grid-2">
+        <FollowUpsSection followUps={data?.followUps || []} loading={loading} onComplete={async (id) => {
+          await api.updateFollowUp(id, { status: 'completed' });
+          qc.invalidateQueries({ queryKey: ['stats'] });
+        }} />
         <div className="card">
           <div className="card-head"><h3><Icon name="pin" /> Κορυφαίες πόλεις</h3></div>
           <div style={{ padding: '6px 8px' }}>
@@ -107,6 +114,35 @@ export default function Dashboard() {
             )}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function FollowUpsSection({ followUps, loading, onComplete }) {
+  const overdue = followUps.filter((f) => new Date(f.due_at) < new Date());
+  const today = followUps.filter((f) => new Date(f.due_at).toDateString() === new Date().toDateString());
+  const rows = [...overdue, ...today.filter((f) => !overdue.includes(f))].slice(0, 8);
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h3><Icon name="bell" /> Follow-ups</h3>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {overdue.length > 0 && <span className="badge badge-inactive">{overdue.length} εκπρόθεσμα</span>}
+          {today.length > 0 && <span className="badge badge-prospect">{today.length} σήμερα</span>}
+        </div>
+      </div>
+      <div style={{ padding: rows.length ? '4px 8px 8px' : 16 }}>
+        {loading ? <Skeleton h={60} /> : rows.length === 0 ? <span className="muted">Δεν υπάρχουν follow-ups για σήμερα.</span> : rows.map((f) => (
+          <div className="search-row" key={f.id} style={{ padding: '10px 8px' }}>
+            <div className="avatar sq" style={{ width: 34, height: 34, background: new Date(f.due_at) < new Date() ? 'var(--red-soft)' : 'var(--amber-soft)', color: new Date(f.due_at) < new Date() ? 'var(--red)' : 'var(--amber)' }}><Icon name="bell" size={16} /></div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600 }}>{f.title}</div>
+              <div className="meta">{f.customer_name} · {new Date(f.due_at).toLocaleString('el-GR', { dateStyle: 'short', timeStyle: 'short' })}</div>
+            </div>
+            <button className="btn btn-sm btn-ghost" title="Ολοκλήρωση" onClick={() => onComplete(f.id)}><Icon name="check" size={15} /></button>
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -43,6 +43,7 @@ const ACT_LABELS = {
   contact_added: 'Νέα επαφή', contact_updated: 'Ενημέρωση επαφής', contact_removed: 'Διαγραφή επαφής',
   branch_created: 'Νέο υποκατάστημα', branch_updated: 'Ενημέρωση υποκαταστήματος', branch_deleted: 'Διαγραφή υποκαταστήματος',
   space_created: 'Νέος χώρος', space_updated: 'Ενημέρωση χώρου', space_deleted: 'Διαγραφή χώρου',
+  follow_up_created: 'Νέα υπενθύμιση', follow_up_completed: 'Ολοκλήρωση υπενθύμισης',
 };
 
 function deliveryClass(st) {

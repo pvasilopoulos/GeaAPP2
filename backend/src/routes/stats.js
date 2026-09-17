@@ -10,7 +10,7 @@ statsRouter.use(authorize(PERMISSIONS.CUSTOMERS_READ, PERMISSIONS.REPORTS_READ))
 statsRouter.get('/overview', async (req, res, next) => {
   try {
     const t = req.user.tenantId;
-    const [totals, vip, upcoming, topCities, recent] = await Promise.all([
+    const [totals, vip, upcoming, topCities, recent, followUps] = await Promise.all([
       query(`SELECT COUNT(*) AS total_customers,
                     SUM(status = 'active') AS active_customers,
                     COALESCE(SUM(total_value), 0) AS total_value
@@ -24,6 +24,11 @@ statsRouter.get('/overview', async (req, res, next) => {
              FROM activities a JOIN customers c ON c.id = a.customer_id
              WHERE a.tenant_id = ?
              ORDER BY a.created_at DESC LIMIT 8`, [t]),
+      query(`SELECT f.id, f.customer_id, f.title, f.description, f.due_at, f.status,
+                    c.full_name AS customer_name, c.code AS customer_code
+             FROM follow_ups f JOIN customers c ON c.id = f.customer_id
+             WHERE f.tenant_id = ? AND f.status = 'open'
+             ORDER BY f.due_at ASC LIMIT 12`, [t]),
     ]);
     res.json({
       totalCustomers: Number(totals.rows[0].total_customers),
@@ -33,6 +38,11 @@ statsRouter.get('/overview', async (req, res, next) => {
       upcomingBookings: Number(upcoming.rows[0].upcoming),
       topCities: topCities.rows.map((r) => ({ ...r, customers: Number(r.customers) })),
       recentActivity: recent.rows,
+      followUps: followUps.rows,
+      followUpCounts: {
+        today: followUps.rows.filter((r) => new Date(r.due_at).toDateString() === new Date().toDateString()).length,
+        overdue: followUps.rows.filter((r) => new Date(r.due_at) < new Date()).length,
+      },
     });
   } catch (err) {
     next(err);

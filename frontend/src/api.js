@@ -87,6 +87,11 @@ export const api = {
   // app
   meta: (opts) => get('/meta', opts),
   statsOverview: (opts) => get('/stats/overview', opts),
+  followUps: (params, opts) => get(`/follow-ups${qs(params)}`, opts),
+  createFollowUp: (payload) => send('POST', '/follow-ups', payload),
+  updateFollowUp: (id, payload) => send('PATCH', `/follow-ups/${id}`, payload),
+  deleteFollowUp: (id) => send('DELETE', `/follow-ups/${id}`),
+  customerFollowUps: (id, opts) => get(`/customers/${id}/follow-ups`, opts),
   searchCustomers: (params, opts) => get(`/customers/search${qs(params)}`, opts),
   customerViews: (opts) => get('/customer-views', opts),
   createCustomerView: (payload) => send('POST', '/customer-views', payload),

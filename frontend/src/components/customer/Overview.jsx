@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { api } from '../../api.js';
 import Icon from '../Icon.jsx';
 import { Avatar, StatusBadge, Skeleton, EmptyState } from '../ui.jsx';
@@ -30,6 +31,8 @@ const ACTIVITY_ICONS = {
   space_created: { icon: 'grid', bg: 'var(--accent-soft)', fg: 'var(--accent)' },
   space_updated: { icon: 'grid', bg: 'var(--amber-soft)', fg: 'var(--amber)' },
   space_deleted: { icon: 'grid', bg: 'var(--red-soft)', fg: 'var(--red)' },
+  follow_up_created: { icon: 'bell', bg: 'var(--amber-soft)', fg: 'var(--amber)' },
+  follow_up_completed: { icon: 'check', bg: 'var(--green-soft)', fg: 'var(--green)' },
 };
 
 function activityPreview(a) {
@@ -60,11 +63,23 @@ function visible(f, customer) {
 export default function Overview({ customerId, data, onOpenTab, onEditCustomer }) {
   const c = data.customer;
   const canWrite = useAuth((s) => s.hasPerm(PERMS.CUSTOMERS_WRITE));
+  const qc = useQueryClient();
+  const [followUpTitle, setFollowUpTitle] = useState('');
+  const [followUpDue, setFollowUpDue] = useState('');
 
   const branchesQ = useQuery({ queryKey: ['c-branches', customerId], queryFn: ({ signal }) => api.customerBranches(customerId, { signal }) });
   const actsQ = useQuery({ queryKey: ['c-acts', customerId, 'ov'], queryFn: ({ signal }) => api.customerActivities(customerId, { limit: 6 }, { signal }) });
   const fieldsQ = useQuery({ queryKey: ['c-fields', customerId], queryFn: ({ signal }) => api.customerCustomFields(customerId, { signal }) });
   const docsQ = useQuery({ queryKey: ['c-docs', customerId, 'ov'], queryFn: ({ signal }) => api.customerDocuments(customerId, { limit: 3 }, { signal }) });
+  const followUpsQ = useQuery({ queryKey: ['c-follow-ups', customerId], queryFn: ({ signal }) => api.customerFollowUps(customerId, { signal }) });
+  const createFollowUp = async (event) => {
+    event.preventDefault();
+    if (!followUpTitle.trim() || !followUpDue) return;
+    await api.createFollowUp({ customerId, title: followUpTitle, dueAt: new Date(followUpDue).toISOString() });
+    setFollowUpTitle(''); setFollowUpDue('');
+    qc.invalidateQueries({ queryKey: ['c-follow-ups', customerId] });
+    qc.invalidateQueries({ queryKey: ['customer', customerId] });
+  };
 
   const customFields = (fieldsQ.data?.fields || [])
     .filter((f) => visible(f, c) && fieldValue(f) != null);
@@ -84,6 +99,7 @@ export default function Overview({ customerId, data, onOpenTab, onEditCustomer }
           <div className="card-head"><h3><Icon name="users" /> Βασικά στοιχεία</h3>
             {canWrite && <a className="link" onClick={onEditCustomer}>Επεξεργασία</a>}
           </div>
+
           <div className="card-pad" style={{ paddingTop: 4 }}>
             <InfoRow k="Ονοματεπώνυμο" v={c.full_name} />
             <InfoRow k="Τύπος πελάτη" v={TYPE_LABELS[c.customer_type]} />
@@ -103,6 +119,23 @@ export default function Overview({ customerId, data, onOpenTab, onEditCustomer }
                 {customFields.map((f) => <InfoRow key={f.id} k={f.name} v={fieldValue(f)} />)}
               </>
             )}
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-head"><h3><Icon name="bell" /> Επόμενες ενέργειες</h3></div>
+          <div className="card-pad">
+            {followUpsQ.data?.results?.length ? followUpsQ.data.results.slice(0, 4).map((f) => (
+              <div className="search-row" key={f.id} style={{ padding: '8px 0' }}>
+                <Icon name="bell" size={15} style={{ color: new Date(f.due_at) < new Date() ? 'var(--red)' : 'var(--amber)' }} />
+                <div style={{ flex: 1 }}><div style={{ fontWeight: 600 }}>{f.title}</div><div className="meta">{formatDateTime(f.due_at)}</div></div>
+                {canWrite && <button className="btn btn-sm btn-ghost" onClick={async () => { await api.updateFollowUp(f.id, { status: 'completed' }); qc.invalidateQueries({ queryKey: ['c-follow-ups', customerId] }); qc.invalidateQueries({ queryKey: ['customer', customerId] }); }}><Icon name="check" size={14} /></button>}
+              </div>
+            )) : <div className="muted" style={{ marginBottom: 10 }}>Δεν υπάρχουν προγραμματισμένες ενέργειες.</div>}
+            {canWrite && <form onSubmit={createFollowUp} style={{ display: 'grid', gap: 7, marginTop: 8 }}>
+              <input className="input" placeholder="Νέα ενέργεια..." value={followUpTitle} onChange={(e) => setFollowUpTitle(e.target.value)} />
+              <div style={{ display: 'flex', gap: 7 }}><input className="input" type="datetime-local" value={followUpDue} onChange={(e) => setFollowUpDue(e.target.value)} /><button className="btn btn-primary" type="submit"><Icon name="plus" size={14} /></button></div>
+            </form>}
           </div>
         </div>
 

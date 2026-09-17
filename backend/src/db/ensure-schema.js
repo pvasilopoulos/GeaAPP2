@@ -57,6 +57,8 @@ export async function ensureSchema() {
   await addColumn('communications', 'recipient', 'VARCHAR(255) NULL');
   await addColumn('communications', 'delivery_status', "VARCHAR(20) NOT NULL DEFAULT 'logged'");
   await addColumn('activities', 'details', 'JSON NULL');
+  await addColumn('customers', 'next_action_at', 'DATETIME NULL');
+  await addColumn('customers', 'next_action_note', 'VARCHAR(200) NULL');
   await addColumn('customers', 'erp_id', 'VARCHAR(160) NULL');
   await addColumn('branches', 'erp_id', 'VARCHAR(160) NULL');
   await addColumn('branches', 'customer_erp_id', 'VARCHAR(160) NULL');
@@ -70,6 +72,24 @@ export async function ensureSchema() {
   await addColumn('notes', 'category', "VARCHAR(60) NOT NULL DEFAULT 'general'");
   await addColumn('notes', 'is_pinned', 'TINYINT(1) NOT NULL DEFAULT 0');
   await addColumn('notes', 'is_archived', 'TINYINT(1) NOT NULL DEFAULT 0');
+  if (!(await tableExists('follow_ups'))) {
+    await query(`CREATE TABLE follow_ups (
+      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      tenant_id BIGINT NOT NULL, customer_id BIGINT NOT NULL,
+      title VARCHAR(200) NOT NULL, description VARCHAR(1000) NULL,
+      due_at DATETIME NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'open',
+      assigned_employee_id BIGINT NULL, created_by BIGINT NULL,
+      completed_at DATETIME NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      KEY idx_followups_tenant_due (tenant_id, status, due_at),
+      KEY idx_followups_customer_due (customer_id, status, due_at),
+      CONSTRAINT fk_followups_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      CONSTRAINT fk_followups_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+      CONSTRAINT fk_followups_employee FOREIGN KEY (assigned_employee_id) REFERENCES employees(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    console.log('[schema] created follow_ups');
+  }
   if (!(await tableExists('quotes'))) {
     await query(`CREATE TABLE quotes (
       id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, tenant_id BIGINT NOT NULL,
