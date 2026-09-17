@@ -18,6 +18,36 @@ const now = Date.now();
 const DAY = 86400000;
 const LABELS = ['Α', 'Β', 'Γ', 'Δ', 'Ε', 'Ζ'];
 
+const DEFAULT_CONNECTORS = [
+  [
+    1, 1, 'Cusomers',
+    'https://gea.oncloud.gr/s1services/js/Softify.APP/Get_Customer_Data',
+    'customers', 'auto', 'GET', 'none',
+    '5wtT4tKRNRnZWtM9.3BymY5mqGIZrV7Xj6M0chw==.f4+ZUvjnXwyVsQpd2Q8NKb5IqhjNtvk=',
+    null, '{}',
+    '{"sources":{"customers":"","branches":"branches","spaces":"spaces"},"customers":{"erp_id":"customer_id","code":"code","company":"company_name","first_name":"first_name","last_name":"last_name","address_line":"address_street","postal_code":"address_postal","city":"address_city","tax_id":"vat_number","email":"email","phone":"phone","mobile":"mobile","status":"status"},"branches":{"erp_id":"id","customer_erp_id":"customer_id","name":"name"},"spaces":{"erp_id":"id","branch_erp_id":"branch_id","name":"name"}}',
+    null, 0, 30000, 3,
+  ],
+  [
+    2, 1, 'Branches',
+    'https://gea.oncloud.gr/s1services/js/Softify.APP/Get_Branch_Data',
+    'branches', 'auto', 'GET', 'none',
+    'tZe3XiZt+02Q8d7L.MakvkdNn0tdCQ70CLdW01A==.GLqsUGI1jdHTOCf0RHLL+V/FZJp2V38=',
+    null, '{}',
+    '{"sources":{"customers":"","branches":"branches","spaces":"spaces"},"customers":{"erp_id":"customer_id","code":"code","company":"company_name","first_name":"first_name","last_name":"last_name","address_line":"address_street","postal_code":"address_postal","city":"address_city","tax_id":"vat_number","email":"email","phone":"phone","mobile":"mobile","status":"status"},"branches":{"erp_id":"branch_id","customer_erp_id":"customer_id","name":"name","code":"code","city":"address_city","address_line":"address_street","phone":"phone"},"spaces":{"erp_id":"id","branch_erp_id":"branch_id","name":"name"}}',
+    null, 0, 30000, 3,
+  ],
+  [
+    3, 1, 'Places',
+    'https://gea.oncloud.gr/s1services/js/Softify.APP/Get_Spaces_Data',
+    'spaces', 'auto', 'GET', 'none',
+    'Fl4YEaInZY8tzk/I.KwftZxbuCXlGpcJA2BtolA==.vDl/0PayVWzLWcb41tv+ZFqIm4NIK8c=',
+    null, '{}',
+    '{"sources":{"customers":"","branches":"branches","spaces":"spaces"},"customers":{"erp_id":"customer_id","code":"code","company":"company_name","first_name":"first_name","last_name":"last_name","address_line":"address_street","postal_code":"address_postal","city":"address_city","tax_id":"vat_number","email":"email","phone":"phone","mobile":"mobile","status":"status"},"branches":{"erp_id":"id","customer_erp_id":"customer_id","name":"name"},"spaces":{"erp_id":"space_id","branch_erp_id":"branch_id","name":"name","code":"code","space_type":"amoivologio","status":"status"}}',
+    null, 0, 30000, 3,
+  ],
+];
+
 function pastDate(maxDaysAgo, minDaysAgo = 0) {
   return new Date(now - randInt(minDaysAgo, maxDaysAgo) * DAY - randInt(0, 86399) * 1000);
 }
@@ -261,6 +291,13 @@ async function main() {
   await conn.query('INSERT INTO tenants (id, name, slug, status, plan, locale, timezone, currency) VALUES ?',
     [[[1, 'Demo Α.Ε.', 'demo', 'active', 'business', 'el', 'Europe/Athens', 'EUR'],
       [2, 'Acme Ε.Π.Ε.', 'acme', 'active', 'standard', 'el', 'Europe/Athens', 'EUR']]]);
+
+  await conn.query(
+    `INSERT INTO connectors
+      (id, tenant_id, name, base_url, target_entity, response_encoding, method, auth_type,
+       credentials_enc, body_template, headers, mappings, schedule_minutes, enabled, timeout_ms, retry_count)
+     VALUES ?`,
+    [DEFAULT_CONNECTORS]);
 
   // Default roles cloned per tenant.
   const roleMap = { 1: await insertTenantRoles(q, 1), 2: await insertTenantRoles(q, 2) };
