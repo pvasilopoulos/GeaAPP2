@@ -9,6 +9,7 @@ import OrgPanel from './settings/OrgPanel.jsx';
 import AppPanel from './settings/AppPanel.jsx';
 import MessagingPanel from './settings/MessagingPanel.jsx';
 import SecurityPanel from './settings/SecurityPanel.jsx';
+import ConnectorsPanel from './settings/ConnectorsPanel.jsx';
 
 const CATS = [
   { id: 'org', label: 'Οργανισμός', hint: 'Επωνυμία, γλώσσα, νόμισμα', icon: 'building', perms: [PERMS.TENANT_MANAGE, PERMS.SETTINGS_MANAGE] },
@@ -18,6 +19,7 @@ const CATS = [
   { id: 'fields', label: 'Custom Fields', hint: 'Δυναμικά πεδία πελατών / χώρων', icon: 'tag', perms: [PERMS.SETTINGS_MANAGE] },
   { id: 'tenants', label: 'Tenants', hint: 'Δημιουργία, επεξεργασία, διαγραφή οργανισμών', icon: 'grid', perms: [PERMS.TENANTS_PLATFORM] },
   { id: 'security', label: 'Ασφάλεια', hint: 'Εγγραφή, πρόσβαση, πλατφόρμα', icon: 'settings', perms: [PERMS.SETTINGS_MANAGE, PERMS.TENANT_MANAGE, PERMS.TENANTS_PLATFORM] },
+  { id: 'connectors', label: 'ERP Sync', hint: 'Συνδέσεις, αντιστοιχίσεις και συγχρονισμοί', icon: 'refresh', perms: [PERMS.SETTINGS_MANAGE] },
 ];
 
 export default function Settings({ initialCat } = {}) {
@@ -66,6 +68,7 @@ export default function Settings({ initialCat } = {}) {
               {active.id === 'fields' && <CustomFieldsPanel />}
               {active.id === 'tenants' && <TenantsPanel />}
               {active.id === 'security' && <SecurityPanel />}
+              {active.id === 'connectors' && <ConnectorsPanel />}
             </>
           )}
         </div>

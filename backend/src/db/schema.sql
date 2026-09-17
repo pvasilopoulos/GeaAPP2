@@ -35,6 +35,8 @@ DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS roles;
 DROP TABLE IF EXISTS platform_settings;
 DROP TABLE IF EXISTS tenants;
+DROP TABLE IF EXISTS sync_runs;
+DROP TABLE IF EXISTS connectors;
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- ---------------------------------------------------------------------------
@@ -114,6 +116,7 @@ CREATE TABLE customers (
   id               BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
   tenant_id        BIGINT NOT NULL,
   code             VARCHAR(40) NOT NULL UNIQUE,
+  erp_id           VARCHAR(160) NULL,
   first_name       VARCHAR(120) NOT NULL,
   last_name        VARCHAR(120) NOT NULL,
   full_name        VARCHAR(255) GENERATED ALWAYS AS (CONCAT(first_name, ' ', last_name)) STORED,
@@ -189,6 +192,7 @@ CREATE TABLE branches (
   tenant_id     BIGINT NOT NULL,
   customer_id   BIGINT NOT NULL,
   code          VARCHAR(40) NOT NULL UNIQUE,
+  erp_id        VARCHAR(160) NULL,
   name          VARCHAR(200) NOT NULL,
   address_line  VARCHAR(255),
   city          VARCHAR(120),
@@ -227,6 +231,7 @@ CREATE TABLE spaces (
   customer_id    BIGINT NOT NULL,
   branch_id      BIGINT NOT NULL,
   code           VARCHAR(40) NOT NULL UNIQUE,
+  erp_id         VARCHAR(160) NULL,
   name           VARCHAR(200) NOT NULL,
   space_type     VARCHAR(120),
   capacity       INT,
@@ -254,6 +259,45 @@ CREATE TABLE spaces (
   CONSTRAINT fk_spaces_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
   CONSTRAINT fk_spaces_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
   CONSTRAINT fk_spaces_branch FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE connectors (
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  tenant_id BIGINT NOT NULL,
+  name VARCHAR(160) NOT NULL,
+  base_url VARCHAR(500) NOT NULL,
+  method VARCHAR(10) NOT NULL DEFAULT 'GET',
+  auth_type     VARCHAR(20) NOT NULL DEFAULT 'bearer',
+  credentials_enc TEXT NULL,
+  body_template TEXT NULL,
+  headers       JSON NULL,
+  mappings JSON NOT NULL,
+  schedule_minutes INT NULL,
+  enabled TINYINT(1) NOT NULL DEFAULT 0,
+  timeout_ms INT NOT NULL DEFAULT 30000,
+  retry_count INT NOT NULL DEFAULT 3,
+  last_run_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_connector_tenant_name (tenant_id, name),
+  KEY idx_connector_schedule (enabled, schedule_minutes, last_run_at),
+  CONSTRAINT fk_connectors_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE sync_runs (
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  tenant_id BIGINT NOT NULL,
+  connector_id BIGINT NOT NULL,
+  status VARCHAR(20) NOT NULL,
+  started_at DATETIME NOT NULL,
+  finished_at DATETIME NULL,
+  records_seen INT NOT NULL DEFAULT 0,
+  records_upserted INT NOT NULL DEFAULT 0,
+  error_count INT NOT NULL DEFAULT 0,
+  error_message TEXT NULL,
+  KEY idx_sync_runs_connector (connector_id, started_at),
+  CONSTRAINT fk_sync_runs_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+  CONSTRAINT fk_sync_runs_connector FOREIGN KEY (connector_id) REFERENCES connectors(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------------

@@ -71,6 +71,12 @@ export const api = {
   updatePlatformSettings: (payload) => send('PATCH', '/settings/platform', payload),
   messagingSettings: (opts) => get('/settings/messaging', opts),
   updateMessagingSettings: (payload) => send('PATCH', '/settings/messaging', payload),
+  connectors: (opts) => get('/connectors', opts),
+  createConnector: (payload) => send('POST', '/connectors', payload),
+  updateConnector: (id, payload) => send('PATCH', `/connectors/${id}`, payload),
+  deleteConnector: (id) => send('DELETE', `/connectors/${id}`),
+  runConnector: (id) => send('POST', `/connectors/${id}/run`),
+  connectorRuns: (id, opts) => get(`/connectors/${id}/runs`, opts),
   messagingChannels: (opts) => get('/settings/messaging/channels', opts),
   sendCustomerMessage: (id, payload) => send('POST', `/customers/${id}/messages`, payload),
   // app

@@ -17,4 +17,5 @@ export const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   jwtSecret: process.env.JWT_SECRET || 'dev-insecure-secret-change-me',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
+  connectorSecret: process.env.CONNECTOR_SECRET || process.env.JWT_SECRET || 'dev-insecure-secret-change-me',
 };
