@@ -2,7 +2,7 @@ import Icon from './Icon.jsx';
 import { Drawer } from './ui.jsx';
 
 const inp = { width: '100%', height: 38, padding: '0 10px', border: '1px solid var(--border-strong)', borderRadius: 9, background: '#fff' };
-const Row = ({ children }) => <div style={{ display: 'flex', gap: 10 }}>{children}</div>;
+const Row = ({ children }) => <div className="filter-drawer-row" style={{ display: 'flex', gap: 10 }}>{children}</div>;
 
 function Group({ title, children }) {
   return (
