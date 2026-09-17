@@ -210,6 +210,7 @@ CREATE TABLE branches (
   customer_id   BIGINT NOT NULL,
   code          VARCHAR(40) NOT NULL UNIQUE,
   erp_id        VARCHAR(160) NULL,
+  customer_erp_id VARCHAR(160) NULL,
   name          VARCHAR(200) NOT NULL,
   address_line  VARCHAR(255),
   city          VARCHAR(120),
@@ -234,7 +235,7 @@ CREATE TABLE branches (
   KEY idx_branches_tenant_city (tenant_id, city),
   KEY idx_branches_status (tenant_id, status),
   FULLTEXT KEY ft_branches_search (search_norm),
-  UNIQUE KEY uq_branches_tenant_erp_id (tenant_id, erp_id),
+  UNIQUE KEY uq_branches_tenant_customer_erp (tenant_id, customer_erp_id, erp_id),
   CONSTRAINT fk_branches_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
   CONSTRAINT fk_branches_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
   CONSTRAINT fk_branches_manager FOREIGN KEY (manager_employee_id) REFERENCES employees(id) ON DELETE SET NULL
@@ -250,6 +251,7 @@ CREATE TABLE spaces (
   branch_id      BIGINT NOT NULL,
   code           VARCHAR(40) NOT NULL UNIQUE,
   erp_id         VARCHAR(160) NULL,
+  branch_erp_id  VARCHAR(160) NULL,
   name           VARCHAR(200) NOT NULL,
   space_type     VARCHAR(120),
   capacity       INT,
@@ -274,7 +276,7 @@ CREATE TABLE spaces (
   KEY idx_spaces_tenant_type (tenant_id, space_type),
   KEY idx_spaces_status (tenant_id, status),
   FULLTEXT KEY ft_spaces_search (search_norm),
-  UNIQUE KEY uq_spaces_tenant_erp_id (tenant_id, erp_id),
+  UNIQUE KEY uq_spaces_tenant_branch_erp (tenant_id, branch_erp_id, erp_id),
   CONSTRAINT fk_spaces_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
   CONSTRAINT fk_spaces_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
   CONSTRAINT fk_spaces_branch FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE

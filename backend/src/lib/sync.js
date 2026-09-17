@@ -76,8 +76,8 @@ async function fetchWithRetry(connector) {
 
 const ENTITY_FIELDS = {
   customers: ['code', 'first_name', 'last_name', 'company', 'email', 'phone', 'mobile', 'tax_id', 'customer_type', 'address_line', 'city', 'postal_code', 'status'],
-  branches: ['customer_id', 'code', 'name', 'address_line', 'city', 'phone', 'status'],
-  spaces: ['customer_id', 'branch_id', 'code', 'name', 'space_type', 'status'],
+  branches: ['customer_id', 'customer_erp_id', 'code', 'name', 'address_line', 'city', 'phone', 'status'],
+  spaces: ['customer_id', 'branch_id', 'branch_erp_id', 'code', 'name', 'space_type', 'status'],
 };
 
 function searchNorm(table, data) {
@@ -172,15 +172,21 @@ async function saveMappedCustomFields(conn, entity, entityId, values) {
   }
 }
 
-async function findByErpId(conn, table, tenantId, erpId, fullRow = false) {
-  const [rows] = await conn.query(`SELECT ${fullRow ? '*' : 'id'} FROM ${table} WHERE tenant_id = ? AND erp_id = ? LIMIT 1`, [tenantId, erpId]);
+async function findByErpId(conn, table, tenantId, erpId, parentErpId = null, fullRow = false) {
+  const parentColumn = table === 'branches' ? 'customer_erp_id' : table === 'spaces' ? 'branch_erp_id' : null;
+  const parentClause = parentColumn ? ` AND ${parentColumn} = ?` : '';
+  const params = parentColumn ? [tenantId, parentErpId, erpId] : [tenantId, erpId];
+  const [rows] = await conn.query(`SELECT ${fullRow ? '*' : 'id'} FROM ${table} WHERE tenant_id = ?${parentClause} AND erp_id = ? LIMIT 1`, params);
   return rows[0] || null;
 }
 
 async function upsert(conn, table, tenantId, data) {
   const erpId = String(data.erp_id || '').trim();
   if (!erpId) throw new Error(`${table}.erp_id is empty`);
-  const existing = await findByErpId(conn, table, tenantId, erpId, true);
+  const parentErpId = table === 'branches' ? String(data.customer_erp_id || '').trim()
+    : table === 'spaces' ? String(data.branch_erp_id || '').trim() : null;
+  if (table !== 'customers' && !parentErpId) throw new Error(`${table}.${table === 'branches' ? 'customer_erp_id' : 'branch_erp_id'} is empty`);
+  const existing = await findByErpId(conn, table, tenantId, erpId, parentErpId, true);
   const existingId = existing?.id || null;
   const fields = ENTITY_FIELDS[table].filter((field) => data[field] !== undefined);
   const values = fields.map((field) => data[field]);
@@ -206,20 +212,20 @@ async function upsert(conn, table, tenantId, data) {
     );
   } else if (table === 'branches') {
     await conn.query(
-      `INSERT INTO branches (tenant_id, customer_id, erp_id, code, name, address_line, city, phone, status, search_norm)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [tenantId, data.customer_id, erpId, data.code || `ERP-${tenantId}-${erpId}`, data.name || erpId,
+      `INSERT INTO branches (tenant_id, customer_id, customer_erp_id, erp_id, code, name, address_line, city, phone, status, search_norm)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [tenantId, data.customer_id, parentErpId, erpId, data.code || `ERP-${tenantId}-${erpId}`, data.name || erpId,
         data.address_line, data.city, data.phone, data.status || 'active', normalized],
     );
   } else {
     await conn.query(
-      `INSERT INTO spaces (tenant_id, customer_id, branch_id, erp_id, code, name, space_type, status, search_norm)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [tenantId, data.customer_id, data.branch_id, erpId, data.code || `ERP-${tenantId}-${erpId}`,
+      `INSERT INTO spaces (tenant_id, customer_id, branch_id, branch_erp_id, erp_id, code, name, space_type, status, search_norm)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [tenantId, data.customer_id, data.branch_id, parentErpId, erpId, data.code || `ERP-${tenantId}-${erpId}`,
         data.name || erpId, data.space_type, data.status || 'available', normalized],
     );
   }
-  return (await findByErpId(conn, table, tenantId, erpId))?.id;
+  return (await findByErpId(conn, table, tenantId, erpId, parentErpId))?.id;
 }
 
 async function resolveCustomer(conn, tenantId, current, data) {
@@ -231,11 +237,17 @@ async function resolveCustomer(conn, tenantId, current, data) {
 
 async function resolveBranch(conn, tenantId, current, data) {
   const erpId = data.branch_erp_id || data.branch_id;
-  const branchId = current.get(String(erpId)) || (await findByErpId(conn, 'branches', tenantId, erpId))?.id;
+  const [branchRows] = await conn.query(
+    'SELECT id, customer_id, erp_id FROM branches WHERE tenant_id = ? AND erp_id = ? LIMIT 1',
+    [tenantId, erpId],
+  );
+  const branchId = current.get(String(erpId)) || branchRows[0]?.id;
   if (!branchId) throw new Error(`Space ${data.erp_id} references unknown branch ${erpId}`);
-  const [rows] = await conn.query('SELECT customer_id FROM branches WHERE id = ? AND tenant_id = ?', [branchId, tenantId]);
+  const rows = branchRows.length
+    ? branchRows
+    : (await conn.query('SELECT customer_id, erp_id FROM branches WHERE id = ? AND tenant_id = ?', [branchId, tenantId]))[0];
   if (!rows.length) throw new Error(`Space ${data.erp_id} references an invalid branch`);
-  return { branchId, customerId: rows[0].customer_id };
+  return { branchId, customerId: rows[0].customer_id, branchErpId: rows[0].erp_id };
 }
 
 export async function runSync(tenantId, connectorId) {
@@ -305,6 +317,7 @@ export async function runSync(tenantId, connectorId) {
           const parent = await resolveBranch(conn, tenantId, branches, data);
           data.branch_id = parent.branchId;
           data.customer_id = parent.customerId;
+          data.branch_erp_id = data.branch_erp_id || parent.branchErpId;
           const id = await upsert(conn, 'spaces', tenantId, data);
           await saveMappedCustomFields(conn, 'spaces', id, mapCustomFields(raw, mappings.spaces, customDefinitions.spaces));
           upserted += 1;

@@ -24,6 +24,12 @@ async function indexExists(table, index) {
   return Number(rows[0].c) > 0;
 }
 
+async function dropIndex(table, index) {
+  if (!(await indexExists(table, index))) return;
+  await query(`ALTER TABLE ${table} DROP INDEX ${index}`);
+  console.log(`[schema] removed ${table}.${index}`);
+}
+
 async function addUniqueIndex(table, index, columns) {
   if (await indexExists(table, index)) return;
   await query(`ALTER TABLE ${table} ADD UNIQUE KEY ${index} (${columns})`);
@@ -53,10 +59,16 @@ export async function ensureSchema() {
   await addColumn('activities', 'details', 'JSON NULL');
   await addColumn('customers', 'erp_id', 'VARCHAR(160) NULL');
   await addColumn('branches', 'erp_id', 'VARCHAR(160) NULL');
+  await addColumn('branches', 'customer_erp_id', 'VARCHAR(160) NULL');
   await addColumn('spaces', 'erp_id', 'VARCHAR(160) NULL');
+  await addColumn('spaces', 'branch_erp_id', 'VARCHAR(160) NULL');
   await addUniqueIndex('customers', 'uq_customers_tenant_erp_id', 'tenant_id, erp_id');
-  await addUniqueIndex('branches', 'uq_branches_tenant_erp_id', 'tenant_id, erp_id');
-  await addUniqueIndex('spaces', 'uq_spaces_tenant_erp_id', 'tenant_id, erp_id');
+  await query('UPDATE branches b JOIN customers c ON c.id = b.customer_id SET b.customer_erp_id = c.erp_id WHERE b.customer_erp_id IS NULL');
+  await query('UPDATE spaces s JOIN branches b ON b.id = s.branch_id SET s.branch_erp_id = b.erp_id WHERE s.branch_erp_id IS NULL');
+  await dropIndex('branches', 'uq_branches_tenant_erp_id');
+  await dropIndex('spaces', 'uq_spaces_tenant_erp_id');
+  await addUniqueIndex('branches', 'uq_branches_tenant_customer_erp', 'tenant_id, customer_erp_id, erp_id');
+  await addUniqueIndex('spaces', 'uq_spaces_tenant_branch_erp', 'tenant_id, branch_erp_id, erp_id');
 
   if (!(await tableExists('platform_settings'))) {
     await query(`CREATE TABLE platform_settings (
