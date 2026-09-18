@@ -750,6 +750,11 @@ textarea.input { height: auto; padding: 8px 10px; }
   .page-head { align-items: flex-start; }
   .page-head > div:last-child { width: 100%; }
   .page-head > div:last-child .btn, .page-head > div:last-child > div { flex: 1; justify-content: center; }
+  /* The export menu's popover is positioned relative to this wrapper — don't
+     let it stretch to fill the row (like the plain buttons beside it) or
+     the popover ends up anchored far from the actual button that opened it. */
+  .page-head .export-menu-anchor { flex: 0 0 auto !important; width: auto !important; }
+  .page-head .export-menu-anchor .search-results { left: 0; right: auto; min-width: 180px; }
   .toolbar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-2); }
   .toolbar .search-input { grid-column: 1 / -1; order: 0; width: auto; min-width: 0; }
   .toolbar .filter-chip, .toolbar .btn { width: 100%; min-width: 0; height: 38px; box-sizing: border-box; justify-content: center; padding-left: 8px; padding-right: 8px; overflow: hidden; }
