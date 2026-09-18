@@ -419,7 +419,7 @@ export default function Customers({ onOpenCustomer }) {
         </div>
         <div style={{ display: 'flex', gap: 9 }}>
           <ExportMenu params={filterParams} canExport={canExport} />
-          {canWrite && <button className="btn btn-primary" onClick={() => setShowCreate(true)}><Icon name="plus" size={16} /> Νέος πελάτης</button>}
+          {canWrite && <button className="btn btn-primary" title="Νέος πελάτης" onClick={() => setShowCreate(true)}><Icon name="plus" size={16} /></button>}
         </div>
       </div>
 
@@ -616,7 +616,7 @@ export default function Customers({ onOpenCustomer }) {
       <div className="customer-card-list">
         {rows.map((c) => {
           const displayName = c.company || c.full_name || 'Χωρίς όνομα';
-          return <button className="customer-card" key={c.id} type="button" onClick={() => onOpenCustomer(c)}>
+          return <button className="customer-card" key={c.id} type="button" style={{ minHeight: `${rowHeight}px` }} onClick={() => onOpenCustomer(c)}>
             <div className="customer-card-top">
               <Avatar name={displayName} src={c.avatar_url} size={42} fallback={false} />
               <div className="customer-card-title"><strong>{displayName}</strong><span>{c.code || 'Χωρίς κωδικό'}</span></div>
