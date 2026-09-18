@@ -17,6 +17,7 @@ DROP TABLE IF EXISTS branch_custom_field_values;
 DROP TABLE IF EXISTS space_custom_field_values;
 DROP TABLE IF EXISTS custom_field_definitions;
 DROP TABLE IF EXISTS customer_saved_views;
+DROP TABLE IF EXISTS audit_events;
 DROP TABLE IF EXISTS follow_ups;
 DROP TABLE IF EXISTS activities;
 DROP TABLE IF EXISTS communications;
@@ -572,6 +573,27 @@ CREATE TABLE notifications (
   CONSTRAINT fk_notifications_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
   CONSTRAINT fk_notifications_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   CONSTRAINT fk_notifications_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Tenant-wide audit trail (org-level; distinct from per-customer activities).
+CREATE TABLE audit_events (
+  id             BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  tenant_id      BIGINT NOT NULL,
+  actor_user_id  BIGINT NULL,
+  actor_name     VARCHAR(160) NULL,
+  action         VARCHAR(40) NOT NULL,
+  entity_type    VARCHAR(40) NOT NULL,
+  entity_id      BIGINT NULL,
+  customer_id    BIGINT NULL,
+  summary        TEXT NULL,
+  details        JSON NULL,
+  ip             VARCHAR(64) NULL,
+  created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_audit_tenant_created (tenant_id, created_at, id),
+  KEY idx_audit_tenant_entity (tenant_id, entity_type, entity_id),
+  CONSTRAINT fk_audit_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+  CONSTRAINT fk_audit_actor FOREIGN KEY (actor_user_id) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_audit_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------------

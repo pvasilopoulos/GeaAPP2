@@ -11,7 +11,7 @@
     "db:schema": "node src/db/apply-schema.js",
     "db:seed": "node src/db/seed.js",
     "db:reset": "node src/db/apply-schema.js && node src/db/seed.js",
-    "test": "node src/lib/tenantSettings.test.mjs && node src/lib/messaging.test.mjs && node src/lib/activityDiff.test.mjs && node src/lib/mapping.test.mjs && node src/lib/matching.test.mjs && node src/lib/schedulerPolicy.test.mjs && node src/lib/responseEncoding.test.mjs && node src/lib/followUps.test.mjs && node src/lib/syncMonitoring.test.mjs && node src/lib/quoteWorkflow.test.mjs && node src/lib/notes.test.mjs && node src/lib/quoteLineMapping.test.mjs && node src/lib/reminderSettings.test.mjs && node src/lib/idempotency.test.mjs && node src/lib/menu.test.mjs && node src/lib/bookings.test.mjs && node src/lib/calendar.test.mjs && node src/lib/notifications.test.mjs"
+    "test": "node src/lib/tenantSettings.test.mjs && node src/lib/messaging.test.mjs && node src/lib/activityDiff.test.mjs && node src/lib/mapping.test.mjs && node src/lib/matching.test.mjs && node src/lib/schedulerPolicy.test.mjs && node src/lib/responseEncoding.test.mjs && node src/lib/followUps.test.mjs && node src/lib/syncMonitoring.test.mjs && node src/lib/quoteWorkflow.test.mjs && node src/lib/notes.test.mjs && node src/lib/quoteLineMapping.test.mjs && node src/lib/reminderSettings.test.mjs && node src/lib/idempotency.test.mjs && node src/lib/menu.test.mjs && node src/lib/bookings.test.mjs && node src/lib/calendar.test.mjs && node src/lib/notifications.test.mjs && node src/lib/audit.test.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

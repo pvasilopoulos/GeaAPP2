@@ -74,6 +74,7 @@ export const api = {
   updateMessagingSettings: (payload) => send('PATCH', '/settings/messaging', payload),
   reminderSettings: (opts) => get('/settings/reminders', opts),
   updateReminderSettings: (payload) => send('PATCH', '/settings/reminders', payload),
+  audit: (params, opts) => get(`/audit${qs(params)}`, opts),
   menuSettings: (opts) => get('/settings/menu', opts),
   updateMenuSettings: (payload) => send('PATCH', '/settings/menu', payload),
   menuRoles: (opts) => get('/settings/menu/roles', opts),

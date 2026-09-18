@@ -14,7 +14,10 @@ const noQuotesNoSettings = (p) => p !== PERMS.QUOTES_VIEW && p !== PERMS.SETTING
 {
   const { items, isDefault } = resolveSidebarMenu({ tenantMenu: null, userMenu: null, hasPerm: allPerm, roleKey: 'owner' });
   assert(isDefault, 'no config => default sidebar');
+  assert(NAV_ITEM_IDS.includes('audit'), 'audit id is whitelisted');
+  assert(!DEFAULT_SIDEBAR_ORDER.includes('audit'), 'audit is not in the default sidebar');
   assert(JSON.stringify(items.map((i) => i.id)) === JSON.stringify(DEFAULT_SIDEBAR_ORDER), 'default sidebar order matches catalog order');
+  assert(!items.some((i) => i.id === 'audit'), 'default sidebar does not auto-append audit');
   const groups = resolveSidebarGroups({ tenantMenu: null, items });
   assert(groups.length === 4, 'default grouping preserved (4 groups)');
   assert(groups[0].id === 'workspace' && groups[0].items[0].id === 'dashboard', 'group order preserved');

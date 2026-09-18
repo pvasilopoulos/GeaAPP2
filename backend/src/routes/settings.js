@@ -7,6 +7,7 @@ import { mergeTenantSettings, parseJson, DEFAULT_PLATFORM_SETTINGS, publicAppSet
 import { applyMessagingPatch, channelStatuses, publicMessaging } from '../lib/messaging.js';
 import { applyReminderSettingsPatch, publicReminderSettings } from '../lib/reminderSettings.js';
 import { sanitizeMenuConfig, sanitizePersonalMenuConfig, NAV_ITEM_IDS } from '../lib/menu.js';
+import { logAuditFromReq, redactAuditDetails } from '../lib/audit.js';
 
 export const settingsRouter = Router();
 
@@ -33,6 +34,11 @@ settingsRouter.patch('/organization', authorize(PERMISSIONS.TENANT_MANAGE), asyn
     sets.push('updated_at = NOW()');
     params.push(req.user.tenantId);
     await query(`UPDATE tenants SET ${sets.join(', ')} WHERE id = ?`, params);
+    await logAuditFromReq(query, req, {
+      action: 'update', entityType: 'settings', entityId: req.user.tenantId,
+      summary: 'Ενημέρωση στοιχείων οργανισμού',
+      details: { keys: Object.keys(b).filter((k) => b[k] !== undefined) },
+    });
     res.json({ tenant: await loadTenant(query, req.user.tenantId) });
   } catch (err) { next(err); }
 });
@@ -51,6 +57,11 @@ settingsRouter.patch('/app', authorize(PERMISSIONS.SETTINGS_MANAGE), async (req,
     const nextSettings = applyAppSettingsPatch(current, req.body || {});
     await query('UPDATE tenants SET settings = ?, updated_at = NOW() WHERE id = ?',
       [JSON.stringify(nextSettings), req.user.tenantId]);
+    await logAuditFromReq(query, req, {
+      action: 'update', entityType: 'settings', entityId: req.user.tenantId,
+      summary: 'Ενημέρωση ρυθμίσεων εφαρμογής / εμφάνισης',
+      details: redactAuditDetails({ keys: Object.keys(req.body || {}) }),
+    });
     res.json({ settings: publicAppSettings(nextSettings) });
   } catch (err) { next(err); }
 });
@@ -81,6 +92,11 @@ settingsRouter.patch('/messaging', authorize(PERMISSIONS.SETTINGS_MANAGE), async
     });
     await query('UPDATE tenants SET settings = ?, updated_at = NOW() WHERE id = ?',
       [JSON.stringify(nextSettings), req.user.tenantId]);
+    await logAuditFromReq(query, req, {
+      action: 'update', entityType: 'settings', entityId: req.user.tenantId,
+      summary: 'Ενημέρωση ρυθμίσεων μηνυμάτων',
+      details: { keys: Object.keys(req.body || {}) },
+    });
     res.json({ messaging: publicMessaging(nextSettings.messaging) });
   } catch (err) { next(err); }
 });
@@ -100,6 +116,10 @@ settingsRouter.patch('/reminders', authorize(PERMISSIONS.SETTINGS_MANAGE), async
     const nextSettings = mergeTenantSettings({ ...current, reminders: nextReminders });
     await query('UPDATE tenants SET settings = ?, updated_at = NOW() WHERE id = ?',
       [JSON.stringify(nextSettings), req.user.tenantId]);
+    await logAuditFromReq(query, req, {
+      action: 'update', entityType: 'settings', entityId: req.user.tenantId,
+      summary: 'Ενημέρωση ρυθμίσεων υπενθυμίσεων',
+    });
     res.json({ reminders: nextSettings.reminders });
   } catch (err) { next(err); }
 });
@@ -142,6 +162,10 @@ settingsRouter.patch('/menu', authorize(PERMISSIONS.SETTINGS_MANAGE), async (req
     const nextSettings = mergeTenantSettings({ ...current, menu: nextMenu });
     await query('UPDATE tenants SET settings = ?, updated_at = NOW() WHERE id = ?',
       [JSON.stringify(nextSettings), req.user.tenantId]);
+    await logAuditFromReq(query, req, {
+      action: 'update', entityType: 'settings', entityId: req.user.tenantId,
+      summary: 'Ενημέρωση μενού οργανισμού',
+    });
     res.json({ menu: nextSettings.menu });
   } catch (err) { next(err); }
 });

@@ -10,6 +10,8 @@ function assert(cond, msg) {
 
 // Untouched tenant → unchanged behaviour (matches current hardcoded nav).
 const defaults = sanitizeMenuConfig(null);
+assert(NAV_ITEM_IDS.includes('audit'), 'audit id is whitelisted');
+assert(!DEFAULT_SIDEBAR_ORDER.includes('audit'), 'audit is not in the default sidebar');
 assert(JSON.stringify(defaults.sidebar.order) === JSON.stringify(DEFAULT_SIDEBAR_ORDER), 'default sidebar order matches current nav');
 assert(defaults.sidebar.hidden.length === 0, 'default sidebar hidden is empty');
 assert(JSON.stringify(defaults.mobile_footer.items) === JSON.stringify(DEFAULT_MOBILE_FOOTER_ITEMS), 'default mobile footer matches curated subset');

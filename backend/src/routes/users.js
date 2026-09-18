@@ -3,6 +3,7 @@ import { query } from '../db.js';
 import { authorize } from '../middleware/auth.js';
 import { hashPassword } from '../lib/auth.js';
 import { PERMISSIONS, PERMISSION_CATALOG, isValidPermission, expandPermissions } from '../lib/permissions.js';
+import { logAuditFromReq } from '../lib/audit.js';
 
 export const usersRouter = Router();
 
@@ -56,6 +57,10 @@ usersRouter.post('/roles', authorize(PERMISSIONS.ROLES_MANAGE), async (req, res,
     const r = await query(
       'INSERT INTO roles (tenant_id, `key`, name, permissions, is_system) VALUES (?, ?, ?, ?, 0)',
       [req.user.tenantId, key, String(name).trim(), JSON.stringify(perms)]);
+    await logAuditFromReq(query, req, {
+      action: 'create', entityType: 'role', entityId: r.rows.insertId,
+      summary: `Δημιουργία ρόλου: ${String(name).trim()}`,
+    });
     res.status(201).json({ id: r.rows.insertId, key });
   } catch (err) { next(err); }
 });
@@ -77,6 +82,11 @@ usersRouter.patch('/roles/:id', authorize(PERMISSIONS.ROLES_MANAGE), async (req,
     if (!sets.length) return res.status(400).json({ error: 'Καμία αλλαγή' });
     params.push(id);
     await query(`UPDATE roles SET ${sets.join(', ')} WHERE id = ?`, params);
+    await logAuditFromReq(query, req, {
+      action: 'update', entityType: 'role', entityId: id,
+      summary: `Ενημέρωση ρόλου: ${rows[0].key}`,
+      details: { keys: Object.keys(req.body || {}).filter((k) => req.body[k] !== undefined) },
+    });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
@@ -90,6 +100,10 @@ usersRouter.delete('/roles/:id', authorize(PERMISSIONS.ROLES_MANAGE), async (req
     const inUse = await query('SELECT COUNT(*) AS c FROM users WHERE role_id = ?', [id]);
     if (Number(inUse.rows[0].c) > 0) return res.status(400).json({ error: 'Ο ρόλος χρησιμοποιείται από χρήστες — αλλάξτε τους πρώτα' });
     await query('DELETE FROM roles WHERE id = ?', [id]);
+    await logAuditFromReq(query, req, {
+      action: 'delete', entityType: 'role', entityId: id,
+      summary: `Διαγραφή ρόλου: ${rows[0].key}`,
+    });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
@@ -126,6 +140,11 @@ usersRouter.post('/users', authorize(PERMISSIONS.USERS_MANAGE), async (req, res,
       `INSERT INTO users (tenant_id, role_id, email, password_hash, first_name, last_name)
        VALUES (?, ?, ?, ?, ?, ?)`,
       [req.user.tenantId, role.id, String(email).toLowerCase(), hash, firstName, lastName || '']);
+    await logAuditFromReq(query, req, {
+      action: 'create', entityType: 'user', entityId: r.rows.insertId,
+      summary: `Δημιουργία χρήστη: ${String(email).toLowerCase()}`,
+      details: { roleKey, email: String(email).toLowerCase() },
+    });
     res.status(201).json({ id: r.rows.insertId });
   } catch (err) { next(err); }
 });
@@ -177,6 +196,13 @@ usersRouter.patch('/users/:id', authorize(PERMISSIONS.USERS_MANAGE), async (req,
     if (!sets.length) return res.status(400).json({ error: 'Καμία αλλαγή' });
     params.push(id);
     await query(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`, params);
+    const changed = Object.keys(req.body || {}).filter((k) => req.body[k] !== undefined && k !== 'password');
+    if (req.body.password) changed.push('passwordChanged');
+    await logAuditFromReq(query, req, {
+      action: 'update', entityType: 'user', entityId: id,
+      summary: `Ενημέρωση χρήστη: ${target.email}`,
+      details: { keys: changed, roleKey: req.body.roleKey || undefined },
+    });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
@@ -191,6 +217,10 @@ usersRouter.delete('/users/:id', authorize(PERMISSIONS.USERS_MANAGE), async (req
       return res.status(400).json({ error: 'Δεν μπορεί να μείνει ο οργανισμός χωρίς ιδιοκτήτη' });
     }
     await query('DELETE FROM users WHERE id = ? AND tenant_id = ?', [id, req.user.tenantId]);
+    await logAuditFromReq(query, req, {
+      action: 'delete', entityType: 'user', entityId: id,
+      summary: `Διαγραφή χρήστη: ${target.email}`,
+    });
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

@@ -118,11 +118,14 @@ export function resolveSidebarMenu({ tenantMenu, userMenu, hasPerm, roleKey }) {
   }
   // Any permitted catalog/link item missing from a stale/partial order is
   // still shown (appended), so nothing silently disappears when the catalog
-  // (or the set of configured links) grows.
-  for (const id of allIds) {
-    if (!permittedIds.has(id) || hidden.has(id) || seen.has(id)) continue;
-    seen.add(id);
-    items.push(byId[id]);
+  // (or the set of configured links) grows. Skip this on the untouched default
+  // so opt-in items (e.g. audit) do not appear until an admin enables them.
+  if (!isDefault) {
+    for (const id of allIds) {
+      if (!permittedIds.has(id) || hidden.has(id) || seen.has(id)) continue;
+      seen.add(id);
+      items.push(byId[id]);
+    }
   }
 
   return { items, isDefault, byId };

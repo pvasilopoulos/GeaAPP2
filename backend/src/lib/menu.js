@@ -10,7 +10,7 @@
 export const NAV_ITEM_IDS = [
   'dashboard', 'customers', 'bookings', 'branches', 'spaces', 'calendar',
   'reports', 'communications', 'documents', 'branch-actions', 'invoices',
-  'quotes', 'settings',
+  'quotes', 'settings', 'audit',
 ];
 
 // Matches the current hardcoded NAV_GROUPS order in App.jsx so behaviour is

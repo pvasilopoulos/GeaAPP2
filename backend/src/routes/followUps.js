@@ -9,6 +9,7 @@ import { computeReminderState } from '../lib/reminderSettings.js';
 import { loadTenant } from '../lib/tenants.js';
 import { withIdempotency } from '../lib/idempotency.js';
 import { notifyFollowUpAssigned } from '../lib/notifications.js';
+import { logAuditFromReq } from '../lib/audit.js';
 
 
 export const followUpsRouter = Router();
@@ -83,6 +84,10 @@ followUpsRouter.post('/', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, re
         [req.user.tenantId, customerId, parsed.branchId ?? null, parsed.title, parsed.description || null, parsed.dueAt, parsed.assignedEmployeeId ?? null, req.user.id]);
       await syncCustomerNextAction(req.user.tenantId, customerId);
       await logActivity({ tenantId: req.user.tenantId, customerId, type: 'follow_up_created', description: `Υπενθύμιση: ${parsed.title}`, details: packDetails(req, { followUpId: r.rows.insertId }) });
+      await logAuditFromReq(query, req, {
+        action: 'create', entityType: 'follow_up', entityId: r.rows.insertId, customerId,
+        summary: `Νέα υπενθύμιση: ${parsed.title}`,
+      });
       if (parsed.assignedEmployeeId) {
         await notifyFollowUpAssigned({
           tenantId: req.user.tenantId,
@@ -96,7 +101,6 @@ followUpsRouter.post('/', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, re
       return { status: 201, body: { id: r.rows.insertId } };
     });
     res.status(result.status).json(result.body);
-
   } catch (err) { next(err); }
 });
 
@@ -131,6 +135,10 @@ followUpsRouter.patch('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req
       await query(`UPDATE follow_ups SET ${fields.join(', ')} WHERE id = ? AND tenant_id = ?`, params);
       if (parsed.status === 'completed') {
         await logActivity({ tenantId: req.user.tenantId, customerId: current.customer_id, type: 'follow_up_completed', description: `Ολοκληρώθηκε: ${parsed.title || current.title}`, details: packDetails(req, { followUpId: id }) });
+        await logAuditFromReq(query, req, {
+          action: 'status', entityType: 'follow_up', entityId: id, customerId: current.customer_id,
+          summary: `Ολοκλήρωση υπενθύμισης: ${parsed.title || current.title}`,
+        });
       }
       // Always resync from the single source of truth (open follow_ups) rather
       // than patching customers.next_action_* by matching on title text, which
@@ -153,7 +161,6 @@ followUpsRouter.patch('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req
       return { status: 200, body: { ok: true } };
     });
     res.status(result.status).json(result.body);
-
   } catch (err) { next(err); }
 });
 
@@ -173,6 +180,11 @@ followUpsRouter.patch('/:id/snooze', authorize(PERMISSIONS.CUSTOMERS_WRITE), asy
       await query('UPDATE follow_ups SET due_at = ?, updated_at = NOW() WHERE id = ? AND tenant_id = ?', [nextDue, id, req.user.tenantId]);
       await syncCustomerNextAction(req.user.tenantId, current.customer_id);
       await logActivity({ tenantId: req.user.tenantId, customerId: current.customer_id, type: 'follow_up_snoozed', description: `Αναβολή: ${current.title}`, details: packDetails(req, { followUpId: id, minutes: parsed.minutes }) });
+      await logAuditFromReq(query, req, {
+        action: 'update', entityType: 'follow_up', entityId: id, customerId: current.customer_id,
+        summary: `Αναβολή υπενθύμισης: ${current.title}`,
+        details: { minutes: parsed.minutes },
+      });
       return { status: 200, body: { ok: true, due_at: nextDue.toISOString() } };
     });
     res.status(result.status).json(result.body);

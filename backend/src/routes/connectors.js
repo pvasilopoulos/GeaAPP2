@@ -6,6 +6,7 @@ import { encryptCredentials, redactConnector } from '../lib/connectorCrypto.js';
 import { validateMappings } from '../lib/mapping.js';
 import { runSync } from '../lib/sync.js';
 import { canRetrySyncRun } from '../lib/syncMonitoring.js';
+import { logAuditFromReq } from '../lib/audit.js';
 
 export const connectorsRouter = Router();
 const guard = authorize(PERMISSIONS.SETTINGS_MANAGE);
@@ -35,7 +36,13 @@ connectorsRouter.patch('/:id', guard, async (req, res, next) => {
 connectorsRouter.delete('/:id', guard, async (req, res, next) => { try { await query('DELETE FROM connectors WHERE id = ? AND tenant_id = ?', [req.params.id, req.user.tenantId]); res.status(204).end(); } catch (e) { next(e); } });
 connectorsRouter.post('/:id/run', guard, async (req, res, next) => {
   try {
-    res.json(await runSync(req.user.tenantId, req.params.id));
+    const result = await runSync(req.user.tenantId, req.params.id);
+    await logAuditFromReq(query, req, {
+      action: 'sync', entityType: 'connector', entityId: Number(req.params.id),
+      summary: `Εκτέλεση σύνδεσης ERP #${req.params.id}`,
+      details: { status: result.status, recordsSeen: result.recordsSeen, recordsUpserted: result.recordsUpserted },
+    });
+    res.json(result);
   } catch (e) {
     if (e.code === 'SYNC_IN_PROGRESS') return res.status(409).json({ error: e.message });
     return res.status(422).json({ error: e.message || 'Ο συγχρονισμός απέτυχε' });
@@ -49,7 +56,13 @@ connectorsRouter.post('/:id/runs/:runId/retry', guard, async (req, res, next) =>
     );
     if (!rows.length) return res.status(404).json({ error: 'Δεν βρέθηκε το run' });
     if (!canRetrySyncRun(rows[0].status)) return res.status(409).json({ error: 'Μπορούν να επαναληφθούν μόνο αποτυχημένα runs' });
-    res.json(await runSync(req.user.tenantId, req.params.id));
+    const result = await runSync(req.user.tenantId, req.params.id);
+    await logAuditFromReq(query, req, {
+      action: 'sync', entityType: 'connector', entityId: Number(req.params.id),
+      summary: `Επανάληψη συγχρονισμού σύνδεσης #${req.params.id}`,
+      details: { retryOf: Number(req.params.runId), status: result.status, recordsSeen: result.recordsSeen, recordsUpserted: result.recordsUpserted },
+    });
+    res.json(result);
   } catch (e) {
     if (e.code === 'SYNC_IN_PROGRESS') return res.status(409).json({ error: e.message });
     return res.status(422).json({ error: e.message || 'Η επανάληψη απέτυχε' });
