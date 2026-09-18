@@ -26,17 +26,14 @@
   <body>
     <div id="root"></div>
     <script>
-      // Capture the Chromium install event before the bundle loads (it can
-      // fire as soon as a controlling service worker is ready).
+      // Capture Chromium's install event before the bundle (it can fire as
+      // soon as the generated service worker is controlling the page).
       window.__spacehubInstall = null;
       window.addEventListener('beforeinstallprompt', function (e) {
         e.preventDefault();
         window.__spacehubInstall = e;
         window.dispatchEvent(new Event('spacehub:beforeinstallprompt'));
       });
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' }).catch(function () {});
-      }
     </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>

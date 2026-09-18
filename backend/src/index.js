@@ -107,13 +107,11 @@ function sendServiceWorker(res, filePath) {
 
 app.get('/sw.js', (_req, res) => {
   const distSw = path.join(distDir, 'sw.js');
-  const pubSw = path.resolve(__dirname, '../../frontend/public/sw.js');
-  const file = existsSync(distSw) ? distSw : pubSw;
-  if (!existsSync(file)) {
+  if (!existsSync(distSw)) {
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-    return res.status(404).send('/* service worker missing */');
+    return res.status(404).send('/* service worker missing — build the frontend */');
   }
-  return sendServiceWorker(res, file);
+  return sendServiceWorker(res, distSw);
 });
 
 app.get('/manifest.webmanifest', async (_req, res) => {
@@ -144,9 +142,14 @@ app.get('/manifest.webmanifest', async (_req, res) => {
 if (existsSync(distDir)) {
   app.use(express.static(distDir, {
     setHeaders(res, filePath) {
-      if (filePath.endsWith(`${path.sep}sw.js`) || filePath.endsWith('/sw.js') || filePath.endsWith('manifest.webmanifest')) {
+      if (
+        filePath.endsWith(`${path.sep}sw.js`)
+        || filePath.endsWith('/sw.js')
+        || filePath.endsWith('manifest.webmanifest')
+        || /workbox-.*\.js$/i.test(filePath)
+      ) {
         res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Service-Worker-Allowed', '/');
+        if (filePath.endsWith('sw.js')) res.setHeader('Service-Worker-Allowed', '/');
       }
     },
   }));

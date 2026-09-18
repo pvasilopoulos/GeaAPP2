@@ -115,8 +115,8 @@ export function dismissInstallHint() {
 }
 
 export function registerServiceWorker() {
-  if (!('serviceWorker' in navigator)) return Promise.resolve(null);
-  return navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' }).catch(() => null);
+  // Registration is injected by vite-plugin-pwa (inline + generated sw.js).
+  return Promise.resolve(null);
 }
 
 /** Open Chrome's install dialog. Must be called directly from a click handler. */
@@ -147,9 +147,8 @@ export async function refreshApp(queryClient) {
   if (!('serviceWorker' in navigator) || import.meta.env.DEV) return { reloaded: false };
   const keys = await caches.keys();
   await Promise.all(keys.map((k) => caches.delete(k)));
-  const reg = await navigator.serviceWorker.getRegistration();
-  await reg?.update();
-  navigator.serviceWorker.controller?.postMessage({ type: 'CLEAR_CACHE' });
+  const regs = await navigator.serviceWorker.getRegistrations();
+  await Promise.all(regs.map((r) => r.update()));
   window.location.reload();
   return { reloaded: true };
 }
