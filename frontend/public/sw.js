@@ -44,8 +44,12 @@ self.addEventListener('push', (event) => {
   const title = data.title || 'SoftifyOS';
   const options = {
     body: data.body || '',
+    // `icon` is the full-color logo shown in the notification body; `badge`
+    // must be a transparent, monochrome (white-on-transparent) silhouette —
+    // Android renders it from the alpha channel only, so reusing the opaque
+    // colored icon here made the status-bar/collapsed icon show up blank.
     icon: '/app-icons/icon-192.png',
-    badge: '/app-icons/icon-192.png',
+    badge: '/app-icons/icon-badge.png',
     data: { target: data.target || null, notificationId: data.notificationId || null },
   };
   event.waitUntil(self.registration.showNotification(title, options));
