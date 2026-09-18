@@ -149,10 +149,16 @@ export default function App() {
     document.title = appSettings?.browser_tab_title || DEFAULT_BROWSER_TAB_TITLE;
   }, [appSettings?.browser_tab_title]);
 
-  const { items: sidebarItems, isDefault: isDefaultSidebar } = resolveSidebarMenu({ tenantMenu, userMenu, hasPerm });
-  const sidebarGroups = isDefaultSidebar ? resolveSidebarGroups({ items: sidebarItems }) : null;
-  const mobileFooterItems = resolveMobileFooterMenu({ tenantMenu, userMenu, hasPerm });
-  const openNavTab = (n) => { openTab({ id: n.id, type: n.type, title: n.label, icon: n.icon }); setNavOpen(false); };
+  const { items: sidebarItems } = resolveSidebarMenu({ tenantMenu, userMenu, hasPerm, roleKey: user?.roleKey });
+  const sidebarGroups = resolveSidebarGroups({ tenantMenu, items: sidebarItems });
+  const mobileFooterItems = resolveMobileFooterMenu({ tenantMenu, userMenu, hasPerm, roleKey: user?.roleKey });
+  // External links (custom URL entries) open in a new tab and never go
+  // through the internal tab/routing system — they carry no route/type.
+  const openNavTab = (n) => {
+    if (n.external) { window.open(n.url, '_blank', 'noopener,noreferrer'); setNavOpen(false); return; }
+    openTab({ id: n.id, type: n.type, title: n.label, icon: n.icon });
+    setNavOpen(false);
+  };
 
   return (
     <div className={`app${navOpen ? ' nav-open' : ''}`}>
@@ -163,30 +169,19 @@ export default function App() {
           {appName}
         </div>
         <div className="nav-group">
-          {sidebarGroups ? (
-            sidebarGroups.map((group) => (
-              <div className="nav-section" key={group.id}>
-                <div className="nav-section-label">{group.label}</div>
-                {group.items.map((n) => (
-                  <button key={n.id} className={`nav-item${activeId === n.id ? ' active' : ''}`}
-                    onClick={() => openNavTab(n)}>
-                    <Icon name={n.icon} />
-                    {n.label}
-                  </button>
-                ))}
-              </div>
-            ))
-          ) : (
-            <div className="nav-section">
-              {sidebarItems.map((n) => (
+          {sidebarGroups.map((group) => (
+            <div className="nav-section" key={group.id}>
+              <div className="nav-section-label">{group.label}</div>
+              {group.items.map((n) => (
                 <button key={n.id} className={`nav-item${activeId === n.id ? ' active' : ''}`}
-                  onClick={() => openNavTab(n)}>
+                  onClick={() => openNavTab(n)} title={n.external ? n.url : undefined}>
                   <Icon name={n.icon} />
                   {n.label}
+                  {n.external && <Icon name="chevronRight" size={12} className="nav-item-external" />}
                 </button>
               ))}
             </div>
-          )}
+          ))}
         </div>
         <div className="sidebar-footer">
           <Avatar name={user?.fullName} size={34} />

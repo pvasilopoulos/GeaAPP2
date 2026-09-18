@@ -104,6 +104,7 @@ input, select { font-family: inherit; font-size: 14px; }
 .nav-item:hover { background: var(--surface-2); color: var(--text); }
 .nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .nav-item svg { width: 18px; height: 18px; flex: none; }
+.nav-item .nav-item-external { width: 11px; height: 11px; margin-left: auto; opacity: .55; }
 .sidebar-footer {
   margin-top: auto; border-top: 1px solid var(--border); padding-top: 12px;
   display: flex; align-items: center; gap: 10px;
@@ -608,6 +609,22 @@ a.bd-fact:hover b { color: var(--accent); }
 .field-group label { display: block; font-size: 12.5px; font-weight: 600; color: var(--text-2); margin-bottom: 6px; }
 .field-group input { width: 100%; height: 40px; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: 9px; outline: none; }
 .field-group input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+/* Advanced menu management editor (settings/MenuPanel.jsx) */
+.menu-group-card { border: 1px solid var(--border); border-radius: 12px; padding: 8px; margin-bottom: 12px; background: var(--surface-1, #fff); }
+.menu-group-header { display: flex; align-items: center; gap: 8px; padding: 4px 4px 8px; flex-wrap: wrap; }
+.icon-picker-pop {
+  position: absolute; z-index: 20; top: calc(100% + 4px); left: 0;
+  display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px;
+  width: 260px; max-height: 220px; overflow-y: auto;
+  background: #fff; border: 1px solid var(--border-strong); border-radius: 10px;
+  box-shadow: var(--shadow-lg); padding: 8px;
+}
+.icon-picker-opt { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 7px; border: 1px solid transparent; background: transparent; cursor: pointer; }
+.icon-picker-opt:hover { background: var(--surface-2); }
+.icon-picker-opt.active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.roles-picker { display: flex; flex-wrap: wrap; gap: 6px 10px; }
+.roles-picker-chip { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-2); cursor: pointer; }
 .auth-error { background: var(--red-soft); color: var(--red); padding: 9px 12px; border-radius: 9px; font-size: 13px; margin-bottom: 14px; }
 .auth-hint { margin-top: 16px; font-size: 12.5px; color: var(--text-3); text-align: center; }
 .auth-hint code { background: var(--surface-2); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; }

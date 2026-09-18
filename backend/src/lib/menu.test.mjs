@@ -1,6 +1,6 @@
 import {
   NAV_ITEM_IDS, DEFAULT_MENU_CONFIG, DEFAULT_SIDEBAR_ORDER, DEFAULT_MOBILE_FOOTER_ITEMS,
-  MOBILE_FOOTER_MIN_MAX, MOBILE_FOOTER_MAX_MAX,
+  MOBILE_FOOTER_MIN_MAX, MOBILE_FOOTER_MAX_MAX, ICON_NAMES,
   sanitizeMenuConfig, sanitizePersonalMenuConfig,
 } from './menu.js';
 
@@ -58,5 +58,90 @@ assert(personalJunk.sidebar.hidden.length === 0, 'personal hidden sanitized');
 
 // DEFAULT_MENU_CONFIG itself is a valid, already-sanitized shape.
 assert(JSON.stringify(sanitizeMenuConfig(DEFAULT_MENU_CONFIG)) === JSON.stringify(DEFAULT_MENU_CONFIG), 'DEFAULT_MENU_CONFIG is idempotent under sanitization');
+
+// Backward compatible with the untouched shape: groups/overrides/links default empty.
+assert(Array.isArray(defaults.groups) && defaults.groups.length === 0, 'defaults have no groups');
+assert(JSON.stringify(defaults.overrides) === '{}', 'defaults have no overrides');
+assert(Array.isArray(defaults.links) && defaults.links.length === 0, 'defaults have no links');
+
+// --- Custom groups -----------------------------------------------------------
+{
+  const cfg = sanitizeMenuConfig({
+    groups: [
+      { id: 'docs', label: 'Έγγραφα & Σύνδεσμοι' },
+      { id: 'docs', label: 'duplicate id ignored' },
+      { id: 'Bad Id!', label: 'invalid id dropped' },
+      { id: 'restricted', label: 'Only managers', roles: ['manager', 'not-real'] },
+    ],
+  }, { validRoleKeys: ['owner', 'admin', 'manager'] });
+  assert(cfg.groups.length === 2, 'duplicate/invalid group ids dropped');
+  assert(cfg.groups[0].id === 'docs' && cfg.groups[0].label === 'Έγγραφα & Σύνδεσμοι', 'valid group kept');
+  assert(cfg.groups[1].roles && cfg.groups[1].roles.length === 1 && cfg.groups[1].roles[0] === 'manager', 'unknown role key rejected from group roles');
+}
+
+// --- Per-item label/icon overrides (id/type/perms stay authoritative) -------
+{
+  const cfg = sanitizeMenuConfig({
+    overrides: {
+      customers: { label: 'Πελατολόγιο', icon: 'star', roles: ['owner'] },
+      'not-a-real-id': { label: 'ignored' },
+      quotes: { icon: 'not-a-real-icon' },
+    },
+  }, { validRoleKeys: ['owner', 'admin'] });
+  assert(cfg.overrides.customers.label === 'Πελατολόγιο', 'label override kept');
+  assert(cfg.overrides.customers.icon === 'star', 'icon override kept when in whitelist');
+  assert(!cfg.overrides['not-a-real-id'], 'override for unknown catalog id dropped');
+  assert(!cfg.overrides.quotes || !cfg.overrides.quotes.icon, 'icon override rejected when not in ICON_NAMES whitelist');
+  assert(ICON_NAMES.includes('star') && !ICON_NAMES.includes('not-a-real-icon'), 'icon whitelist sanity check');
+}
+
+// --- Custom external links --------------------------------------------------
+{
+  const cfg = sanitizeMenuConfig({
+    links: [
+      { id: 'docs-site', label: 'Τεκμηρίωση', icon: 'globe', url: 'https://docs.example.com/help' },
+      { label: 'no id provided', icon: 'file', url: 'https://example.com' },
+      { label: 'bad url', url: 'javascript:alert(1)' },
+      { label: 'ftp url', url: 'ftp://example.com/file' },
+      { label: '', url: 'https://example.com' },
+    ],
+  });
+  assert(cfg.links.length === 2, 'invalid links (bad url / empty label) dropped, valid ones kept with generated ids');
+  assert(cfg.links[0].id === 'docs-site', 'explicit valid id kept');
+  assert(cfg.links[1].id && cfg.links[1].id !== 'docs-site', 'missing id generated uniquely');
+  assert(cfg.links.every((l) => l.url.startsWith('http')), 'only http(s) urls accepted');
+}
+
+// --- Group id whitelist applies to overrides/links group_id reassignment ---
+{
+  const cfg = sanitizeMenuConfig({
+    groups: [{ id: 'docs', label: 'Docs' }],
+    overrides: { customers: { group_id: 'docs' }, quotes: { group_id: 'no-such-group' } },
+    links: [{ id: 'lnk', label: 'Link', url: 'https://a.example.com', group_id: 'workspace' }, { id: 'lnk2', label: 'Link2', url: 'https://b.example.com', group_id: 'bogus' }],
+  });
+  assert(cfg.overrides.customers.group_id === 'docs', 'custom group id accepted for override');
+  assert(!cfg.overrides.quotes || !cfg.overrides.quotes.group_id, 'unknown group id rejected for override');
+  assert(cfg.links[0].group_id === 'workspace', 'built-in group id accepted for link reassignment');
+  assert(cfg.links[1].group_id === null, 'unknown group id rejected for link, falls back to null (ungrouped)');
+}
+
+// --- Link ids become valid sidebar/mobile_footer order/hidden entries ------
+{
+  const cfg = sanitizeMenuConfig({
+    links: [{ id: 'docs-link', label: 'Docs', url: 'https://example.com' }],
+    sidebar: { order: ['docs-link', 'dashboard'], hidden: [] },
+    mobile_footer: { items: ['docs-link'], max: 3 },
+  });
+  assert(cfg.sidebar.order[0] === 'docs-link', 'link id allowed in sidebar order');
+  assert(cfg.mobile_footer.items.includes('docs-link'), 'link id allowed in mobile footer items');
+}
+
+// --- Personal override sanitization accepts an extended allowed-id set -----
+{
+  const personal = sanitizePersonalMenuConfig({ sidebar: { order: ['custom-link', 'dashboard'], hidden: [] } }, [...NAV_ITEM_IDS, 'custom-link']);
+  assert(personal.sidebar.order.includes('custom-link'), 'personal sanitizer respects extended allowedIds for tenant links');
+  const personalDefault = sanitizePersonalMenuConfig({ sidebar: { order: ['custom-link', 'dashboard'], hidden: [] } });
+  assert(!personalDefault.sidebar.order.includes('custom-link'), 'personal sanitizer defaults to NAV_ITEM_IDS only when allowedIds omitted');
+}
 
 console.log('menu.test.mjs ok');

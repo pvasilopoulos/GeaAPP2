@@ -76,6 +76,7 @@ export const api = {
   updateReminderSettings: (payload) => send('PATCH', '/settings/reminders', payload),
   menuSettings: (opts) => get('/settings/menu', opts),
   updateMenuSettings: (payload) => send('PATCH', '/settings/menu', payload),
+  menuRoles: (opts) => get('/settings/menu/roles', opts),
   myMenuSettings: (opts) => get('/settings/menu/me', opts),
   updateMyMenuSettings: (payload) => send('PATCH', '/settings/menu/me', payload),
   clearMyMenuSettings: () => send('PATCH', '/settings/menu/me', { clear: true }),

@@ -49,6 +49,13 @@ const P = {
   eyeOff: 'M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24M1 1l22 22',
 };
 
+// Full list of supported icon names — the single source of truth for the
+// admin menu icon picker (frontend/src/pages/settings/MenuPanel.jsx) and
+// mirrored server-side in backend/src/lib/menu.js (ICON_NAMES) so custom
+// label/icon overrides and custom links can only ever reference an icon that
+// actually renders here.
+export const ICON_NAMES = Object.keys(P);
+
 export default function Icon({ name, size = 18, style, className, strokeWidth = 1.8 }) {
   const d = P[name] || P.grid;
   return (
