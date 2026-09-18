@@ -267,9 +267,27 @@ function SidebarEditor({ catalog, order, hidden, onChange }) {
   );
 }
 
-// Checkbox picker (capped to `max`) for the mobile bottom footer bar.
+// Ordered picker (capped to `max`) for the mobile bottom footer bar: selected
+// items are shown as a drag-and-drop reorderable list (their array order IS
+// the display order in the bottom bar), with the remaining catalog items
+// available to add below.
 function FooterEditor({ catalog, items, max, onItemsChange, onMaxChange }) {
   const selected = items || [];
+  const [dragId, setDragId] = useState(null);
+  const byId = useMemo(() => new Map(catalog.map((item) => [item.id, item])), [catalog]);
+  const remaining = catalog.filter((item) => !selected.includes(item.id));
+
+  const reorderTo = (fromId, toId) => {
+    if (fromId === toId) return;
+    const list = [...selected];
+    const fromIndex = list.indexOf(fromId);
+    if (fromIndex === -1) return;
+    list.splice(fromIndex, 1);
+    const toIndex = toId ? list.indexOf(toId) : list.length;
+    list.splice(toIndex === -1 ? list.length : toIndex, 0, fromId);
+    onItemsChange(list);
+  };
+
   return (
     <div>
       <div className="field-group" style={{ maxWidth: 220 }}>
@@ -285,25 +303,59 @@ function FooterEditor({ catalog, items, max, onItemsChange, onMaxChange }) {
         </select>
       </div>
       <p className="muted" style={{ fontSize: 12.5, margin: '0 0 8px' }}>
-        Επιλέξτε έως {max} στοιχεία — {selected.length}/{max} επιλεγμένα.
+        Σύρετε για να ορίσετε τη σειρά εμφάνισης — {selected.length}/{max} επιλεγμένα.
       </p>
-      {catalog.map((item) => {
-        const checked = selected.includes(item.id);
-        const disableAdd = !checked && selected.length >= max;
+      {selected.length === 0 && <p className="muted" style={{ fontSize: 12.5 }}>Δεν έχουν επιλεγεί στοιχεία για το bottom bar.</p>}
+      {selected.map((id) => {
+        const item = byId.get(id);
+        if (!item) return null;
         return (
-          <label key={item.id} style={{ ...rowStyle, opacity: disableAdd ? 0.5 : 1, cursor: disableAdd ? 'not-allowed' : 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={checked}
-              disabled={disableAdd}
-              onChange={() => onItemsChange(checked ? selected.filter((id) => id !== item.id) : [...selected, item.id])}
-            />
+          <div
+            key={id}
+            draggable
+            onDragStart={() => setDragId(id)}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => { e.preventDefault(); reorderTo(dragId, id); setDragId(null); }}
+            style={{ ...rowStyle, cursor: 'grab' }}
+          >
+            <Icon name="more" size={14} style={{ opacity: 0.45 }} title="Σύρετε για αλλαγή σειράς" />
             <Icon name={item.icon} size={17} />
             <div style={{ flex: 1, fontSize: 13.5, fontWeight: 500 }}>{item.label}</div>
             {item.external && <Icon name="globe" size={13} style={{ opacity: 0.5 }} title={item.url} />}
-          </label>
+            <button type="button" style={iconBtn} title="Αφαίρεση" onClick={() => onItemsChange(selected.filter((x) => x !== id))}>
+              <Icon name="x" size={14} />
+            </button>
+          </div>
         );
       })}
+      <div
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => { e.preventDefault(); if (dragId) reorderTo(dragId, null); setDragId(null); }}
+        style={{ minHeight: 8 }}
+      />
+      {remaining.length > 0 && (
+        <>
+          <div className="section-title" style={{ fontSize: 12, marginTop: 10 }}>Διαθέσιμα στοιχεία</div>
+          {remaining.map((item) => {
+            const disableAdd = selected.length >= max;
+            return (
+              <div key={item.id} style={{ ...rowStyle, opacity: disableAdd ? 0.5 : 1 }}>
+                <Icon name={item.icon} size={17} />
+                <div style={{ flex: 1, fontSize: 13.5, fontWeight: 500 }}>{item.label}</div>
+                {item.external && <Icon name="globe" size={13} style={{ opacity: 0.5 }} title={item.url} />}
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  disabled={disableAdd}
+                  onClick={() => onItemsChange([...selected, item.id])}
+                >
+                  <Icon name="plus" size={13} /> Προσθήκη
+                </button>
+              </div>
+            );
+          })}
+        </>
+      )}
     </div>
   );
 }
