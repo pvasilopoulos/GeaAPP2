@@ -28,6 +28,8 @@ import { settingsRouter } from './routes/settings.js';
 import { connectorsRouter } from './routes/connectors.js';
 import { startScheduler } from './lib/scheduler.js';
 import { followUpsRouter } from './routes/followUps.js';
+import { bookingsRouter } from './routes/bookings.js';
+import { calendarRouter } from './routes/calendar.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -63,6 +65,8 @@ app.use('/api/search', searchRouter);
 app.use('/api/customers', exportRouter);
 app.use('/api/customers', customersRouter);
 app.use('/api/follow-ups', followUpsRouter);
+app.use('/api/bookings', bookingsRouter);
+app.use('/api/calendar', calendarRouter);
 app.use('/api/customer-views', customerViewsRouter);
 app.use('/api/branches', branchesRouter);
 app.use('/api/spaces', spacesRouter);

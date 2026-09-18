@@ -17,6 +17,7 @@ import CustomerProfile from './pages/CustomerProfile.jsx';
 import Settings from './pages/Settings.jsx';
 import Placeholder from './pages/Placeholder.jsx';
 import Quotes from './pages/Quotes.jsx';
+import Calendar from './pages/Calendar.jsx';
 import { api } from './api.js';
 
 
@@ -112,6 +113,7 @@ function TabContent({ tab }) {
     case 'settings': return <Settings />;
     case 'quotes': return <Quotes />;
     case 'users': return <Settings initialCat="users" />;
+    case 'calendar': return <Calendar onOpenCustomer={openCustomer} />;
     default: return <Placeholder title={tab.title} icon={tab.icon} />;
   }
 }
