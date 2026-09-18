@@ -41,6 +41,9 @@ export const FIELD_LABELS = {
   min_duration_minutes: 'Ελάχ. διάρκεια',
   slot_step_minutes: 'Βήμα',
   buffer_minutes: 'Buffer',
+  starts_at: 'Έναρξη',
+  ends_at: 'Λήξη',
+  amount: 'Ποσό',
 };
 
 const STATUS_LABELS = {

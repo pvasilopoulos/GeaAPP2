@@ -10,7 +10,7 @@ export const NAV = [
   { id: 'bookings', type: 'bookings', label: 'Κρατήσεις', icon: 'calendar' },
   { id: 'branches', type: 'branches', label: 'Υποκαταστήματα', icon: 'building' },
   { id: 'spaces', type: 'spaces', label: 'Χώροι', icon: 'grid' },
-  { id: 'calendar', type: 'calendar', label: 'Ημερολόγιο', icon: 'calendar' },
+  { id: 'calendar', type: 'calendar', label: 'Ημερολόγιο', icon: 'calendar', perms: [PERMS.BOOKINGS_VIEW, PERMS.CUSTOMERS_READ] },
   { id: 'reports', type: 'reports', label: 'Αναφορές', icon: 'chart' },
   { id: 'communications', type: 'communications', label: 'Επικοινωνίες', icon: 'message' },
   { id: 'documents', type: 'documents', label: 'Έγγραφα', icon: 'file' },

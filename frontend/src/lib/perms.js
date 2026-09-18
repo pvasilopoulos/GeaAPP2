@@ -17,4 +17,8 @@ export const PERMS = {
   QUOTES_EDIT: 'quotes.edit',
   QUOTES_SEND_EMAIL: 'quotes.send_email',
   QUOTES_FETCH_LINES: 'quotes.fetch_lines',
+  BOOKINGS_VIEW: 'bookings.view',
+  BOOKINGS_CREATE: 'bookings.create',
+  BOOKINGS_EDIT: 'bookings.edit',
+  BOOKINGS_DELETE: 'bookings.delete',
 };
