@@ -46,7 +46,7 @@ export const ICON_NAMES = [
   'search', 'phone', 'mail', 'pin', 'cake', 'edit', 'copy', 'plus', 'chevronRight', 'chevronDown',
   'chevronUp', 'arrowLeft', 'more', 'tag', 'clock', 'wallet', 'star', 'filter', 'check', 'x',
   'download', 'map', 'layers', 'bell', 'refresh', 'globe', 'briefcase', 'activity', 'note', 'mic',
-  'send', 'telegram', 'sms', 'viber', 'archive', 'wifiOff', 'eye', 'eyeOff',
+  'send', 'telegram', 'sms', 'viber', 'archive', 'wifiOff', 'eye', 'eyeOff', 'save', 'sort',
 ];
 
 export const DEFAULT_MENU_CONFIG = {
