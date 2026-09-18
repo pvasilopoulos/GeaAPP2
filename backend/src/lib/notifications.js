@@ -10,12 +10,14 @@ export const NOTIFICATION_TYPES = {
   FOLLOW_UP_ASSIGNED: 'follow_up_assigned',
   CONNECTOR_RUN_FAILED: 'connector_run_failed',
   QUOTE_EXPIRED: 'quote_expired',
+  ADMIN_MESSAGE: 'admin_message',
 };
 
 export const SOURCE_TYPES = {
   FOLLOW_UP: 'follow_up',
   QUOTE: 'quote',
   SYNC_RUN: 'sync_run',
+  BROADCAST: 'push_broadcast',
 };
 
 function parsePerms(value) {
@@ -75,6 +77,8 @@ export function notificationTarget(row) {
         connectorId: payload.connector_id || null,
         runId: Number(row.source_id),
       };
+    case SOURCE_TYPES.BROADCAST:
+      return payload.url ? { kind: 'url', url: payload.url } : { kind: 'none' };
     default:
       if (row?.customer_id) {
         return { kind: 'customer', customerId: row.customer_id, customerName: payload.customer_name || null };
@@ -100,6 +104,8 @@ export function buildNotificationCopy(type, ctx = {}) {
       const label = ctx.series && ctx.quoteNumber != null ? `${ctx.series}-${ctx.quoteNumber}` : (ctx.title || '');
       return { title: 'Η προσφορά έληξε', body: [label, ctx.customerName].filter(Boolean).join(' · ') };
     }
+    case NOTIFICATION_TYPES.ADMIN_MESSAGE:
+      return { title: ctx.title || 'Ειδοποίηση', body: ctx.body || '' };
     default:
       return { title: ctx.title || 'Ειδοποίηση', body: ctx.body || '' };
   }
@@ -149,9 +155,10 @@ export async function createNotification({
         payload ? JSON.stringify(payload) : null,
       ],
     );
-    // Best-effort Web Push mirror of the in-app notification — never blocks
-    // or fails the caller; individual send errors are logged/pruned inside.
-    pushToUser({
+    // Best-effort Web Push mirror of the in-app notification — captured as a
+    // promise so callers that need delivery counts (e.g. admin broadcasts)
+    // can await it; other callers simply let it run fire-and-forget.
+    const pushPromise = pushToUser({
       tenantId,
       userId,
       payload: {
@@ -160,8 +167,11 @@ export async function createNotification({
         notificationId: result.rows.insertId,
         target: { source_type: sourceType || null, source_id: sourceId, customer_id: customerId || null, payload },
       },
-    }, queryFn).catch((err) => console.error('[push] mirror failed:', err.message));
-    return { inserted: true, id: result.rows.insertId };
+    }, queryFn).catch((err) => {
+      console.error('[push] mirror failed:', err.message);
+      return { sent: 0, error: err.message };
+    });
+    return { inserted: true, id: result.rows.insertId, pushPromise };
   } catch (err) {
     if (isDuplicateKeyError(err)) return { inserted: false, reason: 'duplicate' };
     throw err;
@@ -175,6 +185,75 @@ export async function createNotificationsForUsers(userIds, base, queryFn = dbQue
     if (result.inserted) inserted += 1;
   }
   return { inserted };
+}
+
+function badRequest(message) {
+  const err = new Error(message);
+  err.status = 400;
+  return err;
+}
+
+/**
+ * Admin-triggered message: creates an in-app notification (and its Web Push
+ * mirror, via createNotification) for every active user, or a chosen subset.
+ * Logged in `push_broadcasts` for a history/audit trail.
+ */
+export async function sendBroadcast({
+  tenantId, senderUserId, title, body, url, recipients,
+}, queryFn = dbQuery) {
+  const cleanTitle = String(title || '').trim().slice(0, 200);
+  if (!cleanTitle) throw badRequest('Ο τίτλος είναι υποχρεωτικός');
+  const cleanBody = body ? String(body).trim().slice(0, 1000) : null;
+  const cleanUrl = url ? String(url).trim().slice(0, 500) : null;
+  const isAll = recipients === 'all';
+
+  let targetIds;
+  if (isAll) {
+    const { rows } = await queryFn('SELECT id FROM users WHERE tenant_id = ? AND is_active = 1', [tenantId]);
+    targetIds = rows.map((r) => Number(r.id));
+  } else {
+    const ids = [...new Set((Array.isArray(recipients) ? recipients : []).map(Number).filter(Boolean))];
+    if (!ids.length) throw badRequest('Επίλεξε τουλάχιστον έναν παραλήπτη');
+    const placeholders = ids.map(() => '?').join(',');
+    const { rows } = await queryFn(
+      `SELECT id FROM users WHERE tenant_id = ? AND is_active = 1 AND id IN (${placeholders})`,
+      [tenantId, ...ids],
+    );
+    targetIds = rows.map((r) => Number(r.id));
+  }
+  if (!targetIds.length) throw badRequest('Δεν βρέθηκαν ενεργοί παραλήπτες');
+
+  const insertResult = await queryFn(
+    `INSERT INTO push_broadcasts (tenant_id, sender_user_id, title, body, url, recipient_type, recipient_count)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [tenantId, senderUserId, cleanTitle, cleanBody, cleanUrl, isAll ? 'all' : 'users', targetIds.length],
+  );
+  const broadcastId = insertResult.rows.insertId;
+
+  let notified = 0;
+  let pushSent = 0;
+  await Promise.all(targetIds.map(async (userId) => {
+    const created = await createNotification({
+      tenantId,
+      userId,
+      type: NOTIFICATION_TYPES.ADMIN_MESSAGE,
+      title: cleanTitle,
+      body: cleanBody,
+      sourceType: SOURCE_TYPES.BROADCAST,
+      sourceId: broadcastId,
+      payload: cleanUrl ? { url: cleanUrl } : null,
+    }, queryFn);
+    if (created.inserted) {
+      notified += 1;
+      const pushResult = await created.pushPromise;
+      pushSent += pushResult?.sent || 0;
+    }
+  }));
+
+  await queryFn('UPDATE push_broadcasts SET push_sent_count = ? WHERE id = ?', [pushSent, broadcastId]).catch(() => {});
+  return {
+    broadcastId, recipients: targetIds.length, notified, pushSent,
+  };
 }
 
 async function loadTenantUsers(tenantId, queryFn) {

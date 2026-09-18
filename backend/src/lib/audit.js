@@ -1,11 +1,11 @@
 import { encodeCursor, decodeCursor, clampLimit } from './cursor.js';
 
 export const AUDIT_ACTIONS = [
-  'create', 'update', 'delete', 'login', 'status', 'sync', 'export',
+  'create', 'update', 'delete', 'login', 'status', 'sync', 'export', 'notify',
 ];
 
 export const AUDIT_ENTITY_TYPES = [
-  'customer', 'follow_up', 'quote', 'settings', 'user', 'role', 'connector', 'note',
+  'customer', 'follow_up', 'quote', 'settings', 'user', 'role', 'connector', 'note', 'push_broadcast',
 ];
 
 const SECRET_KEY_RE = /(password|passwd|secret|token|credential|authorization|api[_-]?key|smtp_pass|auth_token|bot_token|private[_-]?key)/i;

@@ -282,6 +282,24 @@ export async function ensureSchema() {
     console.log('[schema] created push_subscriptions');
   }
 
+  // Log of manual admin "send notification" broadcasts (all users or a
+  // chosen subset) — provides a history view and a unique source_id per
+  // send so the notifications dedupe key never collides across sends.
+  if (!(await tableExists('push_broadcasts'))) {
+    await query(`CREATE TABLE push_broadcasts (
+      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      tenant_id BIGINT NOT NULL, sender_user_id BIGINT NOT NULL,
+      title VARCHAR(200) NOT NULL, body VARCHAR(1000) NULL, url VARCHAR(500) NULL,
+      recipient_type VARCHAR(20) NOT NULL, recipient_count INT NOT NULL DEFAULT 0,
+      push_sent_count INT NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      KEY idx_push_broadcasts_tenant (tenant_id, created_at),
+      CONSTRAINT fk_push_broadcasts_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      CONSTRAINT fk_push_broadcasts_sender FOREIGN KEY (sender_user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    console.log('[schema] created push_broadcasts');
+  }
+
   if (!(await tableExists('audit_events'))) {
     await query(`CREATE TABLE audit_events (
       id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,

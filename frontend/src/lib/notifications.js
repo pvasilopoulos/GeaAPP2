@@ -22,6 +22,7 @@ export function notificationIcon(type) {
     case 'follow_up_assigned': return 'users';
     case 'connector_run_failed': return 'refresh';
     case 'quote_expired': return 'file';
+    case 'admin_message': return 'bell';
     default: return 'bell';
   }
 }
@@ -39,6 +40,8 @@ export function notificationTarget(row) {
       return { kind: 'quote', quoteId: row.source_id, customerId: row.customer_id || null };
     case 'sync_run':
       return { kind: 'connector', connectorId: payload.connector_id || null, runId: row.source_id };
+    case 'push_broadcast':
+      return payload.url ? { kind: 'url', url: payload.url } : null;
     default:
       if (row?.customer_id) return { kind: 'customer', customerId: row.customer_id, customerName: payload.customer_name || null };
       return null;
@@ -58,5 +61,9 @@ export function openNotificationTarget(target, { openCustomer, openTab }) {
   }
   if (target.kind === 'connector') {
     openTab({ id: 'settings', type: 'settings', title: 'Ρυθμίσεις', icon: 'settings', initialCat: 'connectors' });
+    return;
+  }
+  if (target.kind === 'url' && target.url) {
+    window.open(target.url, '_blank', 'noopener,noreferrer');
   }
 }

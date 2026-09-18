@@ -3,7 +3,7 @@ import {
   NOTIFICATION_TYPES, SOURCE_TYPES,
   buildNotificationCopy, followUpRecipientIds, quoteExpiredRecipientIds,
   userIdsWithPermission, notificationTarget, publicNotification,
-  createNotification, createNotificationsForUsers,
+  createNotification, createNotificationsForUsers, sendBroadcast,
 } from './notifications.js';
 import { PERMISSIONS } from './permissions.js';
 
@@ -98,5 +98,60 @@ const batch = await createNotificationsForUsers([2, 2, 3], {
   sourceType: SOURCE_TYPES.FOLLOW_UP, sourceId: 11,
 }, fakeQuery);
 assert.equal(batch.inserted, 2);
+
+// --- sendBroadcast ---------------------------------------------------------
+const broadcastUsers = [
+  { id: 1, is_active: 1 },
+  { id: 2, is_active: 1 },
+  { id: 3, is_active: 1 },
+];
+let broadcastRowId = 0;
+let broadcastUpdatedCount = null;
+const notificationInserts = [];
+async function broadcastFakeQuery(sql, params) {
+  const s = String(sql);
+  if (s.includes('SELECT id FROM users')) {
+    if (s.includes('IN (')) {
+      const ids = params.slice(1);
+      return { rows: broadcastUsers.filter((u) => ids.includes(u.id)) };
+    }
+    return { rows: broadcastUsers };
+  }
+  if (s.includes('INSERT INTO push_broadcasts')) {
+    broadcastRowId += 1;
+    return { rows: { insertId: broadcastRowId } };
+  }
+  if (s.includes('UPDATE push_broadcasts')) {
+    broadcastUpdatedCount = params[0];
+    return { rows: {} };
+  }
+  if (s.includes('INSERT INTO notifications')) {
+    notificationInserts.push(params);
+    return { rows: { insertId: notificationInserts.length } };
+  }
+  return { rows: [] };
+}
+
+const allResult = await sendBroadcast({
+  tenantId: 1, senderUserId: 9, title: 'Νέα έκδοση', body: 'Δοκιμή', recipients: 'all',
+}, broadcastFakeQuery);
+assert.equal(allResult.recipients, 3);
+assert.equal(allResult.notified, 3);
+assert.equal(allResult.pushSent, 0); // VAPID not configured in tests
+assert.equal(broadcastUpdatedCount, 0);
+
+notificationInserts.length = 0;
+const subsetResult = await sendBroadcast({
+  tenantId: 1, senderUserId: 9, title: 'Μόνο σε δύο', recipients: [1, 2],
+}, broadcastFakeQuery);
+assert.equal(subsetResult.recipients, 2);
+assert.equal(notificationInserts.length, 2);
+
+await assert.rejects(() => sendBroadcast({
+  tenantId: 1, senderUserId: 9, title: '', recipients: 'all',
+}, broadcastFakeQuery), /τίτλος/);
+await assert.rejects(() => sendBroadcast({
+  tenantId: 1, senderUserId: 9, title: 'x', recipients: [],
+}, broadcastFakeQuery), /παραλήπτη/);
 
 console.log('notifications tests passed');
