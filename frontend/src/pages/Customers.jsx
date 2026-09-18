@@ -453,13 +453,16 @@ export default function Customers({ onOpenCustomer }) {
         <button className={`filter-chip${chips.length ? ' active' : ''}`} title="Φίλτρα" onClick={() => setShowFilters(true)}>
           <Icon name="filter" size={15} /> {chips.length > 0 && <span className="pill" style={{ background: 'var(--accent)', color: '#fff', border: 'none' }}>{chips.length}</span>}
         </button>
-        <div className="filter-chip sort-control" title="Ταξινόμηση">
-          <Icon name="sort" size={15} />
-          <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Ταξινόμηση">
-            {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-          </select>
-          <button type="button" className="sort-direction" title={sortDir === 'ASC' ? 'Αύξουσα σειρά' : 'Φθίνουσα σειρά'} onClick={() => setSortDir((direction) => direction === 'ASC' ? 'DESC' : 'ASC')}>
-            <Icon name="chevronDown" size={13} style={{ transform: sortDir === 'ASC' ? 'rotate(180deg)' : undefined }} />
+        <div style={{ display: 'flex', gap: 4 }}>
+          <IconDropdown
+            icon="sort"
+            title="Ταξινόμηση"
+            value={sort}
+            options={SORTS}
+            onChange={setSort}
+          />
+          <button type="button" className="filter-chip icon-dropdown sort-direction-btn" title={sortDir === 'ASC' ? 'Αύξουσα σειρά' : 'Φθίνουσα σειρά'} onClick={() => setSortDir((direction) => direction === 'ASC' ? 'DESC' : 'ASC')}>
+            <Icon name="chevronDown" size={15} style={{ transform: sortDir === 'ASC' ? 'rotate(180deg)' : undefined }} />
           </button>
         </div>
         <IconDropdown
