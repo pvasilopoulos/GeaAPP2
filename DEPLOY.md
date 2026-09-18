@@ -44,6 +44,13 @@ MYSQL_DATABASE=geaapp
 NODE_ENV=production
 JWT_SECRET=<a long random string>
 SEED_CUSTOMERS=50000
+
+# Optional — enables mobile/desktop push notifications. Generate a pair once
+# with `npx web-push generate-vapid-keys` and set both here; leave blank to
+# keep push disabled (in-app notifications still work).
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=mailto:info@softify.gr
 ```
 
 `JWT_SECRET` signs auth tokens — set a long random value in production. Seeding

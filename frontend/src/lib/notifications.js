@@ -44,3 +44,19 @@ export function notificationTarget(row) {
       return null;
   }
 }
+
+/** Opens the tab a notification (in-app or push) points at. Shared by NotificationsMenu and the SW push-click handler. */
+export function openNotificationTarget(target, { openCustomer, openTab }) {
+  if (!target) return;
+  if (target.kind === 'customer' && target.customerId) {
+    openCustomer({ id: target.customerId, full_name: target.customerName });
+    return;
+  }
+  if (target.kind === 'quote') {
+    openTab({ id: 'quotes', type: 'quotes', title: 'Προσφορές', icon: 'file' });
+    return;
+  }
+  if (target.kind === 'connector') {
+    openTab({ id: 'settings', type: 'settings', title: 'Ρυθμίσεις', icon: 'settings', initialCat: 'connectors' });
+  }
+}

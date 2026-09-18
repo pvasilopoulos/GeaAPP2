@@ -18,4 +18,11 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || 'dev-insecure-secret-change-me',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   connectorSecret: process.env.CONNECTOR_SECRET || process.env.JWT_SECRET || 'dev-insecure-secret-change-me',
+  // Web Push (VAPID). Generate a pair once with `npx web-push generate-vapid-keys`
+  // and set them as env vars in production — push is silently disabled without them.
+  push: {
+    publicKey: process.env.VAPID_PUBLIC_KEY || '',
+    privateKey: process.env.VAPID_PRIVATE_KEY || '',
+    subject: process.env.VAPID_SUBJECT || 'mailto:info@softify.gr',
+  },
 };

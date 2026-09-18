@@ -32,6 +32,7 @@ import { bookingsRouter } from './routes/bookings.js';
 import { calendarRouter } from './routes/calendar.js';
 import { notificationsRouter } from './routes/notifications.js';
 import { auditRouter } from './routes/audit.js';
+import { pushRouter } from './routes/push.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -81,6 +82,7 @@ app.use('/api/tenants', tenantsRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/connectors', connectorsRouter);
 app.use('/api/notifications', notificationsRouter);
+app.use('/api/push', pushRouter);
 app.use('/api/audit', auditRouter);
 app.use('/api', usersRouter);
 

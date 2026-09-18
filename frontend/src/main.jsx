@@ -6,8 +6,10 @@ import App from './App.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import { useAuth } from './store/auth.js';
+import { useTabs } from './store/tabs.js';
 import { captureInstallPrompt, installReloadGuard, registerServiceWorker } from './lib/pwa.js';
 import { initOfflineSync, QUEUE_EVENT, queryKeysForMutation } from './lib/offlineQueue.js';
+import { notificationTarget, openNotificationTarget } from './lib/notifications.js';
 import './styles.css';
 
 captureInstallPrompt();
@@ -18,6 +20,20 @@ initOfflineSync();
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30000, refetchOnWindowFocus: false, retry: 1 } },
 });
+
+// Clicking a system push notification posts a message here from the SW
+// (see public/sw.js `notificationclick`); route it to the same tab the
+// in-app notifications bell would open.
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    if (event.data?.type !== 'spacehub:push-click') return;
+    queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    queryClient.invalidateQueries({ queryKey: ['notifications-unread'] });
+    const target = notificationTarget(event.data.target);
+    openNotificationTarget(target, { openCustomer: useTabs.getState().openCustomer, openTab: useTabs.getState().openTab });
+  });
+}
+
 
 if (typeof window !== 'undefined') {
   window.addEventListener(QUEUE_EVENT, (e) => {

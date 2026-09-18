@@ -4,22 +4,7 @@ import Icon from './Icon.jsx';
 import { api } from '../api.js';
 import { useAuth } from '../store/auth.js';
 import { useTabs } from '../store/tabs.js';
-import { formatRelativeTime, notificationIcon, notificationTarget } from '../lib/notifications.js';
-
-function openNotificationTarget(target, { openCustomer, openTab }) {
-  if (!target) return;
-  if (target.kind === 'customer' && target.customerId) {
-    openCustomer({ id: target.customerId, full_name: target.customerName });
-    return;
-  }
-  if (target.kind === 'quote') {
-    openTab({ id: 'quotes', type: 'quotes', title: 'Προσφορές', icon: 'file' });
-    return;
-  }
-  if (target.kind === 'connector') {
-    openTab({ id: 'settings', type: 'settings', title: 'Ρυθμίσεις', icon: 'settings', initialCat: 'connectors' });
-  }
-}
+import { formatRelativeTime, notificationIcon, notificationTarget, openNotificationTarget } from '../lib/notifications.js';
 
 export default function NotificationsMenu() {
   const user = useAuth((s) => s.user);

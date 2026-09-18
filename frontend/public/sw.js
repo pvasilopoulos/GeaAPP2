@@ -32,3 +32,38 @@ self.addEventListener('fetch', (event) => {
       .catch(() => caches.match(req).then((hit) => hit || caches.match('/'))),
   );
 });
+
+// Web Push — the backend mirrors every in-app notification here as a real
+// system push (see backend/src/lib/push.js). `data.target` carries the same
+// shape as the in-app notification row so the client can deep-link on click.
+self.addEventListener('push', (event) => {
+  let data = {};
+  if (event.data) {
+    try { data = event.data.json(); } catch { data = { body: event.data.text() }; }
+  }
+  const title = data.title || 'SoftifyOS';
+  const options = {
+    body: data.body || '',
+    icon: '/app-icons/icon-192.png',
+    badge: '/app-icons/icon-192.png',
+    data: { target: data.target || null, notificationId: data.notificationId || null },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = event.notification.data?.target || null;
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const client of list) {
+        if ('focus' in client) {
+          client.postMessage({ type: 'spacehub:push-click', target });
+          return client.focus();
+        }
+      }
+      if (self.clients.openWindow) return self.clients.openWindow('/');
+      return undefined;
+    }),
+  );
+});

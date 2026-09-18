@@ -2,6 +2,7 @@ import { query as dbQuery } from '../db.js';
 import { isDuplicateKeyError } from './idempotency.js';
 import { computeReminderState, mergeReminderSettings } from './reminderSettings.js';
 import { PERMISSIONS, expandPermissions } from './permissions.js';
+import { pushToUser } from './push.js';
 
 export const NOTIFICATION_TYPES = {
   FOLLOW_UP_OVERDUE: 'follow_up_overdue',
@@ -148,6 +149,18 @@ export async function createNotification({
         payload ? JSON.stringify(payload) : null,
       ],
     );
+    // Best-effort Web Push mirror of the in-app notification — never blocks
+    // or fails the caller; individual send errors are logged/pruned inside.
+    pushToUser({
+      tenantId,
+      userId,
+      payload: {
+        title: String(title || 'Ειδοποίηση').slice(0, 200),
+        body: body ? String(body).slice(0, 1000) : '',
+        notificationId: result.rows.insertId,
+        target: { source_type: sourceType || null, source_id: sourceId, customer_id: customerId || null, payload },
+      },
+    }, queryFn).catch((err) => console.error('[push] mirror failed:', err.message));
     return { inserted: true, id: result.rows.insertId };
   } catch (err) {
     if (isDuplicateKeyError(err)) return { inserted: false, reason: 'duplicate' };

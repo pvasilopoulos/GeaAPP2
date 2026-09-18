@@ -14,6 +14,7 @@ import ConnectorsPanel from './settings/ConnectorsPanel.jsx';
 import CustomersPanel from './settings/CustomersPanel.jsx';
 import QuotesPanel from './settings/QuotesPanel.jsx';
 import MenuPanel from './settings/MenuPanel.jsx';
+import NotificationsPanel from './settings/NotificationsPanel.jsx';
 import AuditLog from './AuditLog.jsx';
 
 const CATS = [
@@ -32,6 +33,7 @@ const CATS = [
   // No perms gate: every authenticated user can personalize their own menu;
   // the panel itself gates the tenant-wide default section by SETTINGS_MANAGE.
   { id: 'menu', label: 'Μενού', hint: 'Πλαϊνό μενού & κάτω μπάρα (mobile) — γενικά και προσωπικά', icon: 'grid', perms: [] },
+  { id: 'notifications', label: 'Ειδοποιήσεις', hint: 'Push ειδοποιήσεις σε αυτή τη συσκευή', icon: 'bell', perms: [] },
 ];
 
 const GROUPS = [
@@ -39,7 +41,7 @@ const GROUPS = [
   { id: 'operations', label: 'Λειτουργίες', items: ['messaging', 'reminders', 'connectors', 'quotes'] },
   { id: 'access', label: 'Πρόσβαση & ασφάλεια', items: ['users', 'security', 'audit'] },
   { id: 'platform', label: 'Πλατφόρμα', items: ['tenants'] },
-  { id: 'personal', label: 'Προσωπικά', items: ['menu'] },
+  { id: 'personal', label: 'Προσωπικά', items: ['menu', 'notifications'] },
 ];
 
 export default function Settings({ initialCat } = {}) {
@@ -107,6 +109,7 @@ export default function Settings({ initialCat } = {}) {
               {active.id === 'security' && <SecurityPanel />}
               {active.id === 'connectors' && <ConnectorsPanel />}
               {active.id === 'menu' && <MenuPanel />}
+              {active.id === 'notifications' && <NotificationsPanel />}
               {active.id === 'audit' && <AuditLog embedded />}
             </>
           )}

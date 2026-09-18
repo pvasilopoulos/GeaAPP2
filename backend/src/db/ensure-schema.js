@@ -261,6 +261,27 @@ export async function ensureSchema() {
   await addUniqueIndex('notifications', 'uq_notifications_dedupe', 'tenant_id, user_id, type, source_id');
   await addIndex('notifications', 'idx_notifications_inbox', 'tenant_id, user_id, dismissed_at, read_at, created_at');
 
+  // Web Push (VAPID) subscriptions — one row per browser/device a user has
+  // granted notification permission on. `endpoint_hash` (sha256 of the full
+  // push endpoint URL) gives us a fixed-width unique key since raw endpoints
+  // can exceed MySQL's utf8mb4 index byte limit.
+  if (!(await tableExists('push_subscriptions'))) {
+    await query(`CREATE TABLE push_subscriptions (
+      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      tenant_id BIGINT NOT NULL, user_id BIGINT NOT NULL,
+      endpoint VARCHAR(1000) NOT NULL, endpoint_hash CHAR(64) NOT NULL,
+      p256dh VARCHAR(255) NOT NULL, auth VARCHAR(255) NOT NULL,
+      user_agent VARCHAR(255) NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_push_subscriptions_endpoint (endpoint_hash),
+      KEY idx_push_subscriptions_user (tenant_id, user_id),
+      CONSTRAINT fk_push_subscriptions_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      CONSTRAINT fk_push_subscriptions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    console.log('[schema] created push_subscriptions');
+  }
+
   if (!(await tableExists('audit_events'))) {
     await query(`CREATE TABLE audit_events (
       id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
