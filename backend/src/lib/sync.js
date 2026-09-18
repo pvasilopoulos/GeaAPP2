@@ -5,6 +5,7 @@ import { retryDelay } from './schedulerPolicy.js';
 import { parseEncodedJson } from './responseEncoding.js';
 import { normalizeFields } from './normalize.js';
 import { valueColumns } from './customFields.js';
+import { notifyConnectorFailure } from './notifications.js';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -340,6 +341,13 @@ export async function runSync(tenantId, connectorId) {
       'UPDATE sync_runs SET status = ?, finished_at = NOW(), error_count = 1, error_message = ? WHERE id = ? AND tenant_id = ?',
       ['failed', error.message, runId, tenantId],
     );
+    await notifyConnectorFailure({
+      tenantId,
+      connectorId,
+      runId,
+      connectorName: connector.name,
+      errorMessage: error.message,
+    }).catch((e) => console.error('[notifications]', e.message));
     throw error;
   }
 }

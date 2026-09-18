@@ -241,6 +241,27 @@ export async function ensureSchema() {
     console.log('[schema] created idempotency_keys');
   }
 
+  if (!(await tableExists('notifications'))) {
+    await query(`CREATE TABLE notifications (
+      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      tenant_id BIGINT NOT NULL, user_id BIGINT NOT NULL,
+      type VARCHAR(40) NOT NULL, title VARCHAR(200) NOT NULL, body VARCHAR(1000) NULL,
+      source_type VARCHAR(40) NULL, source_id BIGINT NULL, customer_id BIGINT NULL,
+      payload JSON NULL, read_at DATETIME NULL, dismissed_at DATETIME NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_notifications_dedupe (tenant_id, user_id, type, source_id),
+      KEY idx_notifications_inbox (tenant_id, user_id, dismissed_at, read_at, created_at),
+      CONSTRAINT fk_notifications_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      CONSTRAINT fk_notifications_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      CONSTRAINT fk_notifications_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    console.log('[schema] created notifications');
+  }
+  await addColumn('notifications', 'dismissed_at', 'DATETIME NULL');
+  await addUniqueIndex('notifications', 'uq_notifications_dedupe', 'tenant_id, user_id, type, source_id');
+  await addIndex('notifications', 'idx_notifications_inbox', 'tenant_id, user_id, dismissed_at, read_at, created_at');
+
+
   const admins = await query('SELECT COUNT(*) AS c FROM users WHERE is_platform_admin = 1');
   if (!Number(admins.rows[0].c)) {
     await query(

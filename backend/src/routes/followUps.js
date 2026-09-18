@@ -8,6 +8,8 @@ import { parseFollowUpPayload, parseSnoozeMinutes, syncCustomerNextAction } from
 import { computeReminderState } from '../lib/reminderSettings.js';
 import { loadTenant } from '../lib/tenants.js';
 import { withIdempotency } from '../lib/idempotency.js';
+import { notifyFollowUpAssigned } from '../lib/notifications.js';
+
 
 export const followUpsRouter = Router();
 followUpsRouter.use(authorize(PERMISSIONS.CUSTOMERS_READ));
@@ -69,7 +71,7 @@ followUpsRouter.post('/', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, re
     const result = await withIdempotency(query, req, async () => {
       const customerId = Number(req.body?.customerId ?? req.body?.customer_id);
       if (!Number.isInteger(customerId)) return { status: 400, body: { error: 'Απαιτείται πελάτης' } };
-      const customer = await query('SELECT id FROM customers WHERE id = ? AND tenant_id = ?', [customerId, req.user.tenantId]);
+      const customer = await query('SELECT id, full_name FROM customers WHERE id = ? AND tenant_id = ?', [customerId, req.user.tenantId]);
       if (!customer.rows.length) return { status: 404, body: { error: 'Customer not found' } };
       const parsed = parseFollowUpPayload(req.body);
       if (parsed.error) return { status: 400, body: { error: parsed.error } };
@@ -81,9 +83,20 @@ followUpsRouter.post('/', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, re
         [req.user.tenantId, customerId, parsed.branchId ?? null, parsed.title, parsed.description || null, parsed.dueAt, parsed.assignedEmployeeId ?? null, req.user.id]);
       await syncCustomerNextAction(req.user.tenantId, customerId);
       await logActivity({ tenantId: req.user.tenantId, customerId, type: 'follow_up_created', description: `Υπενθύμιση: ${parsed.title}`, details: packDetails(req, { followUpId: r.rows.insertId }) });
+      if (parsed.assignedEmployeeId) {
+        await notifyFollowUpAssigned({
+          tenantId: req.user.tenantId,
+          followUpId: r.rows.insertId,
+          customerId,
+          customerName: customer.rows[0].full_name,
+          title: parsed.title,
+          assignedEmployeeId: parsed.assignedEmployeeId,
+        }).catch((e) => console.error('[notifications]', e.message));
+      }
       return { status: 201, body: { id: r.rows.insertId } };
     });
     res.status(result.status).json(result.body);
+
   } catch (err) { next(err); }
 });
 
@@ -125,9 +138,22 @@ followUpsRouter.patch('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req
       if (parsed.status !== undefined || parsed.dueAt !== undefined || parsed.title !== undefined) {
         await syncCustomerNextAction(req.user.tenantId, current.customer_id);
       }
+      if (parsed.assignedEmployeeId !== undefined && parsed.assignedEmployeeId
+          && parsed.assignedEmployeeId !== current.assigned_employee_id) {
+        const customer = (await query('SELECT full_name FROM customers WHERE id = ? AND tenant_id = ?', [current.customer_id, req.user.tenantId])).rows[0];
+        await notifyFollowUpAssigned({
+          tenantId: req.user.tenantId,
+          followUpId: id,
+          customerId: current.customer_id,
+          customerName: customer?.full_name,
+          title: parsed.title || current.title,
+          assignedEmployeeId: parsed.assignedEmployeeId,
+        }).catch((e) => console.error('[notifications]', e.message));
+      }
       return { status: 200, body: { ok: true } };
     });
     res.status(result.status).json(result.body);
+
   } catch (err) { next(err); }
 });
 
