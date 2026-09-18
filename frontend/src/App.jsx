@@ -6,6 +6,7 @@ import TabBar from './components/TabBar.jsx';
 import MobileFooterNav from './components/MobileFooterNav.jsx';
 import { Avatar } from './components/ui.jsx';
 import OfflineSyncStatus from './components/OfflineSyncStatus.jsx';
+import NotificationsMenu from './components/NotificationsMenu.jsx';
 import { useTabs } from './store/tabs.js';
 import { useAuth } from './store/auth.js';
 import { resolveSidebarMenu, resolveSidebarGroups, resolveMobileFooterMenu } from './lib/menu.js';
@@ -110,7 +111,7 @@ function TabContent({ tab }) {
     case 'dashboard': return <Dashboard />;
     case 'customers': return <Customers onOpenCustomer={openCustomer} />;
     case 'customer': return <CustomerProfile customerId={tab.customerId} tabId={tab.id} onBack={() => activateTab('customers')} />;
-    case 'settings': return <Settings />;
+    case 'settings': return <Settings initialCat={tab.initialCat} />;
     case 'quotes': return <Quotes />;
     case 'users': return <Settings initialCat="users" />;
     case 'calendar': return <Calendar onOpenCustomer={openCustomer} />;
@@ -203,7 +204,7 @@ export default function App() {
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
             <OfflineSyncStatus />
             <AppRefresh />
-            <button className="btn btn-icon btn-ghost" aria-label="Ειδοποιήσεις"><Icon name="bell" /></button>
+            <NotificationsMenu />
             <UserMenu />
           </div>
         </header>
