@@ -453,7 +453,7 @@ export default function Customers({ onOpenCustomer }) {
         <button className={`filter-chip${chips.length ? ' active' : ''}`} title="Φίλτρα" onClick={() => setShowFilters(true)}>
           <Icon name="filter" size={15} /> {chips.length > 0 && <span className="pill" style={{ background: 'var(--accent)', color: '#fff', border: 'none' }}>{chips.length}</span>}
         </button>
-        <div style={{ display: 'flex', gap: 4 }}>
+        <div className="sort-control-group" style={{ display: 'flex', gap: 4 }}>
           <IconDropdown
             icon="sort"
             title="Ταξινόμηση"

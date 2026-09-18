@@ -757,6 +757,15 @@ textarea.input { height: auto; padding: 8px 10px; }
   .toolbar .customer-columns-anchor { min-width: 0; }
   .toolbar .customer-columns-anchor > .btn { width: 100%; justify-content: center; }
   .toolbar > .btn.btn-accent { justify-content: center; }
+  /* The icon-only dropdowns (sort/view/scope) open a popover *inside* the
+     same chip element the rules above clip to a tiny pill — without this,
+     the menu still opens but is invisible/cut off, looking like the button
+     doesn't respond at all. Let it escape its own chip and stay within its
+     column instead of overflowing off-screen. */
+  .toolbar .icon-dropdown { overflow: visible; }
+  .toolbar .icon-dropdown .search-results { left: 0; right: 0; width: auto; min-width: 0; }
+  .toolbar .sort-control-group { display: flex; gap: 4px; width: 100%; min-width: 0; }
+  .toolbar .sort-control-group .icon-dropdown, .toolbar .sort-control-group .sort-direction-btn { flex: 1 1 0; width: auto; }
   .results-meta { flex-wrap: wrap; gap: 7px; }
   .results-meta span:last-child { width: 100%; margin-left: 0 !important; }
   .customer-columns-anchor { position: static; }
