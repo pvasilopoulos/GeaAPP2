@@ -4,6 +4,7 @@ import { verifyPassword, signToken } from '../lib/auth.js';
 import { authenticate } from '../middleware/auth.js';
 import { TENANT_PERMISSIONS, expandPermissions } from '../lib/permissions.js';
 import { createTenantWithOwner, getPlatformSetting, getPlatformSettings } from '../lib/tenants.js';
+import { logAudit, clientIp } from '../lib/audit.js';
 
 export const authRouter = Router();
 
@@ -74,6 +75,16 @@ authRouter.post('/login', async (req, res, next) => {
     await query('UPDATE users SET last_login_at = NOW() WHERE id = ?', [user.id]);
     const token = signToken({ sub: user.id });
     const me = await loadUser(user.id);
+    await logAudit(query, {
+      tenantId: user.tenant_id,
+      actorUserId: user.id,
+      actorName: user.full_name || user.email,
+      action: 'login',
+      entityType: 'user',
+      entityId: user.id,
+      summary: 'Επιτυχής σύνδεση',
+      ip: clientIp(req),
+    });
     res.json({ token, user: publicUser(me) });
   } catch (err) {
     next(err);

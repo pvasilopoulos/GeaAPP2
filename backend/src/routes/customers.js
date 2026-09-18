@@ -15,6 +15,7 @@ import { computeReminderState } from '../lib/reminderSettings.js';
 import { diffRecords, snapshotFields, packDetails, changeSummary, parseDetails } from '../lib/activityDiff.js';
 import { parseNotePayload, noteReminderState } from '../lib/notes.js';
 import { extractClientRequestId, isDuplicateKeyError } from '../lib/idempotency.js';
+import { logAuditFromReq } from '../lib/audit.js';
 
 const CUSTOMER_FIELDS = ['first_name', 'last_name', 'email', 'phone', 'mobile', 'company',
   'tax_id', 'customer_type', 'status', 'is_vip', 'date_of_birth', 'address_line', 'city',
@@ -210,6 +211,10 @@ customersRouter.post('/', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, re
       description: `Δημιουργία πελάτη: ${b.first_name} ${b.last_name}`,
       details: packDetails(req, { fields: snapshotFields(vals, CUSTOMER_FIELDS) }),
     });
+    await logAuditFromReq(query, req, {
+      action: 'create', entityType: 'customer', entityId: id, customerId: id,
+      summary: `Δημιουργία πελάτη: ${b.first_name} ${b.last_name}`,
+    });
     res.status(201).json({ id, code });
   } catch (err) { next(err); }
 });
@@ -244,6 +249,11 @@ customersRouter.patch('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req
         description: changeSummary('Ενημέρωση πελάτη', changes, 'Ενημέρωση στοιχείων πελάτη'),
         details: packDetails(req, { changes }),
       });
+      await logAuditFromReq(query, req, {
+        action: 'update', entityType: 'customer', entityId: id, customerId: id,
+        summary: changeSummary('Ενημέρωση πελάτη', changes, 'Ενημέρωση στοιχείων πελάτη'),
+        details: { changes },
+      });
     }
     res.json({ ok: true });
   } catch (err) { next(err); }
@@ -252,7 +262,18 @@ customersRouter.patch('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req
 // DELETE /api/customers/:id — remove a customer and all its data (cascade).
 customersRouter.delete('/:id', authorize(PERMISSIONS.CUSTOMERS_DELETE), async (req, res, next) => {
   try {
-    await query('DELETE FROM customers WHERE id = ? AND tenant_id = ?', [Number(req.params.id), req.user.tenantId]);
+    const id = Number(req.params.id);
+    const cur = (await query(
+      'SELECT id, first_name, last_name, company FROM customers WHERE id = ? AND tenant_id = ?',
+      [id, req.user.tenantId])).rows[0];
+    await query('DELETE FROM customers WHERE id = ? AND tenant_id = ?', [id, req.user.tenantId]);
+    if (cur) {
+      const name = [cur.first_name, cur.last_name].filter(Boolean).join(' ') || cur.company || `#${id}`;
+      await logAuditFromReq(query, req, {
+        action: 'delete', entityType: 'customer', entityId: id,
+        summary: `Διαγραφή πελάτη: ${name}`,
+      });
+    }
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

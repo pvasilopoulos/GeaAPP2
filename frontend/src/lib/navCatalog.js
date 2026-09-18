@@ -18,6 +18,7 @@ export const NAV = [
   { id: 'invoices', type: 'invoices', label: 'Τιμολόγια', icon: 'file' },
   { id: 'quotes', type: 'quotes', label: 'Προσφορές', icon: 'file', perms: [PERMS.QUOTES_VIEW] },
   { id: 'settings', type: 'settings', label: 'Ρυθμίσεις', icon: 'settings', perms: [PERMS.SETTINGS_MANAGE, PERMS.USERS_MANAGE, PERMS.ROLES_MANAGE, PERMS.TENANT_MANAGE, PERMS.TENANTS_PLATFORM] },
+  { id: 'audit', type: 'audit', label: 'Ιστορικό αλλαγών', icon: 'clock', perms: [PERMS.SETTINGS_MANAGE] },
 ];
 
 export const NAV_GROUPS = [

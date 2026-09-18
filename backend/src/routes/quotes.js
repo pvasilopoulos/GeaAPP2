@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { QUOTE_STATUSES, QUOTE_STATUS_TRANSITIONS } from '../lib/quoteWorkflow.js';
 import { mapErpLinesToQuoteLines } from '../lib/quoteLineMapping.js';
 import { parseEncodedJson } from '../lib/responseEncoding.js';
+import { logAuditFromReq } from '../lib/audit.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FONT = path.resolve(__dirname, '../../assets/fonts/DejaVuSans.ttf');
@@ -112,6 +113,10 @@ quotesRouter.post('/', authorize(PERMISSIONS.QUOTES_CREATE), async (req, res, ne
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [req.user.tenantId, b.series || 'ΠΡΟΣ', number, b.quoteDate, b.customerId, b.branchId || null, b.emailTemplate || null, b.paymentTerms || null, b.validUntil || null, b.sellerId || null, b.referenceStartYear || null, b.referenceEndYear || null, b.paymentDueDate || null, b.sendEmail ? 1 : 0, b.sendEmail ? 'ready' : 'draft', calculated.subtotal, calculated.tax_total, calculated.total, req.user.id]);
     for (const line of lines) await insertQuoteLine(r.rows.insertId, line);
+    await logAuditFromReq(query, req, {
+      action: 'create', entityType: 'quote', entityId: r.rows.insertId, customerId: b.customerId,
+      summary: `Δημιουργία προσφοράς ${b.series || 'ΠΡΟΣ'}-${number}`,
+    });
     res.status(201).json({ id: r.rows.insertId, ...calculated });
   } catch (err) { next(err); }
 });
@@ -149,7 +154,13 @@ quotesRouter.post('/:id/status', authorize(PERMISSIONS.QUOTES_EDIT), async (req,
     await query(
       'UPDATE quotes SET status = ?, status_error = NULL, status_updated_at = NOW(), status_updated_by = ?, updated_at = NOW() WHERE id = ? AND tenant_id = ?',
       [nextStatus, req.user.id, id, req.user.tenantId]);
-    await logActivity({ tenantId: req.user.tenantId, customerId: (await query('SELECT customer_id FROM quotes WHERE id = ?', [id])).rows[0].customer_id, type: 'quote_status_changed', description: `Προσφορά ${id}: ${quote.status} → ${nextStatus}`, details: { actor: { id: req.user.id } } });
+    const customerId = (await query('SELECT customer_id FROM quotes WHERE id = ?', [id])).rows[0].customer_id;
+    await logActivity({ tenantId: req.user.tenantId, customerId, type: 'quote_status_changed', description: `Προσφορά ${id}: ${quote.status} → ${nextStatus}`, details: { actor: { id: req.user.id } } });
+    await logAuditFromReq(query, req, {
+      action: 'status', entityType: 'quote', entityId: id, customerId,
+      summary: `Κατάσταση προσφοράς ${id}: ${quote.status} → ${nextStatus}`,
+      details: { from: quote.status, to: nextStatus },
+    });
     res.json({ id, status: nextStatus });
   } catch (err) { next(err); }
 });

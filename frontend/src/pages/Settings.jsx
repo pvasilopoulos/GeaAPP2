@@ -14,6 +14,7 @@ import ConnectorsPanel from './settings/ConnectorsPanel.jsx';
 import CustomersPanel from './settings/CustomersPanel.jsx';
 import QuotesPanel from './settings/QuotesPanel.jsx';
 import MenuPanel from './settings/MenuPanel.jsx';
+import AuditLog from './AuditLog.jsx';
 
 const CATS = [
   { id: 'org', label: 'Οργανισμός', hint: 'Επωνυμία, γλώσσα, νόμισμα', icon: 'building', perms: [PERMS.TENANT_MANAGE, PERMS.SETTINGS_MANAGE] },
@@ -26,6 +27,7 @@ const CATS = [
   { id: 'fields', label: 'Custom Fields', hint: 'Δυναμικά πεδία πελατών / χώρων', icon: 'tag', perms: [PERMS.SETTINGS_MANAGE] },
   { id: 'tenants', label: 'Tenants', hint: 'Δημιουργία, επεξεργασία, διαγραφή οργανισμών', icon: 'grid', perms: [PERMS.TENANTS_PLATFORM] },
   { id: 'security', label: 'Ασφάλεια', hint: 'Εγγραφή, πρόσβαση, πλατφόρμα', icon: 'settings', perms: [PERMS.SETTINGS_MANAGE, PERMS.TENANT_MANAGE, PERMS.TENANTS_PLATFORM] },
+  { id: 'audit', label: 'Ιστορικό αλλαγών', hint: 'Ποιος άλλαξε τι στον οργανισμό', icon: 'clock', perms: [PERMS.SETTINGS_MANAGE] },
   { id: 'connectors', label: 'ERP Sync', hint: 'Συνδέσεις, αντιστοιχίσεις και συγχρονισμοί', icon: 'refresh', perms: [PERMS.SETTINGS_MANAGE] },
   // No perms gate: every authenticated user can personalize their own menu;
   // the panel itself gates the tenant-wide default section by SETTINGS_MANAGE.
@@ -35,7 +37,7 @@ const CATS = [
 const GROUPS = [
   { id: 'workspace', label: 'Χώρος εργασίας', items: ['org', 'app', 'customers', 'fields'] },
   { id: 'operations', label: 'Λειτουργίες', items: ['messaging', 'reminders', 'connectors', 'quotes'] },
-  { id: 'access', label: 'Πρόσβαση & ασφάλεια', items: ['users', 'security'] },
+  { id: 'access', label: 'Πρόσβαση & ασφάλεια', items: ['users', 'security', 'audit'] },
   { id: 'platform', label: 'Πλατφόρμα', items: ['tenants'] },
   { id: 'personal', label: 'Προσωπικά', items: ['menu'] },
 ];
@@ -105,6 +107,7 @@ export default function Settings({ initialCat } = {}) {
               {active.id === 'security' && <SecurityPanel />}
               {active.id === 'connectors' && <ConnectorsPanel />}
               {active.id === 'menu' && <MenuPanel />}
+              {active.id === 'audit' && <AuditLog embedded />}
             </>
           )}
         </div>

@@ -1020,7 +1020,46 @@ textarea.input { height: auto; padding: 8px 10px; }
 .calendar-event-block.type-follow_up.overdue { background: var(--red-soft, #fef2f2); color: var(--red); }
 .calendar-resize-handle { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; cursor: ns-resize; }
 
+.audit-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.audit-filters label {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 12px; color: var(--text-3); font-weight: 600;
+}
+.audit-filters input, .audit-filters select {
+  height: 36px; border: 1px solid var(--border); border-radius: 9px;
+  padding: 0 10px; font: inherit; color: var(--text); background: #fff;
+}
+.audit-search { grid-column: span 2; min-width: 180px; }
+.audit-list { overflow: hidden; }
+.audit-row {
+  width: 100%; display: flex; align-items: center; gap: 12px; text-align: left;
+  padding: 12px 14px; border: 0; border-bottom: 1px solid var(--border);
+  background: #fff; color: inherit; font: inherit; cursor: default;
+}
+.audit-row.is-link { cursor: pointer; }
+.audit-row.is-link:hover { background: var(--surface-2); }
+.audit-when { width: 148px; flex: none; font-size: 12.5px; color: var(--text-3); }
+.audit-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.audit-main b { font-size: 13.5px; font-weight: 600; }
+.audit-main span { font-size: 12px; color: var(--text-3); }
+.audit-action {
+  flex: none; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent);
+}
+.audit-action.action-delete { background: var(--red-soft); color: var(--red); }
+.audit-action.action-create { background: var(--green-soft); color: var(--green); }
+.audit-action.action-login { background: var(--surface-2); color: var(--text-2); }
+.audit-more { padding: 12px; display: flex; justify-content: center; }
+
 @media (max-width: 760px) {
+  .audit-search { grid-column: span 1; }
+  .audit-row { flex-wrap: wrap; }
+  .audit-when { width: 100%; }
   .calendar-toolbar { flex-direction: column; align-items: stretch; }
   .calendar-toolbar-right { justify-content: space-between; }
   .calendar-employee-select { flex: 1; min-width: 0; }
