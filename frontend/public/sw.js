@@ -1,5 +1,5 @@
 /* SpaceHub service worker — app-shell cache, never intercept API. */
-const VERSION = 'spacehub-shell-v1';
+const VERSION = 'spacehub-shell-v2';
 const PRECACHE = ['/', '/index.html', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', (event) => {
