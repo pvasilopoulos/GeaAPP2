@@ -3,7 +3,6 @@ import Icon from './Icon.jsx';
 import {
   currentInstallMode,
   dismissInstallHint,
-  prepareInstall,
   promptInstall,
   subscribeInstallPrompt,
 } from '../lib/pwa.js';
@@ -24,8 +23,7 @@ const COPY = {
   },
   'chromium-menu': {
     title: 'Εγκατάσταση ως εφαρμογή',
-    body: 'Πατήστε Εγκατάσταση. Αν δεν εμφανιστεί το παράθυρο του Chrome/Edge, ανανεώστε και ξαναδοκιμάστε — όχι «Δημιουργία συντόμευσης».',
-    action: 'Εγκατάσταση',
+    body: 'Στο Chrome/Edge πατήστε το εικονίδιο εγκατάστασης στη γραμμή διευθύνσεων, ή μενού ⋮ → Εγκατάσταση εφαρμογής. Όχι «Δημιουργία συντόμευσης».',
   },
   insecure: {
     title: 'Απαιτείται HTTPS',
@@ -39,26 +37,20 @@ const COPY = {
 
 export default function InstallAppBanner({ compact = false }) {
   const [mode, setMode] = useState(() => currentInstallMode());
-  const [busy, setBusy] = useState(false);
   const [extra, setExtra] = useState('');
   useEffect(() => subscribeInstallPrompt(() => setMode(currentInstallMode())), []);
   if (!COPY[mode]) return null;
   const copy = COPY[mode];
-  const canPrompt = mode === 'prompt' || mode === 'chromium-menu';
-  const onInstall = async () => {
-    if (mode === 'prompt') {
-      await promptInstall();
+  const onInstall = () => {
+    // prompt() must run in this click turn — no setState/await beforehand.
+    void promptInstall().then((result) => {
       setMode(currentInstallMode());
-      return;
-    }
-    setBusy(true); setExtra('');
-    try {
-      const r = await prepareInstall();
-      setMode(currentInstallMode());
-      if (r.status === 'waiting') setExtra('Ανανεώστε τη σελίδα. Στο Chrome/Edge επιλέξτε Εγκατάσταση εφαρμογής, όχι συντόμευση.');
-      if (r.status === 'insecure') setExtra('Χρειάζεται HTTPS (ή localhost).');
-      if (r.status === 'sw-failed') setExtra(r.error || 'Αποτυχία service worker.');
-    } finally { setBusy(false); }
+      if (!result.ok) {
+        setExtra(result.reason === 'no-event'
+          ? 'Ο browser δεν άνοιξε διάλογο. Χρησιμοποιήστε ⋮ → Εγκατάσταση εφαρμογής.'
+          : result.reason);
+      }
+    });
   };
   return (
     <div className={`pwa-install${compact ? ' compact' : ''}`} role="status">
@@ -69,9 +61,9 @@ export default function InstallAppBanner({ compact = false }) {
         {extra && <span>{extra}</span>}
       </div>
       <div className="pwa-install-actions">
-        {canPrompt && (
-          <button type="button" className="btn btn-accent" disabled={busy} onClick={onInstall}>
-            {busy ? <span className="spinner" /> : (copy.action || 'Εγκατάσταση')}
+        {mode === 'prompt' && (
+          <button type="button" className="btn btn-accent" onClick={onInstall}>
+            {copy.action}
           </button>
         )}
         <button

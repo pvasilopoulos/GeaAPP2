@@ -117,11 +117,14 @@ export default function AppPanel() {
           <button
             type="button"
             className="btn"
-            onClick={async () => {
-              const r = await prepareInstall();
-              setInstallMode(currentInstallMode());
-              if (r.status === 'waiting') setPwaMsg('Ανανεώστε και ξαναπατήστε. Στο Chrome/Edge επιλέξτε Εγκατάσταση εφαρμογής.');
-              if (r.status === 'insecure') setPwaMsg('Χρειάζεται HTTPS ή localhost.');
+            onClick={() => {
+              void prepareInstall().then((r) => {
+                setInstallMode(currentInstallMode());
+                if (r.status === 'accepted') setPwaMsg('Η εφαρμογή εγκαταστάθηκε.');
+                else if (r.status === 'dismissed') setPwaMsg('Η εγκατάσταση ακυρώθηκε.');
+                else if (r.status === 'insecure') setPwaMsg('Χρειάζεται HTTPS ή localhost.');
+                else setPwaMsg(r.error || 'Χρησιμοποιήστε το εικονίδιο εγκατάστασης στη γραμμή διευθύνσεων, ή ⋮ → Εγκατάσταση εφαρμογής.');
+              });
             }}
           >
             <Icon name="download" size={16} /> Εγκατάσταση εφαρμογής

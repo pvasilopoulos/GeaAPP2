@@ -18,31 +18,47 @@ function adoptInstallEvent(e) {
   notify();
 }
 
+function getInstallEvent() {
+  const evt = installEvent || (typeof window !== 'undefined' ? window.__spacehubInstall : null);
+  return evt && typeof evt.prompt === 'function' ? evt : null;
+}
+
+function clearInstallEvent() {
+  installEvent = null;
+  if (typeof window !== 'undefined') window.__spacehubInstall = null;
+  notify();
+}
+
 export function captureInstallPrompt() {
   adoptInstallEvent(window.__spacehubInstall);
   window.addEventListener('spacehub:beforeinstallprompt', () => {
     adoptInstallEvent(window.__spacehubInstall);
   });
   window.addEventListener('beforeinstallprompt', (e) => {
+    // Defer the native dialog so our button can call prompt() in the click.
     e.preventDefault();
     window.__spacehubInstall = e;
     adoptInstallEvent(e);
   });
   window.addEventListener('appinstalled', () => {
-    installEvent = null;
-    window.__spacehubInstall = null;
     try { localStorage.removeItem(PWA_INSTALL_DISMISS_KEY); } catch { /* ignore */ }
-    notify();
+    clearInstallEvent();
   });
 }
 
 export async function promptInstall() {
-  if (!installEvent) return false;
-  installEvent.prompt();
-  const { outcome } = await installEvent.userChoice;
-  installEvent = null;
-  notify();
-  return outcome === 'accepted';
+  const evt = getInstallEvent();
+  if (!evt) return { ok: false, reason: 'no-event' };
+  try {
+    // Must run in the same user-gesture turn as the click — do not await
+    // anything before this call.
+    await evt.prompt();
+    const { outcome } = await evt.userChoice;
+    clearInstallEvent();
+    return { ok: true, outcome };
+  } catch (err) {
+    return { ok: false, reason: String(err?.message || err) };
+  }
 }
 
 export function isStandalone(win = typeof window === 'undefined' ? undefined : window) {
@@ -103,23 +119,16 @@ export function registerServiceWorker() {
   return navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' }).catch(() => null);
 }
 
-/** Register the SW (needed for Chrome's install prompt) and prompt when possible. */
+/** Open Chrome's install dialog. Must be called directly from a click handler. */
 export async function prepareInstall() {
-  if (installEvent) return { status: (await promptInstall()) ? 'accepted' : 'dismissed' };
-  if (!window.isSecureContext) return { status: 'insecure' };
-  if (!('serviceWorker' in navigator)) return { status: 'unsupported' };
-  try {
-    await navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' });
-    await navigator.serviceWorker.ready;
-  } catch (err) {
-    return { status: 'sw-failed', error: String(err?.message || err) };
+  const evt = getInstallEvent();
+  if (evt) {
+    const result = await promptInstall();
+    if (result.ok) return { status: result.outcome === 'accepted' ? 'accepted' : 'dismissed' };
+    return { status: 'prompt-failed', error: result.reason };
   }
-  if (installEvent) return { status: (await promptInstall()) ? 'accepted' : 'dismissed' };
-  if (!navigator.serviceWorker.controller) {
-    window.location.reload();
-    return { status: 'reload' };
-  }
-  return { status: 'waiting' };
+  if (typeof window !== 'undefined' && window.isSecureContext === false) return { status: 'insecure' };
+  return { status: 'no-event' };
 }
 
 /** Block browser reload (F5 / Ctrl+R / Cmd+R). Dev keeps native refresh. */

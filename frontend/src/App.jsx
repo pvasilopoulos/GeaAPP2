@@ -79,9 +79,20 @@ function UserMenu() {
             </div>
           </div>
           {showInstall && (
-            <div className="item" onClick={async () => { await prepareInstall(); setOpen(false); }}>
+            <button
+              type="button"
+              className="item"
+              onClick={() => {
+                void prepareInstall().then((r) => {
+                  if (r.status !== 'accepted') {
+                    window.alert('Στο Chrome/Edge: εικονίδιο εγκατάστασης στη γραμμή διευθύνσεων, ή μενού ⋮ → Εγκατάσταση εφαρμογής (όχι συντόμευση).');
+                  }
+                  setOpen(false);
+                });
+              }}
+            >
               <Icon name="download" size={16} /> Εγκατάσταση εφαρμογής
-            </div>
+            </button>
           )}
           {showIosHint && (
             <div
