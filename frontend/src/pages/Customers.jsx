@@ -76,6 +76,38 @@ function useDebounced(value, delay = 250) {
   return v;
 }
 
+// Icon-only trigger that opens a small options menu — used where a control's
+// current value shouldn't take up toolbar space as visible text (e.g. the
+// saved-view and visibility-scope pickers), while staying keyboard/click
+// accessible like the native <select> it replaces.
+function IconDropdown({ icon, title, value, options, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    const onClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
+  const current = options.find((o) => String(o.value) === String(value));
+  return (
+    <div className="filter-chip icon-dropdown" style={{ position: 'relative' }} ref={ref}>
+      <button type="button" className="icon-dropdown-trigger" title={current ? `${title}: ${current.label}` : title} onClick={() => setOpen((o) => !o)}>
+        <Icon name={icon} size={15} />
+      </button>
+      {open && (
+        <div className="search-results" style={{ left: 0, right: 'auto', minWidth: 200, top: 36 }}>
+          {options.map((o) => (
+            <div key={o.value} className={`search-row${String(o.value) === String(value) ? ' active' : ''}`} style={{ justifyContent: 'space-between' }} onClick={() => { onChange(o.value); setOpen(false); }}>
+              <div style={{ fontWeight: 600 }}>{o.label}</div>
+              {String(o.value) === String(value) && <Icon name="check" size={14} />}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ExportMenu({ params, canExport }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState('');
@@ -430,20 +462,20 @@ export default function Customers({ onOpenCustomer }) {
             <Icon name="chevronDown" size={13} style={{ transform: sortDir === 'ASC' ? 'rotate(180deg)' : undefined }} />
           </button>
         </div>
-        <div className="filter-chip customer-view-control" title="Αποθηκευμένη προβολή">
-          <Icon name="eye" size={15} />
-          <select value={activeView?.id || ''} onChange={(e) => applyView(views.find((view) => String(view.id) === e.target.value))} aria-label="Αποθηκευμένη προβολή">
-            <option value="">Προσωρινή</option>
-            {views.map((view) => <option key={view.id} value={view.id}>{view.visibility === 'shared' ? 'Κοινή · ' : ''}{view.name}</option>)}
-          </select>
-        </div>
-        <div className="filter-chip customer-view-scope" title="Εμβέλεια αποθήκευσης">
-          <Icon name="users" size={15} />
-          <select value={viewVisibility} onChange={(e) => setViewVisibility(e.target.value)} aria-label="Εμβέλεια αποθήκευσης">
-            <option value="personal">Προσωπική</option>
-            <option value="shared">Κοινή ομάδα</option>
-          </select>
-        </div>
+        <IconDropdown
+          icon="eye"
+          title="Αποθηκευμένη προβολή"
+          value={activeView?.id || ''}
+          options={[{ value: '', label: 'Προσωρινή' }, ...views.map((view) => ({ value: view.id, label: `${view.visibility === 'shared' ? 'Κοινή · ' : ''}${view.name}` }))]}
+          onChange={(id) => applyView(views.find((view) => String(view.id) === String(id)))}
+        />
+        <IconDropdown
+          icon="users"
+          title="Εμβέλεια αποθήκευσης"
+          value={viewVisibility}
+          options={[{ value: 'personal', label: 'Προσωπική' }, { value: 'shared', label: 'Κοινή ομάδα' }]}
+          onChange={setViewVisibility}
+        />
         <div className="customer-columns-anchor" ref={columnsMenuRef}>
           <button className={`btn${showColumns ? ' is-active' : ''}`} title="Στήλες" onClick={() => setShowColumns((open) => !open)}><Icon name="grid" size={15} /> <span className="customer-columns-count">{visibleColumns.length}</span></button>
           {showColumns && (
