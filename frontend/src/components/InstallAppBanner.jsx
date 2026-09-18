@@ -3,6 +3,7 @@ import Icon from './Icon.jsx';
 import {
   currentInstallMode,
   dismissInstallHint,
+  prepareInstall,
   promptInstall,
   subscribeInstallPrompt,
 } from '../lib/pwa.js';
@@ -23,7 +24,8 @@ const COPY = {
   },
   'chromium-menu': {
     title: 'Εγκατάσταση ως εφαρμογή',
-    body: 'Στο Chrome ή Edge: μενού ⋮ → «Εγκατάσταση εφαρμογής» / Install this site as an app. Μην επιλέξετε «Δημιουργία συντόμευσης».',
+    body: 'Πατήστε Εγκατάσταση. Αν δεν εμφανιστεί το παράθυρο του Chrome/Edge, ανανεώστε και ξαναδοκιμάστε — όχι «Δημιουργία συντόμευσης».',
+    action: 'Εγκατάσταση',
   },
   insecure: {
     title: 'Απαιτείται HTTPS',
@@ -37,20 +39,39 @@ const COPY = {
 
 export default function InstallAppBanner({ compact = false }) {
   const [mode, setMode] = useState(() => currentInstallMode());
+  const [busy, setBusy] = useState(false);
+  const [extra, setExtra] = useState('');
   useEffect(() => subscribeInstallPrompt(() => setMode(currentInstallMode())), []);
   if (!COPY[mode]) return null;
   const copy = COPY[mode];
+  const canPrompt = mode === 'prompt' || mode === 'chromium-menu';
+  const onInstall = async () => {
+    if (mode === 'prompt') {
+      await promptInstall();
+      setMode(currentInstallMode());
+      return;
+    }
+    setBusy(true); setExtra('');
+    try {
+      const r = await prepareInstall();
+      setMode(currentInstallMode());
+      if (r.status === 'waiting') setExtra('Ανανεώστε τη σελίδα. Στο Chrome/Edge επιλέξτε Εγκατάσταση εφαρμογής, όχι συντόμευση.');
+      if (r.status === 'insecure') setExtra('Χρειάζεται HTTPS (ή localhost).');
+      if (r.status === 'sw-failed') setExtra(r.error || 'Αποτυχία service worker.');
+    } finally { setBusy(false); }
+  };
   return (
     <div className={`pwa-install${compact ? ' compact' : ''}`} role="status">
       <Icon name="download" size={16} />
       <div className="pwa-install-copy">
         <b>{copy.title}</b>
         <span>{copy.body}</span>
+        {extra && <span>{extra}</span>}
       </div>
       <div className="pwa-install-actions">
-        {mode === 'prompt' && (
-          <button type="button" className="btn btn-accent" onClick={() => promptInstall()}>
-            {copy.action}
+        {canPrompt && (
+          <button type="button" className="btn btn-accent" disabled={busy} onClick={onInstall}>
+            {busy ? <span className="spinner" /> : (copy.action || 'Εγκατάσταση')}
           </button>
         )}
         <button

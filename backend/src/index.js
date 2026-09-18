@@ -98,6 +98,24 @@ const frontendOrigin = process.env.FRONTEND_ORIGIN || 'http://127.0.0.1:5173';
 // directly, no Authorization header), so — same limitation as the browser
 // tab title before login — it reflects the primary tenant (id 1), which is
 // what every current single-org deployment of this app actually is.
+function sendServiceWorker(res, filePath) {
+  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Service-Worker-Allowed', '/');
+  res.sendFile(filePath);
+}
+
+app.get('/sw.js', (_req, res) => {
+  const distSw = path.join(distDir, 'sw.js');
+  const pubSw = path.resolve(__dirname, '../../frontend/public/sw.js');
+  const file = existsSync(distSw) ? distSw : pubSw;
+  if (!existsSync(file)) {
+    res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    return res.status(404).send('/* service worker missing */');
+  }
+  return sendServiceWorker(res, file);
+});
+
 app.get('/manifest.webmanifest', async (_req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
@@ -115,7 +133,8 @@ app.get('/manifest.webmanifest', async (_req, res) => {
   try {
     const { rows } = await query('SELECT settings FROM tenants WHERE id = 1');
     const { app_name } = mergeTenantSettings(rows[0]?.settings);
-    return res.json({ ...base, name: app_name, short_name: app_name });
+    const name = (app_name && String(app_name).trim()) || base.name || 'SpaceHub';
+    return res.json({ ...base, name, short_name: name });
   } catch (err) {
     console.error('Failed to brand PWA manifest:', err);
     return res.json(base);
@@ -131,7 +150,12 @@ if (existsSync(distDir)) {
       }
     },
   }));
-  app.get('*', (_req, res) => res.sendFile(path.join(distDir, 'index.html')));
+  app.get('*', (req, res) => {
+    if (req.path === '/sw.js' || req.path === '/manifest.webmanifest') {
+      return res.status(404).end();
+    }
+    res.sendFile(path.join(distDir, 'index.html'));
+  });
 } else {
   app.get('*', (req, res) => {
     res.redirect(302, `${frontendOrigin}${req.originalUrl || '/'}`);

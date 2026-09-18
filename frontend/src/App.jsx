@@ -12,7 +12,7 @@ import { useAuth } from './store/auth.js';
 import { resolveSidebarMenu, resolveSidebarGroups, resolveMobileFooterMenu } from './lib/menu.js';
 import { DEFAULT_APP_NAME, DEFAULT_BROWSER_TAB_TITLE } from './lib/branding.js';
 import InstallAppBanner from './components/InstallAppBanner.jsx';
-import { isIosDevice, isStandalone, promptInstall, refreshApp, subscribeInstallPrompt } from './lib/pwa.js';
+import { isChromium, isIosDevice, isStandalone, prepareInstall, refreshApp, subscribeInstallPrompt } from './lib/pwa.js';
 import Dashboard from './pages/Dashboard.jsx';
 import Customers from './pages/Customers.jsx';
 import CustomerProfile from './pages/CustomerProfile.jsx';
@@ -60,6 +60,7 @@ function UserMenu() {
   useEffect(() => subscribeInstallPrompt((ev) => setCanInstall(!!ev)), []);
   if (!user) return null;
   const showIosHint = !canInstall && !isStandalone() && isIosDevice(navigator.userAgent, navigator);
+  const showInstall = !isStandalone() && (canInstall || isChromium(navigator.userAgent));
   return (
     <div className="user-menu" ref={ref}>
       <button className="user-btn" onClick={() => setOpen((o) => !o)}>
@@ -77,8 +78,8 @@ function UserMenu() {
               <span style={{ fontSize: 12, color: 'var(--text-3)' }}>· {user.tenantName}</span>
             </div>
           </div>
-          {canInstall && (
-            <div className="item" onClick={async () => { await promptInstall(); setOpen(false); }}>
+          {showInstall && (
+            <div className="item" onClick={async () => { await prepareInstall(); setOpen(false); }}>
               <Icon name="download" size={16} /> Εγκατάσταση εφαρμογής
             </div>
           )}

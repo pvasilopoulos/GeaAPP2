@@ -4,7 +4,7 @@ import { api } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
 import { Skeleton } from '../../components/ui.jsx';
 import { MAP_PROVIDERS } from '../../lib/maps.js';
-import { currentInstallMode, isStandalone, promptInstall, refreshApp, subscribeInstallPrompt } from '../../lib/pwa.js';
+import { currentInstallMode, isStandalone, prepareInstall, refreshApp, subscribeInstallPrompt } from '../../lib/pwa.js';
 
 const inp = { width: '100%', height: 40, padding: '0 10px', border: '1px solid var(--border-strong)', borderRadius: 9 };
 const chk = { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5, padding: '6px 0' };
@@ -16,15 +16,11 @@ export default function AppPanel() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
-  const [canInstall, setCanInstall] = useState(false);
   const [installMode, setInstallMode] = useState(() => currentInstallMode());
   const [pwaBusy, setPwaBusy] = useState(false);
   const [pwaMsg, setPwaMsg] = useState('');
   useEffect(() => { if (data?.settings) setF({ ...data.settings }); }, [data]);
-  useEffect(() => subscribeInstallPrompt((ev) => {
-    setCanInstall(!!ev);
-    setInstallMode(currentInstallMode());
-  }), []);
+  useEffect(() => subscribeInstallPrompt(() => setInstallMode(currentInstallMode())), []);
   const set = (k) => (e) => {
     const v = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
     setF((s) => ({ ...s, [k]: v }));
@@ -117,8 +113,17 @@ export default function AppPanel() {
                 : 'Εγκαταστήστε το ως εφαρμογή (Install app / Εγκατάσταση), όχι ως «Δημιουργία συντόμευσης». Η εφαρμογή ανοίγει σε δικό της παράθυρο με εικονίδιο στο μενού της συσκευής.'}
       </p>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
-        {canInstall && (
-          <button type="button" className="btn" onClick={() => promptInstall()}>
+        {!isStandalone() && (
+          <button
+            type="button"
+            className="btn"
+            onClick={async () => {
+              const r = await prepareInstall();
+              setInstallMode(currentInstallMode());
+              if (r.status === 'waiting') setPwaMsg('Ανανεώστε και ξαναπατήστε. Στο Chrome/Edge επιλέξτε Εγκατάσταση εφαρμογής.');
+              if (r.status === 'insecure') setPwaMsg('Χρειάζεται HTTPS ή localhost.');
+            }}
+          >
             <Icon name="download" size={16} /> Εγκατάσταση εφαρμογής
           </button>
         )}

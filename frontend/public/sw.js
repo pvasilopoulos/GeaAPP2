@@ -1,6 +1,11 @@
-/* SpaceHub service worker — app-shell cache, never intercept API. */
-const VERSION = 'spacehub-shell-v3';
+/* SpaceHub service worker — app-shell cache, never intercept API or Vite HMR. */
+const VERSION = 'spacehub-shell-v4';
 const PRECACHE = ['/', '/index.html', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png'];
+
+function isDevModule(url) {
+  const p = url.pathname;
+  return p.startsWith('/src/') || p.startsWith('/@') || p.startsWith('/node_modules/') || p.includes('/.vite/');
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
@@ -34,6 +39,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/api') || url.pathname.startsWith('/uploads')) return;
+  if (isDevModule(url)) return;
 
   if (req.mode === 'navigate') {
     event.respondWith(

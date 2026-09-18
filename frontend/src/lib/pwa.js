@@ -12,14 +12,25 @@ export function subscribeInstallPrompt(fn) {
   return () => listeners.delete(fn);
 }
 
+function adoptInstallEvent(e) {
+  if (!e || typeof e.prompt !== 'function') return;
+  installEvent = e;
+  notify();
+}
+
 export function captureInstallPrompt() {
+  adoptInstallEvent(window.__spacehubInstall);
+  window.addEventListener('spacehub:beforeinstallprompt', () => {
+    adoptInstallEvent(window.__spacehubInstall);
+  });
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
-    installEvent = e;
-    notify();
+    window.__spacehubInstall = e;
+    adoptInstallEvent(e);
   });
   window.addEventListener('appinstalled', () => {
     installEvent = null;
+    window.__spacehubInstall = null;
     try { localStorage.removeItem(PWA_INSTALL_DISMISS_KEY); } catch { /* ignore */ }
     notify();
   });
@@ -88,8 +99,27 @@ export function dismissInstallHint() {
 }
 
 export function registerServiceWorker() {
-  if (import.meta.env?.DEV || !('serviceWorker' in navigator)) return;
-  navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' }).catch(() => {});
+  if (!('serviceWorker' in navigator)) return Promise.resolve(null);
+  return navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' }).catch(() => null);
+}
+
+/** Register the SW (needed for Chrome's install prompt) and prompt when possible. */
+export async function prepareInstall() {
+  if (installEvent) return { status: (await promptInstall()) ? 'accepted' : 'dismissed' };
+  if (!window.isSecureContext) return { status: 'insecure' };
+  if (!('serviceWorker' in navigator)) return { status: 'unsupported' };
+  try {
+    await navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' });
+    await navigator.serviceWorker.ready;
+  } catch (err) {
+    return { status: 'sw-failed', error: String(err?.message || err) };
+  }
+  if (installEvent) return { status: (await promptInstall()) ? 'accepted' : 'dismissed' };
+  if (!navigator.serviceWorker.controller) {
+    window.location.reload();
+    return { status: 'reload' };
+  }
+  return { status: 'waiting' };
 }
 
 /** Block browser reload (F5 / Ctrl+R / Cmd+R). Dev keeps native refresh. */
