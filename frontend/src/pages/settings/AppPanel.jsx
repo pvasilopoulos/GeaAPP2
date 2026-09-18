@@ -46,6 +46,18 @@ export default function AppPanel() {
     <form className="card card-pad" onSubmit={submit} style={{ maxWidth: 640 }}>
       {err && <div className="auth-error">{err}</div>}
       {msg && <div className="voice-msg ok" style={{ marginBottom: 10 }}>{msg}</div>}
+      <div className="section-title">Branding εφαρμογής</div>
+      <div className="field-group"><label>Όνομα εφαρμογής</label>
+        <input style={inp} value={f.app_name || ''} onChange={set('app_name')} placeholder="SpaceHub" />
+      </div>
+      <div className="field-group"><label>Τίτλος καρτέλας browser</label>
+        <input style={inp} value={f.browser_tab_title || ''} onChange={set('browser_tab_title')} placeholder="SpaceHub — Διαχείριση Πελατών" />
+      </div>
+      <p className="muted" style={{ fontSize: 12.5, margin: '-6px 0 12px' }}>
+        Αυτά τα πεδία αλλάζουν μόνο τον τίτλο της καρτέλας του browser και το κείμενο branding μέσα στην εφαρμογή (π.χ. πλαϊνή στήλη). Είναι
+        ξεχωριστά από την «Επωνυμία οργανισμού» (Ρυθμίσεις → Οργανισμός), η οποία αφορά τον ίδιο τον οργανισμό/tenant. Δεν επηρεάζουν το
+        εικονίδιο ή το manifest της εγκατεστημένης εφαρμογής (PWA) — αυτά παραμένουν στατικά. Κενό πεδίο επαναφέρει την προεπιλογή «SpaceHub».
+      </p>
       <div className="section-title">Εμφάνιση</div>
       <div className="field-group"><label>Μορφή ημερομηνίας</label>
         <select style={inp} value={f.date_format} onChange={set('date_format')}>

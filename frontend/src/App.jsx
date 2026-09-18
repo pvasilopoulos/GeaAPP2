@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Icon from './components/Icon.jsx';
 import GlobalSearch from './components/GlobalSearch.jsx';
 import TabBar from './components/TabBar.jsx';
@@ -7,6 +7,7 @@ import { Avatar } from './components/ui.jsx';
 import { useTabs } from './store/tabs.js';
 import { useAuth } from './store/auth.js';
 import { PERMS } from './lib/perms.js';
+import { DEFAULT_APP_NAME, DEFAULT_BROWSER_TAB_TITLE } from './lib/branding.js';
 import { isStandalone, promptInstall, refreshApp, subscribeInstallPrompt } from './lib/pwa.js';
 import Dashboard from './pages/Dashboard.jsx';
 import Customers from './pages/Customers.jsx';
@@ -14,6 +15,7 @@ import CustomerProfile from './pages/CustomerProfile.jsx';
 import Settings from './pages/Settings.jsx';
 import Placeholder from './pages/Placeholder.jsx';
 import Quotes from './pages/Quotes.jsx';
+import { api } from './api.js';
 
 // Sidebar entries → open (or activate) a workspace tab. `perm` gates visibility.
 const NAV = [
@@ -140,6 +142,17 @@ export default function App() {
   const hasPerm = useAuth((s) => s.hasPerm);
   const { tabs, activeId, openTab } = useTabs();
   const [navOpen, setNavOpen] = useState(false);
+  const { data: appSettings } = useQuery({
+    queryKey: ['settings-app'],
+    queryFn: ({ signal }) => api.appSettings({ signal }),
+    enabled: !!user,
+    select: (d) => d?.settings,
+  });
+  const appName = appSettings?.app_name || DEFAULT_APP_NAME;
+
+  useEffect(() => {
+    document.title = appSettings?.browser_tab_title || DEFAULT_BROWSER_TAB_TITLE;
+  }, [appSettings?.browser_tab_title]);
 
   const nav = NAV.filter((n) => !n.perms || n.perms.some((p) => hasPerm(p)));
   const openNavTab = (n) => { openTab({ id: n.id, type: n.type, title: n.label, icon: n.icon }); setNavOpen(false); };
@@ -150,7 +163,7 @@ export default function App() {
       <nav className="sidebar">
         <div className="brand">
           <span className="logo"><Icon name="layers" size={17} /></span>
-          SpaceHub
+          {appName}
         </div>
         <div className="nav-group">
           {NAV_GROUPS.map((group) => {

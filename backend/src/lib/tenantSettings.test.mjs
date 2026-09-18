@@ -29,4 +29,14 @@ assert(updated.google_maps_api_key === 'AIzaNew', 'maps key updates');
 const masked = applyAppSettingsPatch({ google_maps_api_key: 'keep-me' }, { google_maps_api_key: '••••••••' });
 assert(masked.google_maps_api_key === 'keep-me', 'bullet placeholder does not wipe');
 
+assert(mergeTenantSettings({}).app_name === 'SpaceHub', 'default app_name');
+assert(mergeTenantSettings({}).browser_tab_title === 'SpaceHub — Διαχείριση Πελατών', 'default browser_tab_title');
+assert(mergeTenantSettings({ app_name: 'Acme' }).app_name === 'Acme', 'custom app_name kept');
+assert(mergeTenantSettings({ app_name: '  ' }).app_name === 'SpaceHub', 'blank app_name falls back to default');
+assert(mergeTenantSettings({ app_name: 'a'.repeat(200) }).app_name.length === 60, 'app_name capped to max length');
+assert(publicAppSettings({ app_name: 'Acme' }).app_name === 'Acme', 'app_name exposed via publicAppSettings');
+const brandedPatch = applyAppSettingsPatch({}, { app_name: 'Acme', browser_tab_title: 'Acme — CRM' });
+assert(brandedPatch.app_name === 'Acme', 'patch updates app_name');
+assert(brandedPatch.browser_tab_title === 'Acme — CRM', 'patch updates browser_tab_title');
+
 console.log('tenantSettings slugify: ok');
