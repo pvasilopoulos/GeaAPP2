@@ -7,12 +7,12 @@ import { persist } from 'zustand/middleware';
 const MAX_TABS = 12;
 
 const DEFAULT_TABS = [
-  { id: 'customers', type: 'customers', title: 'Πελάτες', icon: 'users' },
+  { id: 'dashboard', type: 'dashboard', title: 'Αρχική', icon: 'home' },
 ];
 
 export const useTabs = create(persist((set, get) => ({
   tabs: DEFAULT_TABS,
-  activeId: 'customers',
+  activeId: 'dashboard',
 
   openTab: (tab) => set((s) => {
     if (s.tabs.some((t) => t.id === tab.id)) return { activeId: tab.id };
@@ -32,7 +32,7 @@ export const useTabs = create(persist((set, get) => ({
     const idx = s.tabs.findIndex((t) => t.id === id);
     if (idx === -1) return s;
     const tabs = s.tabs.filter((t) => t.id !== id);
-    if (tabs.length === 0) return { tabs: DEFAULT_TABS, activeId: 'customers' };
+    if (tabs.length === 0) return { tabs: DEFAULT_TABS, activeId: 'dashboard' };
     let activeId = s.activeId;
     if (activeId === id) activeId = (tabs[idx] || tabs[idx - 1] || tabs[0]).id;
     return { tabs, activeId };

@@ -32,7 +32,7 @@ export const useAuth = create((set, get) => ({
     setToken(null);
     set({ user: null, status: 'anon' });
     // Reset the workspace so tabs don't leak across sessions/tenants.
-    useTabs.setState({ tabs: [{ id: 'customers', type: 'customers', title: 'Πελάτες', icon: 'users' }], activeId: 'customers' });
+    useTabs.setState({ tabs: [{ id: 'dashboard', type: 'dashboard', title: 'Αρχική', icon: 'home' }], activeId: 'dashboard' });
   },
   hasPerm: (code) => {
     const u = get().user;
