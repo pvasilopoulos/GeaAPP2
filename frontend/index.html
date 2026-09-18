@@ -10,6 +10,17 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <title>SpaceHub — Διαχείριση Πελατών</title>
     <link rel="manifest" href="/manifest.webmanifest" />
+    <script>
+      window.__spacehubInstall = null;
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        window.__spacehubInstall = e;
+        window.dispatchEvent(new Event('spacehub:beforeinstallprompt'));
+      });
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' });
+      }
+    </script>
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
     <link
       rel="icon"
@@ -25,16 +36,6 @@
   </head>
   <body>
     <div id="root"></div>
-    <script>
-      // Capture Chromium's install event before the bundle (it can fire as
-      // soon as the generated service worker is controlling the page).
-      window.__spacehubInstall = null;
-      window.addEventListener('beforeinstallprompt', function (e) {
-        e.preventDefault();
-        window.__spacehubInstall = e;
-        window.dispatchEvent(new Event('spacehub:beforeinstallprompt'));
-      });
-    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

@@ -6,11 +6,12 @@ import App from './App.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import { useAuth } from './store/auth.js';
-import { captureInstallPrompt, installReloadGuard } from './lib/pwa.js';
+import { captureInstallPrompt, installReloadGuard, registerServiceWorker } from './lib/pwa.js';
 import { initOfflineSync, QUEUE_EVENT, queryKeysForMutation } from './lib/offlineQueue.js';
 import './styles.css';
 
 captureInstallPrompt();
+registerServiceWorker();
 installReloadGuard();
 initOfflineSync();
 

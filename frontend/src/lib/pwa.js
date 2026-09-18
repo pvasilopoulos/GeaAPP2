@@ -115,8 +115,8 @@ export function dismissInstallHint() {
 }
 
 export function registerServiceWorker() {
-  // Registration is injected by vite-plugin-pwa (inline + generated sw.js).
-  return Promise.resolve(null);
+  if (!('serviceWorker' in navigator)) return Promise.resolve(null);
+  return navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' }).catch(() => null);
 }
 
 /** Open Chrome's install dialog. Must be called directly from a click handler. */
