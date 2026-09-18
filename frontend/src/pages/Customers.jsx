@@ -8,6 +8,8 @@ import { useAuth } from '../store/auth.js';
 import { PERMS } from '../lib/perms.js';
 import { CustomerFormDrawer } from '../components/forms.jsx';
 import FilterDrawer from '../components/FilterDrawer.jsx';
+import PendingSyncBanner from '../components/customer/PendingSyncBanner.jsx';
+import { QUEUE_EVENT } from '../lib/offlineQueue.js';
 
 const COLUMNS = [
   { key: 'name', label: 'Πελάτης', sort: 'name' },
@@ -186,6 +188,18 @@ export default function Customers({ onOpenCustomer }) {
   const canExport = useAuth((s) => s.hasPerm(PERMS.CUSTOMERS_EXPORT));
   const canWrite = useAuth((s) => s.hasPerm(PERMS.CUSTOMERS_WRITE));
   const qc = useQueryClient();
+  // Once a queued offline customer creation syncs, refresh the list/meta so
+  // the real record (with its server id) replaces the pending-sync banner entry.
+  useEffect(() => {
+    const onQueueEvent = (e) => {
+      if (e.detail?.synced?.item?.type === 'create_customer') {
+        qc.invalidateQueries({ queryKey: ['customers'] });
+        qc.invalidateQueries({ queryKey: ['meta'] });
+      }
+    };
+    window.addEventListener(QUEUE_EVENT, onQueueEvent);
+    return () => window.removeEventListener(QUEUE_EVENT, onQueueEvent);
+  }, [qc]);
   useEffect(() => {
     api.customerViews().then((response) => {
       setViews(response.views || []);
@@ -380,11 +394,23 @@ export default function Customers({ onOpenCustomer }) {
       {showCreate && (
         <CustomerFormDrawer onClose={() => setShowCreate(false)}
           onOpenExisting={(c) => { setShowCreate(false); onOpenCustomer(c); }}
-          onSaved={(c) => { setShowCreate(false); qc.invalidateQueries({ queryKey: ['customers'] }); qc.invalidateQueries({ queryKey: ['meta'] }); onOpenCustomer(c); }} />
+          onSaved={(c) => {
+            setShowCreate(false);
+            // A customer that couldn't reach the server yet has no real id:
+            // it stays visible via PendingSyncBanner and the profile opens
+            // automatically once the queued sync completes (see the
+            // queue-change effect above), instead of failing to load now.
+            if (c.pendingSync) return;
+            qc.invalidateQueries({ queryKey: ['customers'] });
+            qc.invalidateQueries({ queryKey: ['meta'] });
+            onOpenCustomer(c);
+          }} />
       )}
       {showFilters && (
         <FilterDrawer filters={filters} meta={meta} onSet={set} onClear={() => setFilters(EMPTY_FILTERS)} onClose={() => setShowFilters(false)} />
       )}
+
+      <PendingSyncBanner />
 
       <div className="toolbar">
         <div className="search-input">

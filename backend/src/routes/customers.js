@@ -14,6 +14,7 @@ import { loadTenant } from '../lib/tenants.js';
 import { computeReminderState } from '../lib/reminderSettings.js';
 import { diffRecords, snapshotFields, packDetails, changeSummary, parseDetails } from '../lib/activityDiff.js';
 import { parseNotePayload, noteReminderState } from '../lib/notes.js';
+import { extractClientRequestId, isDuplicateKeyError } from '../lib/idempotency.js';
 
 const CUSTOMER_FIELDS = ['first_name', 'last_name', 'email', 'phone', 'mobile', 'company',
   'tax_id', 'customer_type', 'status', 'is_vip', 'date_of_birth', 'address_line', 'city',
@@ -153,11 +154,26 @@ customersRouter.post('/check-duplicates', authorize(PERMISSIONS.CUSTOMERS_WRITE)
   } catch (err) { next(err); }
 });
 
+// Looks up a previously created customer by its idempotency key, so a retried
+// request (e.g. an offline client replaying a queued submission) can be
+// answered with the existing record instead of erroring or duplicating.
+async function findByClientRequestId(tenantId, clientRequestId) {
+  const { rows } = await query(
+    'SELECT id, code FROM customers WHERE tenant_id = ? AND client_request_id = ?',
+    [tenantId, clientRequestId]);
+  return rows[0] || null;
+}
+
 // POST /api/customers — create a customer in the caller's tenant.
 customersRouter.post('/', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
   try {
     const b = req.body || {};
     if (!b.first_name || !b.last_name) return res.status(400).json({ error: 'Συμπληρώστε όνομα και επώνυμο' });
+    const clientRequestId = extractClientRequestId(req);
+    if (clientRequestId) {
+      const existing = await findByClientRequestId(req.user.tenantId, clientRequestId);
+      if (existing) return res.status(200).json({ id: existing.id, code: existing.code, idempotentReplay: true });
+    }
     const tmpCode = `TMP-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
     const vals = {
       tenant_id: req.user.tenantId, code: tmpCode,
@@ -168,12 +184,24 @@ customersRouter.post('/', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, re
       address_line: b.address_line || null, city: b.city || null, postal_code: b.postal_code || null,
       country: b.country || 'Ελλάδα', avatar_url: b.avatar_url || null,
       profile_note: b.profile_note || null, assigned_employee_id: b.assigned_employee_id || null,
-      search_norm: '',
+      search_norm: '', client_request_id: clientRequestId,
     };
     const cols = Object.keys(vals);
-    const r = await query(`INSERT INTO customers (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`,
-      cols.map((c) => vals[c]));
-    const id = r.rows.insertId;
+    let id;
+    try {
+      const r = await query(`INSERT INTO customers (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`,
+        cols.map((c) => vals[c]));
+      id = r.rows.insertId;
+    } catch (err) {
+      // A retried request can race the first attempt's commit; if the
+      // unique (tenant, client_request_id) index rejected us, the customer
+      // already exists — return it instead of surfacing a duplicate error.
+      if (clientRequestId && isDuplicateKeyError(err)) {
+        const existing = await findByClientRequestId(req.user.tenantId, clientRequestId);
+        if (existing) return res.status(200).json({ id: existing.id, code: existing.code, idempotentReplay: true });
+      }
+      throw err;
+    }
     const code = `C-${100000 + id}`;
     await query('UPDATE customers SET code = ?, search_norm = ? WHERE id = ?',
       [code, customerSearchNorm({ ...vals, code }), id]);

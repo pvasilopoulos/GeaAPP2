@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview --host --port 5173",
-    "test": "node src/lib/voiceFill.test.mjs && node src/lib/maps.test.mjs && node src/lib/channels.test.mjs"
+    "test": "node src/lib/voiceFill.test.mjs && node src/lib/maps.test.mjs && node src/lib/channels.test.mjs && node src/lib/offlineQueue.test.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.51.0",
