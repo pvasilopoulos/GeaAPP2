@@ -39,4 +39,8 @@ const brandedPatch = applyAppSettingsPatch({}, { app_name: 'Acme', browser_tab_t
 assert(brandedPatch.app_name === 'Acme', 'patch updates app_name');
 assert(brandedPatch.browser_tab_title === 'Acme — CRM', 'patch updates browser_tab_title');
 
+assert(Array.isArray(mergeTenantSettings({}).menu.sidebar.order), 'default menu sidebar order present');
+assert(mergeTenantSettings({}).menu.mobile_footer.items.length > 0, 'default menu mobile footer populated');
+assert(mergeTenantSettings({ menu: { sidebar: { hidden: ['quotes'] } } }).menu.sidebar.hidden.includes('quotes'), 'custom menu hidden respected via mergeTenantSettings');
+
 console.log('tenantSettings slugify: ok');

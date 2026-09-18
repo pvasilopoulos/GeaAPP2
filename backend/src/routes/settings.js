@@ -6,6 +6,7 @@ import { loadTenant, getPlatformSettings, setPlatformSetting } from '../lib/tena
 import { mergeTenantSettings, parseJson, DEFAULT_PLATFORM_SETTINGS, publicAppSettings, applyAppSettingsPatch } from '../lib/tenantSettings.js';
 import { applyMessagingPatch, channelStatuses, publicMessaging } from '../lib/messaging.js';
 import { applyReminderSettingsPatch, publicReminderSettings } from '../lib/reminderSettings.js';
+import { sanitizeMenuConfig, sanitizePersonalMenuConfig } from '../lib/menu.js';
 
 export const settingsRouter = Router();
 
@@ -100,6 +101,50 @@ settingsRouter.patch('/reminders', authorize(PERMISSIONS.SETTINGS_MANAGE), async
     await query('UPDATE tenants SET settings = ?, updated_at = NOW() WHERE id = ?',
       [JSON.stringify(nextSettings), req.user.tenantId]);
     res.json({ reminders: nextSettings.reminders });
+  } catch (err) { next(err); }
+});
+
+// ---- Nav menu configuration -------------------------------------------------
+// Tenant-wide default: readable by any authenticated user (needed to render
+// their own sidebar/mobile footer), editable only by SETTINGS_MANAGE. This
+// never bypasses permissions — it only controls order/visibility among the
+// items a user's role already permits (enforced client-side on top of this).
+settingsRouter.get('/menu', async (req, res, next) => {
+  try {
+    const { rows } = await query('SELECT settings FROM tenants WHERE id = ?', [req.user.tenantId]);
+    res.json({ menu: mergeTenantSettings(rows[0]?.settings).menu });
+  } catch (err) { next(err); }
+});
+
+settingsRouter.patch('/menu', authorize(PERMISSIONS.SETTINGS_MANAGE), async (req, res, next) => {
+  try {
+    const { rows } = await query('SELECT settings FROM tenants WHERE id = ?', [req.user.tenantId]);
+    const current = parseJson(rows[0]?.settings, {}) || {};
+    const currentMenu = mergeTenantSettings(current).menu;
+    const nextMenu = sanitizeMenuConfig({ ...currentMenu, ...(req.body || {}) });
+    const nextSettings = mergeTenantSettings({ ...current, menu: nextMenu });
+    await query('UPDATE tenants SET settings = ?, updated_at = NOW() WHERE id = ?',
+      [JSON.stringify(nextSettings), req.user.tenantId]);
+    res.json({ menu: nextSettings.menu });
+  } catch (err) { next(err); }
+});
+
+// Personal per-user override — always scoped to the caller's own row, never
+// another user's, and independent from the admin-only tenant default above.
+settingsRouter.get('/menu/me', async (req, res, next) => {
+  try {
+    const { rows } = await query('SELECT menu_preferences FROM users WHERE id = ? AND tenant_id = ?', [req.user.id, req.user.tenantId]);
+    res.json({ menu: sanitizePersonalMenuConfig(parseJson(rows[0]?.menu_preferences, null)) });
+  } catch (err) { next(err); }
+});
+
+settingsRouter.patch('/menu/me', async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const next = body.clear ? null : sanitizePersonalMenuConfig(body);
+    await query('UPDATE users SET menu_preferences = ? WHERE id = ? AND tenant_id = ?',
+      [next ? JSON.stringify(next) : null, req.user.id, req.user.tenantId]);
+    res.json({ menu: next });
   } catch (err) { next(err); }
 });
 

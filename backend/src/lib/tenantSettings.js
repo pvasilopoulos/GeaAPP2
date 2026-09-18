@@ -1,5 +1,6 @@
 import { mergeMessaging } from './messaging.js';
 import { mergeReminderSettings } from './reminderSettings.js';
+import { DEFAULT_MENU_CONFIG, sanitizeMenuConfig } from './menu.js';
 
 export const APP_SETTING_KEYS = [
   'default_country', 'date_format', 'week_starts_on',
@@ -36,6 +37,9 @@ export const DEFAULT_TENANT_SETTINGS = {
     response_encoding: 'auto',
   },
   google_maps_api_key: '',
+  // Tenant-wide default sidebar/mobile-footer nav configuration. Defaults
+  // mirror the current hardcoded nav so untouched tenants are unaffected.
+  menu: DEFAULT_MENU_CONFIG,
   view_preferences: {
     customer_profile: {
       default_tab: 'overview',
@@ -131,6 +135,7 @@ export function mergeTenantSettings(raw) {
     },
     messaging: mergeMessaging(parsed.messaging),
     reminders: mergeReminderSettings(parsed.reminders),
+    menu: sanitizeMenuConfig(parsed.menu),
   };
 }
 

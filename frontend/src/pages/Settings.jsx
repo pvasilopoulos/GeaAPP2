@@ -13,6 +13,7 @@ import SecurityPanel from './settings/SecurityPanel.jsx';
 import ConnectorsPanel from './settings/ConnectorsPanel.jsx';
 import CustomersPanel from './settings/CustomersPanel.jsx';
 import QuotesPanel from './settings/QuotesPanel.jsx';
+import MenuPanel from './settings/MenuPanel.jsx';
 
 const CATS = [
   { id: 'org', label: 'Οργανισμός', hint: 'Επωνυμία, γλώσσα, νόμισμα', icon: 'building', perms: [PERMS.TENANT_MANAGE, PERMS.SETTINGS_MANAGE] },
@@ -26,6 +27,9 @@ const CATS = [
   { id: 'tenants', label: 'Tenants', hint: 'Δημιουργία, επεξεργασία, διαγραφή οργανισμών', icon: 'grid', perms: [PERMS.TENANTS_PLATFORM] },
   { id: 'security', label: 'Ασφάλεια', hint: 'Εγγραφή, πρόσβαση, πλατφόρμα', icon: 'settings', perms: [PERMS.SETTINGS_MANAGE, PERMS.TENANT_MANAGE, PERMS.TENANTS_PLATFORM] },
   { id: 'connectors', label: 'ERP Sync', hint: 'Συνδέσεις, αντιστοιχίσεις και συγχρονισμοί', icon: 'refresh', perms: [PERMS.SETTINGS_MANAGE] },
+  // No perms gate: every authenticated user can personalize their own menu;
+  // the panel itself gates the tenant-wide default section by SETTINGS_MANAGE.
+  { id: 'menu', label: 'Μενού', hint: 'Πλαϊνό μενού & κάτω μπάρα (mobile) — γενικά και προσωπικά', icon: 'grid', perms: [] },
 ];
 
 const GROUPS = [
@@ -33,11 +37,12 @@ const GROUPS = [
   { id: 'operations', label: 'Λειτουργίες', items: ['messaging', 'reminders', 'connectors', 'quotes'] },
   { id: 'access', label: 'Πρόσβαση & ασφάλεια', items: ['users', 'security'] },
   { id: 'platform', label: 'Πλατφόρμα', items: ['tenants'] },
+  { id: 'personal', label: 'Προσωπικά', items: ['menu'] },
 ];
 
 export default function Settings({ initialCat } = {}) {
   const hasPerm = useAuth((s) => s.hasPerm);
-  const cats = useMemo(() => CATS.filter((c) => c.perms.some((p) => hasPerm(p))), [hasPerm]);
+  const cats = useMemo(() => CATS.filter((c) => c.perms.length === 0 || c.perms.some((p) => hasPerm(p))), [hasPerm]);
   const [cat, setCat] = useState(() => {
     if (initialCat && cats.some((c) => c.id === initialCat)) return initialCat;
     return cats[0]?.id || 'org';
@@ -99,6 +104,7 @@ export default function Settings({ initialCat } = {}) {
               {active.id === 'tenants' && <TenantsPanel />}
               {active.id === 'security' && <SecurityPanel />}
               {active.id === 'connectors' && <ConnectorsPanel />}
+              {active.id === 'menu' && <MenuPanel />}
             </>
           )}
         </div>

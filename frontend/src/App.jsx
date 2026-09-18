@@ -3,11 +3,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Icon from './components/Icon.jsx';
 import GlobalSearch from './components/GlobalSearch.jsx';
 import TabBar from './components/TabBar.jsx';
+import MobileFooterNav from './components/MobileFooterNav.jsx';
 import { Avatar } from './components/ui.jsx';
 import OfflineSyncStatus from './components/OfflineSyncStatus.jsx';
 import { useTabs } from './store/tabs.js';
 import { useAuth } from './store/auth.js';
-import { PERMS } from './lib/perms.js';
+import { resolveSidebarMenu, resolveSidebarGroups, resolveMobileFooterMenu } from './lib/menu.js';
 import { DEFAULT_APP_NAME, DEFAULT_BROWSER_TAB_TITLE } from './lib/branding.js';
 import { isStandalone, promptInstall, refreshApp, subscribeInstallPrompt } from './lib/pwa.js';
 import Dashboard from './pages/Dashboard.jsx';
@@ -18,29 +19,6 @@ import Placeholder from './pages/Placeholder.jsx';
 import Quotes from './pages/Quotes.jsx';
 import { api } from './api.js';
 
-// Sidebar entries → open (or activate) a workspace tab. `perm` gates visibility.
-const NAV = [
-  { id: 'dashboard', type: 'dashboard', label: 'Αρχική', icon: 'home' },
-  { id: 'customers', type: 'customers', label: 'Πελάτες', icon: 'users' },
-  { id: 'bookings', type: 'bookings', label: 'Κρατήσεις', icon: 'calendar' },
-  { id: 'branches', type: 'branches', label: 'Υποκαταστήματα', icon: 'building' },
-  { id: 'spaces', type: 'spaces', label: 'Χώροι', icon: 'grid' },
-  { id: 'calendar', type: 'calendar', label: 'Ημερολόγιο', icon: 'calendar' },
-  { id: 'reports', type: 'reports', label: 'Αναφορές', icon: 'chart' },
-  { id: 'communications', type: 'communications', label: 'Επικοινωνίες', icon: 'message' },
-  { id: 'documents', type: 'documents', label: 'Έγγραφα', icon: 'file' },
-  { id: 'branch-actions', type: 'branch-actions', label: 'Ενέργειες ανά υποκατάστημα', icon: 'activity' },
-  { id: 'invoices', type: 'invoices', label: 'Τιμολόγια', icon: 'file' },
-  { id: 'quotes', type: 'quotes', label: 'Προσφορές', icon: 'file', perms: [PERMS.QUOTES_VIEW] },
-  { id: 'settings', type: 'settings', label: 'Ρυθμίσεις', icon: 'settings', perms: [PERMS.SETTINGS_MANAGE, PERMS.USERS_MANAGE, PERMS.ROLES_MANAGE, PERMS.TENANT_MANAGE, PERMS.TENANTS_PLATFORM] },
-];
-
-const NAV_GROUPS = [
-  { id: 'workspace', label: 'Workspace', items: ['dashboard', 'calendar', 'reports'] },
-  { id: 'customers', label: 'Πελατειακή διαχείριση', items: ['customers', 'branches', 'spaces', 'branch-actions', 'invoices'] },
-  { id: 'operations', label: 'Λειτουργίες', items: ['bookings', 'quotes', 'communications', 'documents'] },
-  { id: 'admin', label: 'Διαχείριση', items: ['settings'] },
-];
 
 function isIosDevice() {
   if (typeof navigator === 'undefined') return false;
@@ -151,11 +129,29 @@ export default function App() {
   });
   const appName = appSettings?.app_name || DEFAULT_APP_NAME;
 
+  // Tenant-wide default menu + the current user's personal override. Both are
+  // optional (untouched tenants/users get `undefined`, which resolves to the
+  // original hardcoded nav via lib/menu.js).
+  const { data: tenantMenu } = useQuery({
+    queryKey: ['settings-menu'],
+    queryFn: ({ signal }) => api.menuSettings({ signal }),
+    enabled: !!user,
+    select: (d) => d?.menu,
+  });
+  const { data: userMenu } = useQuery({
+    queryKey: ['settings-menu-me'],
+    queryFn: ({ signal }) => api.myMenuSettings({ signal }),
+    enabled: !!user,
+    select: (d) => d?.menu,
+  });
+
   useEffect(() => {
     document.title = appSettings?.browser_tab_title || DEFAULT_BROWSER_TAB_TITLE;
   }, [appSettings?.browser_tab_title]);
 
-  const nav = NAV.filter((n) => !n.perms || n.perms.some((p) => hasPerm(p)));
+  const { items: sidebarItems, isDefault: isDefaultSidebar } = resolveSidebarMenu({ tenantMenu, userMenu, hasPerm });
+  const sidebarGroups = isDefaultSidebar ? resolveSidebarGroups({ items: sidebarItems }) : null;
+  const mobileFooterItems = resolveMobileFooterMenu({ tenantMenu, userMenu, hasPerm });
   const openNavTab = (n) => { openTab({ id: n.id, type: n.type, title: n.label, icon: n.icon }); setNavOpen(false); };
 
   return (
@@ -167,20 +163,30 @@ export default function App() {
           {appName}
         </div>
         <div className="nav-group">
-          {NAV_GROUPS.map((group) => {
-            const items = group.items.map((id) => nav.find((n) => n.id === id)).filter(Boolean);
-            if (!items.length) return null;
-            return <div className="nav-section" key={group.id}>
-              <div className="nav-section-label">{group.label}</div>
-              {items.map((n) => (
+          {sidebarGroups ? (
+            sidebarGroups.map((group) => (
+              <div className="nav-section" key={group.id}>
+                <div className="nav-section-label">{group.label}</div>
+                {group.items.map((n) => (
+                  <button key={n.id} className={`nav-item${activeId === n.id ? ' active' : ''}`}
+                    onClick={() => openNavTab(n)}>
+                    <Icon name={n.icon} />
+                    {n.label}
+                  </button>
+                ))}
+              </div>
+            ))
+          ) : (
+            <div className="nav-section">
+              {sidebarItems.map((n) => (
                 <button key={n.id} className={`nav-item${activeId === n.id ? ' active' : ''}`}
                   onClick={() => openNavTab(n)}>
                   <Icon name={n.icon} />
                   {n.label}
                 </button>
               ))}
-            </div>;
-          })}
+            </div>
+          )}
         </div>
         <div className="sidebar-footer">
           <Avatar name={user?.fullName} size={34} />
@@ -216,7 +222,9 @@ export default function App() {
             ))}
           </div>
         </main>
+        <MobileFooterNav items={mobileFooterItems} activeId={activeId} onOpen={openNavTab} />
       </div>
     </div>
   );
 }
+
