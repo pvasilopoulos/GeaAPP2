@@ -124,7 +124,7 @@ function ExportMenu({ params, canExport }) {
   };
   const items = [{ format: 'csv', label: 'CSV (.csv)', icon: 'file' }, { format: 'xlsx', label: 'Excel (.xlsx)', icon: 'grid' }, { format: 'pdf', label: 'PDF (.pdf)', icon: 'file' }];
   return (
-    <div className="export-menu-anchor" style={{ position: 'relative' }} ref={ref}>
+    <div className="export-menu-anchor" style={{ position: 'relative', flex: '0 0 auto' }} ref={ref}>
       <button className="btn" title="Εξαγωγή" onClick={() => setOpen((o) => !o)}><Icon name="download" size={16} /></button>
       {open && (
         <div className="search-results" style={{ right: 0, left: 'auto', minWidth: 200, top: 42 }}>
