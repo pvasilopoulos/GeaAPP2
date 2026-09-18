@@ -41,6 +41,7 @@ DROP TABLE IF EXISTS sync_runs;
 DROP TABLE IF EXISTS connectors;
 DROP TABLE IF EXISTS quote_lines;
 DROP TABLE IF EXISTS quotes;
+DROP TABLE IF EXISTS idempotency_keys;
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- ---------------------------------------------------------------------------
@@ -146,6 +147,23 @@ CREATE TABLE users (
   KEY idx_users_tenant (tenant_id),
   CONSTRAINT fk_users_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
   CONSTRAINT fk_users_role FOREIGN KEY (role_id) REFERENCES roles(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE idempotency_keys (
+  id               BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  tenant_id        BIGINT NOT NULL,
+  user_id          BIGINT NOT NULL,
+  idempotency_key  VARCHAR(100) NOT NULL,
+  method           VARCHAR(10) NOT NULL,
+  path             VARCHAR(255) NOT NULL,
+  request_hash     CHAR(64) NOT NULL,
+  status_code      INT NOT NULL,
+  response_json    JSON NOT NULL,
+  created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_idempotency_tenant_user_key (tenant_id, user_id, idempotency_key),
+  KEY idx_idempotency_created (created_at),
+  CONSTRAINT fk_idempotency_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+  CONSTRAINT fk_idempotency_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------------------------------------------------------------------------

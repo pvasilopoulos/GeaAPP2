@@ -14,7 +14,7 @@ import { loadTenant } from '../lib/tenants.js';
 import { computeReminderState } from '../lib/reminderSettings.js';
 import { diffRecords, snapshotFields, packDetails, changeSummary, parseDetails } from '../lib/activityDiff.js';
 import { parseNotePayload, noteReminderState } from '../lib/notes.js';
-import { extractClientRequestId, isDuplicateKeyError } from '../lib/idempotency.js';
+import { extractClientRequestId, isDuplicateKeyError, withIdempotency } from '../lib/idempotency.js';
 
 const CUSTOMER_FIELDS = ['first_name', 'last_name', 'email', 'phone', 'mobile', 'company',
   'tax_id', 'customer_type', 'status', 'is_vip', 'date_of_birth', 'address_line', 'city',
@@ -217,35 +217,38 @@ customersRouter.post('/', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, re
 // PATCH /api/customers/:id — edit a customer (tenant verified by param).
 customersRouter.patch('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
   try {
-    const id = Number(req.params.id);
-    const cur = (await query('SELECT * FROM customers WHERE id = ?', [id])).rows[0];
-    const b = req.body || {};
-    const sets = [];
-    const params = [];
-    for (const f of CUSTOMER_FIELDS) {
-      if (b[f] !== undefined) {
-        sets.push(`${f} = ?`);
-        params.push(f === 'is_vip' ? (b[f] ? 1 : 0) : (b[f] === '' ? null : b[f]));
+    const result = await withIdempotency(query, req, async () => {
+      const id = Number(req.params.id);
+      const cur = (await query('SELECT * FROM customers WHERE id = ?', [id])).rows[0];
+      const b = req.body || {};
+      const sets = [];
+      const params = [];
+      for (const f of CUSTOMER_FIELDS) {
+        if (b[f] !== undefined) {
+          sets.push(`${f} = ?`);
+          params.push(f === 'is_vip' ? (b[f] ? 1 : 0) : (b[f] === '' ? null : b[f]));
+        }
       }
-    }
-    const merged = { ...cur, ...b, code: cur.code };
-    sets.push('search_norm = ?'); params.push(customerSearchNorm(merged));
-    sets.push('updated_at = NOW()');
-    params.push(id);
-    await query(`UPDATE customers SET ${sets.join(', ')} WHERE id = ?`, params);
-    const patch = {};
-    for (const f of CUSTOMER_FIELDS) {
-      if (b[f] !== undefined) patch[f] = f === 'is_vip' ? (b[f] ? 1 : 0) : (b[f] === '' ? null : b[f]);
-    }
-    const changes = diffRecords(cur, patch);
-    if (changes.length) {
-      await logActivity({
-        tenantId: req.user.tenantId, customerId: id, type: 'customer_updated',
-        description: changeSummary('Ενημέρωση πελάτη', changes, 'Ενημέρωση στοιχείων πελάτη'),
-        details: packDetails(req, { changes }),
-      });
-    }
-    res.json({ ok: true });
+      const merged = { ...cur, ...b, code: cur.code };
+      sets.push('search_norm = ?'); params.push(customerSearchNorm(merged));
+      sets.push('updated_at = NOW()');
+      params.push(id);
+      await query(`UPDATE customers SET ${sets.join(', ')} WHERE id = ?`, params);
+      const patch = {};
+      for (const f of CUSTOMER_FIELDS) {
+        if (b[f] !== undefined) patch[f] = f === 'is_vip' ? (b[f] ? 1 : 0) : (b[f] === '' ? null : b[f]);
+      }
+      const changes = diffRecords(cur, patch);
+      if (changes.length) {
+        await logActivity({
+          tenantId: req.user.tenantId, customerId: id, type: 'customer_updated',
+          description: changeSummary('Ενημέρωση πελάτη', changes, 'Ενημέρωση στοιχείων πελάτη'),
+          details: packDetails(req, { changes }),
+        });
+      }
+      return { status: 200, body: { ok: true } };
+    });
+    res.status(result.status).json(result.body);
   } catch (err) { next(err); }
 });
 
@@ -543,35 +546,41 @@ customersRouter.get('/:id/notes', async (req, res, next) => {
 
 customersRouter.post('/:id/notes', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
   try {
-    const customerId = Number(req.params.id);
-    const parsed = parseNotePayload(req.body);
-    if (parsed.error) return res.status(400).json({ error: parsed.error });
-    const r = await query(
-      `INSERT INTO notes (customer_id, body, title, body_html, category, is_pinned, due_at, tags, employee_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [customerId, parsed.body, parsed.title, parsed.bodyHtml, parsed.category, parsed.isPinned, parsed.dueAt,
-        JSON.stringify(parsed.tags), req.user.id]);
-    res.status(201).json({ id: r.rows.insertId });
+    const result = await withIdempotency(query, req, async () => {
+      const customerId = Number(req.params.id);
+      const parsed = parseNotePayload(req.body);
+      if (parsed.error) return { status: 400, body: { error: parsed.error } };
+      const r = await query(
+        `INSERT INTO notes (customer_id, body, title, body_html, category, is_pinned, due_at, tags, employee_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [customerId, parsed.body, parsed.title, parsed.bodyHtml, parsed.category, parsed.isPinned, parsed.dueAt,
+          JSON.stringify(parsed.tags), req.user.id]);
+      return { status: 201, body: { id: r.rows.insertId } };
+    });
+    res.status(result.status).json(result.body);
   } catch (err) { next(err); }
 });
 
 customersRouter.patch('/:id/notes/:noteId', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
   try {
-    const parsed = parseNotePayload(req.body, { partial: true });
-    if (parsed.error) return res.status(400).json({ error: parsed.error });
-    const fields = [];
-    const params = [];
-    if (parsed.title !== undefined) { fields.push('title = ?'); params.push(parsed.title); }
-    if (parsed.body !== undefined) { fields.push('body = ?', 'body_html = ?'); params.push(parsed.body, parsed.bodyHtml); }
-    if (parsed.category !== undefined) { fields.push('category = ?'); params.push(parsed.category); }
-    if (parsed.isPinned !== undefined) { fields.push('is_pinned = ?'); params.push(parsed.isPinned); }
-    if (parsed.isArchived !== undefined) { fields.push('is_archived = ?'); params.push(parsed.isArchived); }
-    if (parsed.dueAt !== undefined) { fields.push('due_at = ?'); params.push(parsed.dueAt); }
-    if (parsed.tags !== undefined) { fields.push('tags = ?'); params.push(JSON.stringify(parsed.tags)); }
-    if (!fields.length) return res.json({ ok: true });
-    params.push(Number(req.params.noteId), Number(req.params.id));
-    await query(`UPDATE notes SET ${fields.join(', ')} WHERE id = ? AND customer_id = ?`, params);
-    res.json({ ok: true });
+    const result = await withIdempotency(query, req, async () => {
+      const parsed = parseNotePayload(req.body, { partial: true });
+      if (parsed.error) return { status: 400, body: { error: parsed.error } };
+      const fields = [];
+      const params = [];
+      if (parsed.title !== undefined) { fields.push('title = ?'); params.push(parsed.title); }
+      if (parsed.body !== undefined) { fields.push('body = ?', 'body_html = ?'); params.push(parsed.body, parsed.bodyHtml); }
+      if (parsed.category !== undefined) { fields.push('category = ?'); params.push(parsed.category); }
+      if (parsed.isPinned !== undefined) { fields.push('is_pinned = ?'); params.push(parsed.isPinned); }
+      if (parsed.isArchived !== undefined) { fields.push('is_archived = ?'); params.push(parsed.isArchived); }
+      if (parsed.dueAt !== undefined) { fields.push('due_at = ?'); params.push(parsed.dueAt); }
+      if (parsed.tags !== undefined) { fields.push('tags = ?'); params.push(JSON.stringify(parsed.tags)); }
+      if (!fields.length) return { status: 200, body: { ok: true } };
+      params.push(Number(req.params.noteId), Number(req.params.id));
+      await query(`UPDATE notes SET ${fields.join(', ')} WHERE id = ? AND customer_id = ?`, params);
+      return { status: 200, body: { ok: true } };
+    });
+    res.status(result.status).json(result.body);
   } catch (err) { next(err); }
 });
 

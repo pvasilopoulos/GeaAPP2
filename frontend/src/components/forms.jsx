@@ -6,7 +6,7 @@ import { Drawer } from './ui.jsx';
 import { ImageUpload, HoursEditor, AmenitiesPicker } from './formBits.jsx';
 import VoiceFill from './VoiceFill.jsx';
 import { defaultOpeningHours, BRANCH_STATUS_LABELS, SPACE_STATUS_LABELS } from '../lib/format.js';
-import { submitCustomerCreate } from '../lib/offlineQueue.js';
+import { submitCustomerCreate, submitCustomerUpdate } from '../lib/offlineQueue.js';
 
 const SPACE_TYPES = ['Αίθουσα συνεδριάσεων', 'Ιδιωτικό γραφείο', 'Co-working', 'Lounge', 'Αίθουσα εκδηλώσεων', 'Studio', 'Αίθουσα εκπαίδευσης'];
 
@@ -173,9 +173,8 @@ export function CustomerFormDrawer({ initial, onClose, onSaved, onOpenExisting }
       const customFieldValues = {};
       for (const fld of visibleCf) customFieldValues[fld.id] = cfValues[fld.id];
       if (initial) {
-        await api.updateCustomer(initial.id, f);
-        if (visibleCf.length) await api.saveCustomerCustomFields(initial.id, customFieldValues);
-        onSaved({ id: initial.id, full_name: `${f.first_name} ${f.last_name}` });
+        const res = await submitCustomerUpdate(initial.id, f, customFieldValues);
+        onSaved({ id: initial.id, full_name: `${f.first_name} ${f.last_name}`, pendingSync: res.pendingSync });
       } else {
         // Offline-resilient: falls back to a queued sync instead of failing
         // when the network is unreachable (see lib/offlineQueue.js).

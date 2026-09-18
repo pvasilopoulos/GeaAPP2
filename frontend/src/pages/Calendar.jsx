@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api.js';
+import { submitFollowUpCreate, submitFollowUpUpdate } from '../lib/offlineQueue.js';
 import Icon from '../components/Icon.jsx';
 import { Drawer, EmptyState, Skeleton } from '../components/ui.jsx';
 import { useAuth } from '../store/auth.js';
@@ -118,7 +119,7 @@ function QuickCreateDrawer({ slot, canBookings, canFollowUps, employees, onClose
     try {
       if (type === 'follow_up') {
         if (!title.trim()) { setError('Απαιτείται τίτλος'); setBusy(false); return; }
-        await api.createFollowUp({
+        await submitFollowUpCreate({
           customerId: customer.id, branchId: branchId || undefined, title, description: description || undefined,
           dueAt: new Date(dueAt).toISOString(), assignedEmployeeId: employeeId || undefined,
         });
@@ -260,19 +261,19 @@ function FollowUpDetail({ event, onClose, onOpenCustomer, canWrite }) {
         <div className="field-group"><label>Ημερομηνία/ώρα</label><input className="input" type="datetime-local" value={dueAt} onChange={(e) => setDueAt(e.target.value)} disabled={!canWrite} /></div>
         {canWrite && (
           <>
-            <button className="btn btn-primary" disabled={!!busy} onClick={() => run('save', () => api.updateFollowUp(event.raw_id, { title, description, dueAt: new Date(dueAt).toISOString(), branchId: branchId || null }))}>
+            <button className="btn btn-primary" disabled={!!busy} onClick={() => run('save', () => submitFollowUpUpdate(event.raw_id, { title, description, dueAt: new Date(dueAt).toISOString(), branchId: branchId || null }, { customerId: event.customer_id }))}>
               {busy === 'save' ? <span className="spinner" /> : <Icon name="check" size={15} />} Αποθήκευση
             </button>
             {event.status === 'open' && (
               <>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {SNOOZE_OPTIONS.map((s) => (
-                    <button key={s.minutes} type="button" className="btn btn-sm btn-ghost" disabled={!!busy} onClick={() => run('snooze', () => api.snoozeFollowUp(event.raw_id, s.minutes))}>
+                    <button key={s.minutes} type="button" className="btn btn-sm btn-ghost" disabled={!!busy} onClick={() => run('snooze', () => submitFollowUpUpdate(event.raw_id, null, { customerId: event.customer_id, snoozeMinutes: s.minutes }))}>
                       <Icon name="clock" size={13} /> {s.label}
                     </button>
                   ))}
                 </div>
-                <button className="btn btn-sm" disabled={!!busy} onClick={() => run('complete', () => api.updateFollowUp(event.raw_id, { status: 'completed' }))}>
+                <button className="btn btn-sm" disabled={!!busy} onClick={() => run('complete', () => submitFollowUpUpdate(event.raw_id, { status: 'completed' }, { customerId: event.customer_id }))}>
                   <Icon name="check" size={14} /> Ολοκλήρωση
                 </button>
               </>
@@ -503,7 +504,7 @@ export default function Calendar({ onOpenCustomer }) {
         await api.updateBooking(event.raw_id, { startsAt: start, endsAt: end });
       } else {
         const { start } = computeDragMove(event, newStart);
-        await api.updateFollowUp(event.raw_id, { dueAt: start });
+        await submitFollowUpUpdate(event.raw_id, { dueAt: start }, { customerId: event.customer_id });
       }
       invalidateShared(qc, event.customer_id);
     } catch { /* surfaced via failed refetch; drag UX stays best-effort */ }
