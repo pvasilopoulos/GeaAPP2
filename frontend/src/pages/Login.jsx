@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../store/auth.js';
 import { api } from '../api.js';
 import Icon from '../components/Icon.jsx';
+import { DEFAULT_APP_NAME } from '../lib/branding.js';
 
 const DEMO = [
   ['Ιδιοκτήτης', 'owner@demo.gr'],
@@ -31,7 +32,7 @@ export default function Login() {
   return (
     <div className="auth-wrap">
       <div className="auth-card">
-        <div className="auth-brand"><span className="logo"><Icon name="layers" size={19} /></span> SpaceHub</div>
+        <div className="auth-brand"><span className="logo"><Icon name="layers" size={19} /></span> {DEFAULT_APP_NAME}</div>
         <div className="auth-sub">Σύνδεση στο λογαριασμό σας</div>
         {error && <div className="auth-error">{error}</div>}
         <form onSubmit={submit}>

@@ -5,12 +5,14 @@ export const APP_SETTING_KEYS = [
   'default_country', 'date_format', 'week_starts_on',
   'default_customer_status', 'require_email', 'strict_duplicates',
   'voice_lang', 'allow_vip', 'map_provider', 'view_preferences',
-  'quote_api',
+  'quote_api', 'app_name', 'browser_tab_title',
 ];
 
 export const MAP_PROVIDER_IDS = ['google', 'osm', 'apple', 'bing'];
 const CUSTOMER_ROW_HEIGHT_MIN = 44;
 const CUSTOMER_ROW_HEIGHT_MAX = 180;
+const APP_NAME_MAX_LENGTH = 60;
+const BROWSER_TAB_TITLE_MAX_LENGTH = 100;
 
 export const DEFAULT_TENANT_SETTINGS = {
   default_country: 'Ελλάδα',
@@ -22,6 +24,9 @@ export const DEFAULT_TENANT_SETTINGS = {
   voice_lang: 'el-GR',
   allow_vip: true,
   map_provider: 'google',
+  // App-wide branding text (distinct from the tenant/organization name in `tenants.name`).
+  app_name: 'SpaceHub',
+  browser_tab_title: 'SpaceHub — Διαχείριση Πελατών',
   quote_api: {
     url: '',
     method: 'POST',
@@ -88,10 +93,18 @@ export function parseJson(v, fallback) {
   return fallback;
 }
 
+function sanitizeBrandingText(value, fallback, maxLength) {
+  if (value == null) return fallback;
+  const trimmed = String(value).trim();
+  return trimmed ? trimmed.slice(0, maxLength) : fallback;
+}
+
 export function mergeTenantSettings(raw) {
   const parsed = parseJson(raw, {}) || {};
   const map_provider = MAP_PROVIDER_IDS.includes(parsed.map_provider) ? parsed.map_provider : DEFAULT_TENANT_SETTINGS.map_provider;
   const google_maps_api_key = parsed.google_maps_api_key == null ? '' : String(parsed.google_maps_api_key);
+  const app_name = sanitizeBrandingText(parsed.app_name, DEFAULT_TENANT_SETTINGS.app_name, APP_NAME_MAX_LENGTH);
+  const browser_tab_title = sanitizeBrandingText(parsed.browser_tab_title, DEFAULT_TENANT_SETTINGS.browser_tab_title, BROWSER_TAB_TITLE_MAX_LENGTH);
   const rawViews = parsed.view_preferences && typeof parsed.view_preferences === 'object' ? parsed.view_preferences : {};
   const customerProfile = rawViews.customer_profile || {};
   const requestedRowHeight = Number(customerProfile.customer_list_row_height);
@@ -103,6 +116,8 @@ export function mergeTenantSettings(raw) {
     ...parsed,
     map_provider,
     google_maps_api_key,
+    app_name,
+    browser_tab_title,
     view_preferences: {
       customer_profile: {
         ...DEFAULT_TENANT_SETTINGS.view_preferences.customer_profile,
