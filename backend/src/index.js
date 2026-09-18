@@ -2,10 +2,11 @@ import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import path from 'node:path';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
-import { pool } from './db.js';
+import { pool, query } from './db.js';
+import { mergeTenantSettings } from './lib/tenantSettings.js';
 import { customersRouter } from './routes/customers.js';
 import { customerViewsRouter } from './routes/customerViews.js';
 import { metaRouter } from './routes/meta.js';
@@ -82,6 +83,30 @@ app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 // Production serves the built SPA; in local/dev we redirect to Vite (:5173).
 const distDir = path.resolve(__dirname, '../../frontend/dist');
 const frontendOrigin = process.env.FRONTEND_ORIGIN || 'http://127.0.0.1:5173';
+
+// The PWA manifest is a single static file per browser origin, but this
+// deployment's "Όνομα εφαρμογής" branding setting is tenant-scoped. There is
+// no authenticated session at manifest-fetch time (the browser requests it
+// directly, no Authorization header), so — same limitation as the browser
+// tab title before login — it reflects the primary tenant (id 1), which is
+// what every current single-org deployment of this app actually is.
+app.get('/manifest.webmanifest', async (_req, res) => {
+  try {
+    const manifestPath = path.join(distDir, 'manifest.webmanifest');
+    const base = existsSync(manifestPath)
+      ? JSON.parse(readFileSync(manifestPath, 'utf8'))
+      : JSON.parse(readFileSync(path.resolve(__dirname, '../../frontend/public/manifest.webmanifest'), 'utf8'));
+    const { rows } = await query('SELECT settings FROM tenants WHERE id = 1');
+    const { app_name } = mergeTenantSettings(rows[0]?.settings);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+    res.json({ ...base, name: app_name, short_name: app_name });
+  } catch (err) {
+    console.error('Failed to build dynamic manifest:', err);
+    res.status(500).json({ error: 'Manifest unavailable' });
+  }
+});
+
 if (existsSync(distDir)) {
   app.use(express.static(distDir, {
     setHeaders(res, filePath) {
