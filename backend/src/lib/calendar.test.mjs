@@ -50,11 +50,14 @@ assert.equal(canViewFollowUps([BOOKINGS_VIEW], CUSTOMERS_READ), false);
   const row = {
     id: 9, customer_id: 4, customer_name: 'Μαρία Παπά', title: 'Τηλεφώνημα', description: 'Follow up',
     due_at: '2020-01-01T09:00:00.000Z', status: 'open', assigned_employee_id: 6, assigned_employee: 'Νίκος',
+    branch_id: 3, branch_name: 'Κέντρο',
   };
   const event = mapFollowUpToEvent(row, { now: new Date('2030-01-01T00:00:00Z') });
   assert.equal(event.id, 'follow_up-9');
   assert.equal(event.type, 'follow_up');
   assert.equal(event.start, '2020-01-01T09:00:00.000Z');
+  assert.equal(event.branch_id, 3);
+  assert.equal(event.branch_name, 'Κέντρο');
   assert.equal(new Date(event.end).getTime() - new Date(event.start).getTime(), FOLLOW_UP_DEFAULT_DURATION_MINUTES * 60000);
   // Past-due open follow-up viewed "now" in 2030 must surface as overdue so
   // the calendar can color-code it distinctly from regular follow-ups.

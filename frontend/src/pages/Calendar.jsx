@@ -40,27 +40,32 @@ function CustomerPicker({ value, onChange }) {
   const [open, setOpen] = useState(false);
   const results = useQuery({
     queryKey: ['calendar-customer-search', q],
-    queryFn: ({ signal }) => api.searchCustomers({ q, limit: 8 }, { signal }),
-    enabled: open && q.trim().length > 1,
+    queryFn: ({ signal }) => api.searchCustomers({ q, limit: 8, sort: 'name', sortDir: 'ASC' }, { signal }),
+    enabled: open && q.trim().length > 0,
   });
   return (
     <div className="field-group" style={{ position: 'relative' }}>
       <label>Πελάτης *</label>
       {value ? (
         <div className="search-row" style={{ padding: '6px 8px', border: '1px solid var(--border-strong)', borderRadius: 9 }}>
-          <div style={{ flex: 1, fontWeight: 600 }}>{value.full_name || value.company || value.name}</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 600 }}>{value.full_name || value.company || value.name}</div>
+            {(value.code || value.tax_id || value.city) && (
+              <div className="meta">{[value.code, value.tax_id, value.city].filter(Boolean).join(' · ')}</div>
+            )}
+          </div>
           <button type="button" className="btn btn-icon btn-ghost" onClick={() => onChange(null)}><Icon name="x" size={14} /></button>
         </div>
       ) : (
         <input
           className="input"
-          placeholder="Αναζήτηση πελάτη…"
+          placeholder="Αναζήτηση πελάτη… (όνομα, κωδικός, ΑΦΜ, τηλέφωνο, email)"
           value={q}
           onChange={(e) => { setQ(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
         />
       )}
-      {open && !value && q.trim().length > 1 && (
+      {open && !value && q.trim().length > 0 && (
         <div className="search-results" style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 5 }}>
           {results.isLoading && <div style={{ padding: 12 }}><Skeleton h={16} /></div>}
           {!results.isLoading && (results.data?.results || []).length === 0 && (
@@ -70,7 +75,7 @@ function CustomerPicker({ value, onChange }) {
             <div key={c.id} className="search-row" onClick={() => { onChange(c); setOpen(false); setQ(''); }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 600 }}>{c.full_name || c.company || c.name}</div>
-                {c.code && <div className="meta">{c.code}</div>}
+                <div className="meta">{[c.code, c.tax_id, c.phone || c.mobile, c.city].filter(Boolean).join(' · ')}</div>
               </div>
             </div>
           ))}
@@ -98,7 +103,7 @@ function QuickCreateDrawer({ slot, canBookings, canFollowUps, employees, onClose
   const branchesQ = useQuery({
     queryKey: ['calendar-branches', customer?.id],
     queryFn: ({ signal }) => api.branches({ customerId: customer.id, limit: 100 }, { signal }),
-    enabled: type === 'booking' && !!customer,
+    enabled: !!customer,
   });
   const spacesQ = useQuery({
     queryKey: ['calendar-spaces', branchId],
@@ -114,7 +119,7 @@ function QuickCreateDrawer({ slot, canBookings, canFollowUps, employees, onClose
       if (type === 'follow_up') {
         if (!title.trim()) { setError('Απαιτείται τίτλος'); setBusy(false); return; }
         await api.createFollowUp({
-          customerId: customer.id, title, description: description || undefined,
+          customerId: customer.id, branchId: branchId || undefined, title, description: description || undefined,
           dueAt: new Date(dueAt).toISOString(), assignedEmployeeId: employeeId || undefined,
         });
       } else {
@@ -144,6 +149,13 @@ function QuickCreateDrawer({ slot, canBookings, canFollowUps, employees, onClose
         <CustomerPicker value={customer} onChange={setCustomer} />
         {type === 'follow_up' ? (
           <>
+            <div className="field-group">
+              <label>Υποκατάστημα</label>
+              <select className="input" value={branchId} onChange={(e) => setBranchId(e.target.value)} disabled={!customer}>
+                <option value="">—</option>
+                {(branchesQ.data?.results || []).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
             <div className="field-group">
               <label>Τίτλος *</label>
               <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="π.χ. Τηλεφώνημα follow-up" />
@@ -210,7 +222,13 @@ function FollowUpDetail({ event, onClose, onOpenCustomer, canWrite }) {
   const [title, setTitle] = useState(event.title || '');
   const [description, setDescription] = useState(event.description || '');
   const [dueAt, setDueAt] = useState(toLocalInput(event.start));
+  const [branchId, setBranchId] = useState(event.branch_id || '');
   const [busy, setBusy] = useState('');
+
+  const branchesQ = useQuery({
+    queryKey: ['calendar-branches', event.customer_id],
+    queryFn: ({ signal }) => api.branches({ customerId: event.customer_id, limit: 100 }, { signal }),
+  });
 
   const run = async (key, fn) => {
     setBusy(key);
@@ -230,12 +248,19 @@ function FollowUpDetail({ event, onClose, onOpenCustomer, canWrite }) {
             <Icon name="users" size={14} /> {event.customer_name}
           </button>
         </div>
+        <div className="field-group">
+          <label>Υποκατάστημα</label>
+          <select className="input" value={branchId} onChange={(e) => setBranchId(e.target.value)} disabled={!canWrite}>
+            <option value="">—</option>
+            {(branchesQ.data?.results || []).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+        </div>
         <div className="field-group"><label>Τίτλος</label><input className="input" value={title} onChange={(e) => setTitle(e.target.value)} disabled={!canWrite} /></div>
         <div className="field-group"><label>Περιγραφή</label><textarea className="input" rows={2} style={{ height: 'auto', padding: '8px 10px' }} value={description} onChange={(e) => setDescription(e.target.value)} disabled={!canWrite} /></div>
         <div className="field-group"><label>Ημερομηνία/ώρα</label><input className="input" type="datetime-local" value={dueAt} onChange={(e) => setDueAt(e.target.value)} disabled={!canWrite} /></div>
         {canWrite && (
           <>
-            <button className="btn btn-primary" disabled={!!busy} onClick={() => run('save', () => api.updateFollowUp(event.raw_id, { title, description, dueAt: new Date(dueAt).toISOString() }))}>
+            <button className="btn btn-primary" disabled={!!busy} onClick={() => run('save', () => api.updateFollowUp(event.raw_id, { title, description, dueAt: new Date(dueAt).toISOString(), branchId: branchId || null }))}>
               {busy === 'save' ? <span className="spinner" /> : <Icon name="check" size={15} />} Αποθήκευση
             </button>
             {event.status === 'open' && (

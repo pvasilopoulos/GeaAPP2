@@ -75,6 +75,8 @@ export function mapFollowUpToEvent(row, ctx = {}) {
     customer_name: row.customer_name || null,
     employee_id: row.assigned_employee_id,
     employee_name: row.assigned_employee || null,
+    branch_id: row.branch_id,
+    branch_name: row.branch_name || null,
     overdue: computedStatus === 'overdue',
   };
 }

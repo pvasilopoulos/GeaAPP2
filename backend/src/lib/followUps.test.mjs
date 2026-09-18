@@ -21,4 +21,11 @@ assert.equal(parseSnoozeMinutes(-5).error, 'Μη έγκυρη διάρκεια �
 assert.equal(parseSnoozeMinutes('not-a-number').error, 'Μη έγκυρη διάρκεια αναβολής');
 assert.equal(parseSnoozeMinutes(999999).error, 'Μη έγκυρη διάρκεια αναβολής');
 
+// branchId (optional, tags the follow-up to one of the customer's branches
+// so it can be shown/filtered on the calendar and customer profile)
+assert.equal(parseFollowUpPayload({ title: 'x', dueAt: '2030-01-02', branchId: 7 }).branchId, 7);
+assert.equal(parseFollowUpPayload({ title: 'x', dueAt: '2030-01-02' }).branchId, undefined);
+assert.equal(parseFollowUpPayload({ title: 'x', dueAt: '2030-01-02', branchId: '' }).branchId, null);
+assert.equal(parseFollowUpPayload({ title: 'x', dueAt: '2030-01-02', branchId: 'abc' }).error, 'Μη έγκυρο υποκατάστημα');
+
 console.log('followUps tests passed');

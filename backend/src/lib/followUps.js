@@ -32,6 +32,13 @@ export function parseFollowUpPayload(body = {}, { partial = false } = {}) {
       return { error: 'Μη έγκυρος υπεύθυνος' };
     }
   }
+  if (body.branchId !== undefined || body.branch_id !== undefined) {
+    const value = body.branchId ?? body.branch_id;
+    result.branchId = value === '' || value == null ? null : Number(value);
+    if (result.branchId !== null && !Number.isInteger(result.branchId)) {
+      return { error: 'Μη έγκυρο υποκατάστημα' };
+    }
+  }
   if (body.status !== undefined) {
     const status = String(body.status);
     if (!STATUSES.has(status)) return { error: 'Μη έγκυρη κατάσταση υπενθύμισης' };

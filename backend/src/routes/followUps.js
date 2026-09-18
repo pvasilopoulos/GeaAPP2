@@ -11,11 +11,13 @@ import { loadTenant } from '../lib/tenants.js';
 export const followUpsRouter = Router();
 followUpsRouter.use(authorize(PERMISSIONS.CUSTOMERS_READ));
 
-const SELECT = `SELECT f.id, f.customer_id, f.title, f.description, f.due_at, f.status,
+const SELECT = `SELECT f.id, f.customer_id, f.branch_id, f.title, f.description, f.due_at, f.status,
   f.completed_at, f.created_at, f.updated_at, f.assigned_employee_id,
   c.full_name AS customer_name, c.code AS customer_code,
+  b.name AS branch_name,
   e.full_name AS assigned_employee
   FROM follow_ups f JOIN customers c ON c.id = f.customer_id
+  LEFT JOIN branches b ON b.id = f.branch_id
   LEFT JOIN employees e ON e.id = f.assigned_employee_id`;
 
 // Loads the tenant's reminder preferences + timezone so overdue/due-soon
@@ -32,6 +34,14 @@ function mapRow(row, ctx) {
 async function validateEmployee(tenantId, employeeId) {
   if (employeeId == null) return true;
   const { rows } = await query('SELECT id FROM employees WHERE id = ? AND tenant_id = ?', [employeeId, tenantId]);
+  return rows.length > 0;
+}
+
+// A follow-up's branch (if set) must belong to the same customer/tenant —
+// prevents tagging a reminder with an unrelated branch.
+async function validateBranch(tenantId, customerId, branchId) {
+  if (branchId == null) return true;
+  const { rows } = await query('SELECT id FROM branches WHERE id = ? AND customer_id = ? AND tenant_id = ?', [branchId, customerId, tenantId]);
   return rows.length > 0;
 }
 
@@ -62,10 +72,11 @@ followUpsRouter.post('/', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, re
     const parsed = parseFollowUpPayload(req.body);
     if (parsed.error) return res.status(400).json({ error: parsed.error });
     if (!(await validateEmployee(req.user.tenantId, parsed.assignedEmployeeId))) return res.status(400).json({ error: 'Ο υπεύθυνος δεν ανήκει στον οργανισμό' });
+    if (!(await validateBranch(req.user.tenantId, customerId, parsed.branchId))) return res.status(400).json({ error: 'Το υποκατάστημα δεν ανήκει στον πελάτη' });
     const r = await query(
-      `INSERT INTO follow_ups (tenant_id, customer_id, title, description, due_at, assigned_employee_id, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [req.user.tenantId, customerId, parsed.title, parsed.description || null, parsed.dueAt, parsed.assignedEmployeeId ?? null, req.user.id]);
+      `INSERT INTO follow_ups (tenant_id, customer_id, branch_id, title, description, due_at, assigned_employee_id, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [req.user.tenantId, customerId, parsed.branchId ?? null, parsed.title, parsed.description || null, parsed.dueAt, parsed.assignedEmployeeId ?? null, req.user.id]);
     await syncCustomerNextAction(req.user.tenantId, customerId);
     await logActivity({ tenantId: req.user.tenantId, customerId, type: 'follow_up_created', description: `Υπενθύμιση: ${parsed.title}`, details: packDetails(req, { followUpId: r.rows.insertId }) });
     res.status(201).json({ id: r.rows.insertId });
@@ -85,6 +96,7 @@ followUpsRouter.patch('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req
     if (parsed.description !== undefined) { fields.push('description = ?'); params.push(parsed.description); }
     if (parsed.dueAt !== undefined) { fields.push('due_at = ?'); params.push(parsed.dueAt); }
     if (parsed.assignedEmployeeId !== undefined) { fields.push('assigned_employee_id = ?'); params.push(parsed.assignedEmployeeId); }
+    if (parsed.branchId !== undefined) { fields.push('branch_id = ?'); params.push(parsed.branchId); }
     if (parsed.status !== undefined) {
       fields.push('status = ?', 'completed_at = ?');
       params.push(parsed.status, parsed.status === 'completed' ? new Date() : null);
@@ -92,6 +104,9 @@ followUpsRouter.patch('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req
     if (!fields.length) return res.json({ ok: true });
     if (parsed.assignedEmployeeId !== undefined && !(await validateEmployee(req.user.tenantId, parsed.assignedEmployeeId))) {
       return res.status(400).json({ error: 'Ο υπεύθυνος δεν ανήκει στον οργανισμό' });
+    }
+    if (parsed.branchId !== undefined && !(await validateBranch(req.user.tenantId, current.customer_id, parsed.branchId))) {
+      return res.status(400).json({ error: 'Το υποκατάστημα δεν ανήκει στον πελάτη' });
     }
     fields.push('updated_at = NOW()');
     params.push(id, req.user.tenantId);

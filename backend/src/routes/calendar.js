@@ -23,10 +23,11 @@ const BOOKING_SELECT = `SELECT b.id, b.customer_id, b.branch_id, b.space_id, b.e
   LEFT JOIN spaces s ON s.id = b.space_id
   LEFT JOIN employees e ON e.id = b.employee_id`;
 
-const FOLLOW_UP_SELECT = `SELECT f.id, f.customer_id, f.title, f.description, f.due_at, f.status,
-  f.assigned_employee_id, c.full_name AS customer_name, e.full_name AS assigned_employee
+const FOLLOW_UP_SELECT = `SELECT f.id, f.customer_id, f.branch_id, f.title, f.description, f.due_at, f.status,
+  f.assigned_employee_id, c.full_name AS customer_name, br.name AS branch_name, e.full_name AS assigned_employee
   FROM follow_ups f
   JOIN customers c ON c.id = f.customer_id
+  LEFT JOIN branches br ON br.id = f.branch_id
   LEFT JOIN employees e ON e.id = f.assigned_employee_id`;
 
 // GET /api/calendar?from=&to=&employeeId= — unified bookings + follow-ups feed.

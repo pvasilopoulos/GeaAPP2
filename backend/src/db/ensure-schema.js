@@ -98,7 +98,7 @@ export async function ensureSchema() {
   if (!(await tableExists('follow_ups'))) {
     await query(`CREATE TABLE follow_ups (
       id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      tenant_id BIGINT NOT NULL, customer_id BIGINT NOT NULL,
+      tenant_id BIGINT NOT NULL, customer_id BIGINT NOT NULL, branch_id BIGINT NULL,
       title VARCHAR(200) NOT NULL, description VARCHAR(1000) NULL,
       due_at DATETIME NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'open',
       assigned_employee_id BIGINT NULL, created_by BIGINT NULL,
@@ -109,10 +109,12 @@ export async function ensureSchema() {
       KEY idx_followups_customer_due (customer_id, status, due_at),
       CONSTRAINT fk_followups_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
       CONSTRAINT fk_followups_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+      CONSTRAINT fk_followups_branch FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE SET NULL,
       CONSTRAINT fk_followups_employee FOREIGN KEY (assigned_employee_id) REFERENCES employees(id) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
     console.log('[schema] created follow_ups');
   }
+  await addColumn('follow_ups', 'branch_id', 'BIGINT NULL');
   if (!(await tableExists('quotes'))) {
     await query(`CREATE TABLE quotes (
       id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, tenant_id BIGINT NOT NULL,

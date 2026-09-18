@@ -394,9 +394,10 @@ customersRouter.get('/:id/follow-ups', async (req, res, next) => {
   try {
     const [{ rows }, tenant] = await Promise.all([
       query(
-        `SELECT f.id, f.title, f.description, f.due_at, f.status, f.completed_at,
-                f.assigned_employee_id, e.full_name AS assigned_employee
+        `SELECT f.id, f.branch_id, f.title, f.description, f.due_at, f.status, f.completed_at,
+                f.assigned_employee_id, e.full_name AS assigned_employee, b.name AS branch_name
          FROM follow_ups f LEFT JOIN employees e ON e.id = f.assigned_employee_id
+         LEFT JOIN branches b ON b.id = f.branch_id
          WHERE f.customer_id = ? AND f.tenant_id = ? ORDER BY f.status = 'open' DESC, f.due_at ASC`,
         [Number(req.params.id), req.user.tenantId]),
       loadTenant(query, req.user.tenantId),

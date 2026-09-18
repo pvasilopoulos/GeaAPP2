@@ -66,19 +66,28 @@ export default function Overview({ customerId, data, onOpenTab, onEditCustomer }
   const qc = useQueryClient();
   const [followUpTitle, setFollowUpTitle] = useState('');
   const [followUpDue, setFollowUpDue] = useState('');
+  const [followUpBranchId, setFollowUpBranchId] = useState('');
 
   const branchesQ = useQuery({ queryKey: ['c-branches', customerId], queryFn: ({ signal }) => api.customerBranches(customerId, { signal }) });
   const actsQ = useQuery({ queryKey: ['c-acts', customerId, 'ov'], queryFn: ({ signal }) => api.customerActivities(customerId, { limit: 6 }, { signal }) });
   const fieldsQ = useQuery({ queryKey: ['c-fields', customerId], queryFn: ({ signal }) => api.customerCustomFields(customerId, { signal }) });
   const docsQ = useQuery({ queryKey: ['c-docs', customerId, 'ov'], queryFn: ({ signal }) => api.customerDocuments(customerId, { limit: 3 }, { signal }) });
   const followUpsQ = useQuery({ queryKey: ['c-follow-ups', customerId], queryFn: ({ signal }) => api.customerFollowUps(customerId, { signal }) });
+  // Follow-ups are also shown on the Calendar module (and their due/overdue
+  // state feeds the dashboard) — invalidate those alongside the
+  // customer-scoped keys so changes made here show up there immediately.
+  const invalidateFollowUps = () => {
+    qc.invalidateQueries({ queryKey: ['c-follow-ups', customerId] });
+    qc.invalidateQueries({ queryKey: ['customer', customerId] });
+    qc.invalidateQueries({ queryKey: ['calendar'] });
+    qc.invalidateQueries({ queryKey: ['stats'] });
+  };
   const createFollowUp = async (event) => {
     event.preventDefault();
     if (!followUpTitle.trim() || !followUpDue) return;
-    await api.createFollowUp({ customerId, title: followUpTitle, dueAt: new Date(followUpDue).toISOString() });
-    setFollowUpTitle(''); setFollowUpDue('');
-    qc.invalidateQueries({ queryKey: ['c-follow-ups', customerId] });
-    qc.invalidateQueries({ queryKey: ['customer', customerId] });
+    await api.createFollowUp({ customerId, branchId: followUpBranchId || undefined, title: followUpTitle, dueAt: new Date(followUpDue).toISOString() });
+    setFollowUpTitle(''); setFollowUpDue(''); setFollowUpBranchId('');
+    invalidateFollowUps();
   };
 
   const customFields = (fieldsQ.data?.fields || [])
@@ -128,13 +137,19 @@ export default function Overview({ customerId, data, onOpenTab, onEditCustomer }
             {followUpsQ.data?.results?.length ? followUpsQ.data.results.slice(0, 4).map((f) => (
               <div className="search-row" key={f.id} style={{ padding: '8px 0' }}>
                 <Icon name="bell" size={15} style={{ color: f.computed_status === 'overdue' ? 'var(--red)' : f.computed_status === 'due_soon' ? 'var(--amber)' : 'var(--text-3)' }} />
-                <div style={{ flex: 1 }}><div style={{ fontWeight: 600 }}>{f.title}</div><div className="meta">{formatDateTime(f.due_at)}</div></div>
-                {canWrite && f.status === 'open' && <button className="btn btn-sm btn-ghost" title="Αναβολή 1 ώρα" onClick={async () => { await api.snoozeFollowUp(f.id, 60); qc.invalidateQueries({ queryKey: ['c-follow-ups', customerId] }); qc.invalidateQueries({ queryKey: ['customer', customerId] }); }}><Icon name="clock" size={14} /></button>}
-                {canWrite && <button className="btn btn-sm btn-ghost" onClick={async () => { await api.updateFollowUp(f.id, { status: 'completed' }); qc.invalidateQueries({ queryKey: ['c-follow-ups', customerId] }); qc.invalidateQueries({ queryKey: ['customer', customerId] }); }}><Icon name="check" size={14} /></button>}
+                <div style={{ flex: 1 }}><div style={{ fontWeight: 600 }}>{f.title}</div><div className="meta">{formatDateTime(f.due_at)}{f.branch_name ? ` · ${f.branch_name}` : ''}</div></div>
+                {canWrite && f.status === 'open' && <button className="btn btn-sm btn-ghost" title="Αναβολή 1 ώρα" onClick={async () => { await api.snoozeFollowUp(f.id, 60); invalidateFollowUps(); }}><Icon name="clock" size={14} /></button>}
+                {canWrite && <button className="btn btn-sm btn-ghost" onClick={async () => { await api.updateFollowUp(f.id, { status: 'completed' }); invalidateFollowUps(); }}><Icon name="check" size={14} /></button>}
               </div>
             )) : <div className="muted" style={{ marginBottom: 10 }}>Δεν υπάρχουν προγραμματισμένες ενέργειες.</div>}
             {canWrite && <form onSubmit={createFollowUp} style={{ display: 'grid', gap: 7, marginTop: 8 }}>
               <input className="input" placeholder="Νέα ενέργεια..." value={followUpTitle} onChange={(e) => setFollowUpTitle(e.target.value)} />
+              {(branchesQ.data?.branches || []).length > 0 && (
+                <select className="input" value={followUpBranchId} onChange={(e) => setFollowUpBranchId(e.target.value)}>
+                  <option value="">Χωρίς υποκατάστημα</option>
+                  {(branchesQ.data?.branches || []).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              )}
               <div style={{ display: 'flex', gap: 7 }}><input className="input" type="datetime-local" value={followUpDue} onChange={(e) => setFollowUpDue(e.target.value)} /><button className="btn btn-primary" type="submit"><Icon name="plus" size={14} /></button></div>
             </form>}
           </div>
