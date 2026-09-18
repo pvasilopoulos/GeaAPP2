@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "SpaceHub",
-  "short_name": "SpaceHub",
-  "description": "Διαχείριση πελατών, υποκαταστημάτων και χώρων",
+  "name": "SoftifyOS",
+  "short_name": "SoftifyOS",
+  "description": "ERP & CRM",
   "lang": "el",
   "dir": "ltr",
   "start_url": "/",
