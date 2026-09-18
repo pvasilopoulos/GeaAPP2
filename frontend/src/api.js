@@ -125,6 +125,7 @@ export const api = {
   pushStatus: (opts) => get('/push/status', opts),
   pushSubscribe: (subscription) => send('POST', '/push/subscribe', { subscription }),
   pushUnsubscribe: (endpoint) => send('POST', '/push/unsubscribe', { endpoint }),
+  pushTest: () => send('POST', '/push/test'),
   calendarEvents: (params, opts) => get(`/calendar${qs(params)}`, opts),
   bookings: (params, opts) => get(`/bookings${qs(params)}`, opts),
   booking: (id, opts) => get(`/bookings/${id}`, opts),

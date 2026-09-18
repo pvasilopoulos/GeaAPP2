@@ -61,6 +61,17 @@ export default function NotificationsPanel() {
     } finally { setBusy(false); }
   };
 
+  const sendTest = async () => {
+    setBusy(true); setMsg(''); setErr('');
+    try {
+      const result = await api.pushTest();
+      if (result.sent > 0) setMsg(`Στάλθηκε δοκιμαστική ειδοποίηση (${result.sent} συσκευή/ές). Αν δεν εμφανιστεί, έλεγξε τις ειδοποιήσεις του browser/κινητού.`);
+      else setErr('Ο server δεν κατάφερε να στείλει την ειδοποίηση σε καμία συσκευή — δες τα logs (αναζήτησε "[push]").');
+    } catch (e) {
+      setErr(e.message || 'Κάτι πήγε στραβά');
+    } finally { setBusy(false); }
+  };
+
   if (keyLoading || subscribed === null) return <div style={card}><Skeleton h={90} /></div>;
 
   return (
@@ -96,7 +107,7 @@ export default function NotificationsPanel() {
           )}
 
           {supported && serverConfigured && (
-            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <button
                 type="button"
                 className={`btn ${subscribed ? 'btn-secondary' : 'btn-primary'}`}
@@ -105,6 +116,11 @@ export default function NotificationsPanel() {
               >
                 {busy ? 'Παρακαλώ περιμένετε…' : subscribed ? 'Απενεργοποίηση' : 'Ενεργοποίηση ειδοποιήσεων'}
               </button>
+              {subscribed && (
+                <button type="button" className="btn btn-secondary" disabled={busy} onClick={sendTest}>
+                  Αποστολή δοκιμαστικής ειδοποίησης
+                </button>
+              )}
               {permission === 'denied' && (
                 <span className="muted" style={{ fontSize: 12.5 }}>
                   Έχεις μπλοκάρει τις ειδοποιήσεις για αυτή τη σελίδα από τον browser.
