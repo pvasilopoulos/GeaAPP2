@@ -125,7 +125,7 @@ function ExportMenu({ params, canExport }) {
   const items = [{ format: 'csv', label: 'CSV (.csv)', icon: 'file' }, { format: 'xlsx', label: 'Excel (.xlsx)', icon: 'grid' }, { format: 'pdf', label: 'PDF (.pdf)', icon: 'file' }];
   return (
     <div style={{ position: 'relative' }} ref={ref}>
-      <button className="btn" onClick={() => setOpen((o) => !o)}><Icon name="download" size={16} /> Εξαγωγή <Icon name="chevronDown" size={14} /></button>
+      <button className="btn" title="Εξαγωγή" onClick={() => setOpen((o) => !o)}><Icon name="download" size={16} /></button>
       {open && (
         <div className="search-results" style={{ right: 0, left: 'auto', minWidth: 200, top: 42 }}>
           <div className="search-group-label">Μορφή εξαγωγής</div>
