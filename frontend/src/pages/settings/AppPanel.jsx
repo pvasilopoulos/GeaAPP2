@@ -4,7 +4,7 @@ import { api } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
 import { Skeleton } from '../../components/ui.jsx';
 import { MAP_PROVIDERS } from '../../lib/maps.js';
-import { isStandalone, promptInstall, refreshApp, subscribeInstallPrompt } from '../../lib/pwa.js';
+import { currentInstallMode, isStandalone, promptInstall, refreshApp, subscribeInstallPrompt } from '../../lib/pwa.js';
 
 const inp = { width: '100%', height: 40, padding: '0 10px', border: '1px solid var(--border-strong)', borderRadius: 9 };
 const chk = { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5, padding: '6px 0' };
@@ -17,10 +17,14 @@ export default function AppPanel() {
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
   const [canInstall, setCanInstall] = useState(false);
+  const [installMode, setInstallMode] = useState(() => currentInstallMode());
   const [pwaBusy, setPwaBusy] = useState(false);
   const [pwaMsg, setPwaMsg] = useState('');
   useEffect(() => { if (data?.settings) setF({ ...data.settings }); }, [data]);
-  useEffect(() => subscribeInstallPrompt((ev) => setCanInstall(!!ev)), []);
+  useEffect(() => subscribeInstallPrompt((ev) => {
+    setCanInstall(!!ev);
+    setInstallMode(currentInstallMode());
+  }), []);
   const set = (k) => (e) => {
     const v = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
     setF((s) => ({ ...s, [k]: v }));
@@ -103,13 +107,19 @@ export default function AppPanel() {
       <div className="section-title">Εφαρμογή συσκευής</div>
       <p className="muted" style={{ fontSize: 12.5, margin: '0 0 12px' }}>
         {isStandalone()
-          ? 'Η εφαρμογή τρέχει σε λειτουργία οθόνης (PWA). Το κουμπί ανανέωσης στην κορυφή ενημερώνει δεδομένα και cache.'
-          : 'Για εμπειρία σαν native app, εγκαταστήστε το SpaceHub στην αρχική οθόνη. Στο κινητό κλειδώνει το rubber-band του browser· η ανανέωση γίνεται μόνο από το κουμπί στην κορυφή (ή εδώ).'}
+          ? 'Τρέχει ως εγκατεστημένη εφαρμογή (δικό της παράθυρο, χωρίς τη γραμμή του browser). Το κουμπί ανανέωσης ενημερώνει δεδομένα και cache.'
+          : installMode === 'insecure'
+            ? 'Η εγκατάσταση ως εφαρμογή απαιτεί HTTPS. Σε HTTP ο browser δίνει μόνο συντόμευση που ανοίγει καρτέλα.'
+            : installMode === 'ios-other'
+              ? 'Στο iPhone/iPad ανοίξτε το SpaceHub στο Safari και επιλέξτε Κοινοποίηση → Προσθήκη στην οθόνη Αφετηρίας. Το Chrome εκεί δημιουργεί μόνο συντόμευση.'
+              : installMode === 'ios-safari'
+                ? 'Safari: Κοινοποίηση → Προσθήκη στην οθόνη Αφετηρίας. Έτσι ανοίγει ως εφαρμογή, όχι ως σελιδοδείκτης.'
+                : 'Εγκαταστήστε το ως εφαρμογή (Install app / Εγκατάσταση), όχι ως «Δημιουργία συντόμευσης». Η εφαρμογή ανοίγει σε δικό της παράθυρο με εικονίδιο στο μενού της συσκευής.'}
       </p>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
         {canInstall && (
           <button type="button" className="btn" onClick={() => promptInstall()}>
-            <Icon name="download" size={16} /> Εγκατάσταση
+            <Icon name="download" size={16} /> Εγκατάσταση εφαρμογής
           </button>
         )}
         <button

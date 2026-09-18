@@ -11,7 +11,8 @@ import { useTabs } from './store/tabs.js';
 import { useAuth } from './store/auth.js';
 import { resolveSidebarMenu, resolveSidebarGroups, resolveMobileFooterMenu } from './lib/menu.js';
 import { DEFAULT_APP_NAME, DEFAULT_BROWSER_TAB_TITLE } from './lib/branding.js';
-import { isStandalone, promptInstall, refreshApp, subscribeInstallPrompt } from './lib/pwa.js';
+import InstallAppBanner from './components/InstallAppBanner.jsx';
+import { isIosDevice, isStandalone, promptInstall, refreshApp, subscribeInstallPrompt } from './lib/pwa.js';
 import Dashboard from './pages/Dashboard.jsx';
 import Customers from './pages/Customers.jsx';
 import CustomerProfile from './pages/CustomerProfile.jsx';
@@ -22,12 +23,6 @@ import Calendar from './pages/Calendar.jsx';
 import AuditLog from './pages/AuditLog.jsx';
 import { api } from './api.js';
 
-
-function isIosDevice() {
-  if (typeof navigator === 'undefined') return false;
-  return /iphone|ipad|ipod/i.test(navigator.userAgent)
-    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-}
 
 function AppRefresh() {
   const qc = useQueryClient();
@@ -64,7 +59,7 @@ function UserMenu() {
   }, []);
   useEffect(() => subscribeInstallPrompt((ev) => setCanInstall(!!ev)), []);
   if (!user) return null;
-  const showIosHint = !canInstall && !isStandalone() && isIosDevice();
+  const showIosHint = !canInstall && !isStandalone() && isIosDevice(navigator.userAgent, navigator);
   return (
     <div className="user-menu" ref={ref}>
       <button className="user-btn" onClick={() => setOpen((o) => !o)}>
@@ -91,11 +86,11 @@ function UserMenu() {
             <div
               className="item"
               onClick={() => {
-                window.alert('Στο Safari πατήστε Κοινή χρήση → Προσθήκη στην οθόνη Αφετηρίας.');
+                window.alert('Για εφαρμογή (όχι συντόμευση) ανοίξτε στο Safari: Κοινοποίηση → Προσθήκη στην οθόνη Αφετηρίας.');
                 setOpen(false);
               }}
             >
-              <Icon name="download" size={16} /> Προσθήκη στην αρχική οθόνη
+              <Icon name="download" size={16} /> Προσθήκη ως εφαρμογή
             </div>
           )}
           <div className="item" onClick={logout}><Icon name="arrowLeft" size={16} /> Αποσύνδεση</div>
@@ -211,6 +206,7 @@ export default function App() {
           </div>
         </header>
         <TabBar />
+        <InstallAppBanner />
         <main className="content">
           <div className="content-narrow">
             {/* Keep every open tab mounted; show only the active one so state

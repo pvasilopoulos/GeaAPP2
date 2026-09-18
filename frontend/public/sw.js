@@ -1,6 +1,6 @@
 /* SpaceHub service worker — app-shell cache, never intercept API. */
-const VERSION = 'spacehub-shell-v2';
-const PRECACHE = ['/', '/index.html', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png', '/icons/icon-512.png'];
+const VERSION = 'spacehub-shell-v3';
+const PRECACHE = ['/', '/index.html', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {

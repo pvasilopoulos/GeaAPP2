@@ -99,19 +99,26 @@ const frontendOrigin = process.env.FRONTEND_ORIGIN || 'http://127.0.0.1:5173';
 // tab title before login — it reflects the primary tenant (id 1), which is
 // what every current single-org deployment of this app actually is.
 app.get('/manifest.webmanifest', async (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+  let base;
   try {
     const manifestPath = path.join(distDir, 'manifest.webmanifest');
-    const base = existsSync(manifestPath)
-      ? JSON.parse(readFileSync(manifestPath, 'utf8'))
-      : JSON.parse(readFileSync(path.resolve(__dirname, '../../frontend/public/manifest.webmanifest'), 'utf8'));
+    const src = existsSync(manifestPath)
+      ? manifestPath
+      : path.resolve(__dirname, '../../frontend/public/manifest.webmanifest');
+    base = JSON.parse(readFileSync(src, 'utf8'));
+  } catch (err) {
+    console.error('Failed to read PWA manifest:', err);
+    return res.status(500).json({ error: 'Manifest unavailable' });
+  }
+  try {
     const { rows } = await query('SELECT settings FROM tenants WHERE id = 1');
     const { app_name } = mergeTenantSettings(rows[0]?.settings);
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
-    res.json({ ...base, name: app_name, short_name: app_name });
+    return res.json({ ...base, name: app_name, short_name: app_name });
   } catch (err) {
-    console.error('Failed to build dynamic manifest:', err);
-    res.status(500).json({ error: 'Manifest unavailable' });
+    console.error('Failed to brand PWA manifest:', err);
+    return res.json(base);
   }
 });
 
