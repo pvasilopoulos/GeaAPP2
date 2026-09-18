@@ -98,14 +98,12 @@ export default function CustomerProfile({ customerId, tabId, onBack }) {
 
       <div className="profile-header">
         <div className="ph-top">
-          {c.avatar_url ? (
-            <div style={{ position: 'relative' }}>
-              <Avatar name={c.full_name} src={c.avatar_url} size={72} />
-              {c.status === 'active' && (
-                <span style={{ position: 'absolute', right: 2, bottom: 2, width: 15, height: 15, borderRadius: '50%', background: 'var(--green)', border: '3px solid #fff' }} />
-              )}
-            </div>
-          ) : null}
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <Avatar name={c.full_name} src={c.avatar_url} size={72} />
+            {c.status === 'active' && (
+              <span style={{ position: 'absolute', right: 2, bottom: 2, width: 15, height: 15, borderRadius: '50%', background: 'var(--green)', border: '3px solid #fff' }} />
+            )}
+          </div>
 
           <div className="ph-main">
             <div className="ph-id">
@@ -113,7 +111,10 @@ export default function CustomerProfile({ customerId, tabId, onBack }) {
               {c.is_vip && <VipBadge />}
             </div>
             <div className="ph-meta">
-              #{c.code} · {STATUS_LABELS[c.status]} πελάτης · {TYPE_LABELS[c.customer_type]} · Από {String(joined.getMonth() + 1).padStart(2, '0')}/{joined.getFullYear()}
+              <span className="item">#{c.code}</span>
+              <span className="item">{STATUS_LABELS[c.status]} πελάτης</span>
+              <span className="item">{TYPE_LABELS[c.customer_type]}</span>
+              <span className="item">Από {String(joined.getMonth() + 1).padStart(2, '0')}/{joined.getFullYear()}</span>
             </div>
             <div className="ph-contact">
               {c.phone && <span className="item"><Icon name="phone" /> {c.phone}</span>}

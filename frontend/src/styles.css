@@ -371,11 +371,12 @@ input, select { font-family: inherit; font-size: 14px; }
 
 /* ---------- Customer 360 ---------- */
 .profile-header { background: linear-gradient(135deg, #fff 0%, #fbfbff 100%); border: 1px solid var(--border); border-radius: 16px; padding: 22px 24px; box-shadow: var(--shadow-sm); }
-.ph-top { display: flex; align-items: flex-start; gap: 18px; }
-.ph-main { min-width: 0; flex: 1; }
+.ph-top { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 18px; }
+.ph-main { min-width: 0; flex: 1 1 240px; }
 .ph-id { display: flex; align-items: center; gap: 11px; flex-wrap: wrap; }
 .ph-id h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
-.ph-meta { color: var(--text-3); font-size: 13px; margin-top: 4px; }
+.ph-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 0; color: var(--text-3); font-size: 13px; margin-top: 4px; }
+.ph-meta .item:not(:last-child)::after { content: '·'; margin: 0 8px; color: var(--border-strong); }
 .ph-contact { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; margin-top: 14px; color: var(--text-2); font-size: 13px; }
 .ph-contact .item { display: flex; align-items: center; gap: 7px; }
 .ph-contact svg { width: 15px; height: 15px; color: var(--text-3); }
