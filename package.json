@@ -1,0 +1,23 @@
+{
+  "name": "spacehub",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SpaceHub — premium customer management platform (Customers, Branches, Spaces) built for 350k+ customers.",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "install:all": "npm install",
+    "db:schema": "npm --workspace backend run db:schema",
+    "db:seed": "npm --workspace backend run db:seed",
+    "db:reset": "npm --workspace backend run db:reset",
+    "dev:backend": "npm --workspace backend run dev",
+    "dev:frontend": "npm --workspace frontend run dev",
+    "build:frontend": "npm --workspace frontend run build",
+    "start": "npm --workspace backend run start"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
