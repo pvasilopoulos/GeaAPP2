@@ -32,7 +32,7 @@ import { bookingsRouter } from './routes/bookings.js';
 import { calendarRouter } from './routes/calendar.js';
 import { notificationsRouter } from './routes/notifications.js';
 import { auditRouter } from './routes/audit.js';
-import { pushRouter } from './routes/push.js';
+import { pushRouter, pushPublicRouter } from './routes/push.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -57,6 +57,8 @@ app.get('/api/health', async (_req, res) => {
 
 // Public authentication endpoints (login/register); /me authenticates itself.
 app.use('/api/auth', authRouter);
+// Public VAPID key so the SW can subscribe before/without an active session check.
+app.use('/api/push', pushPublicRouter);
 
 // Everything below requires a valid token.
 app.use('/api', authenticate);

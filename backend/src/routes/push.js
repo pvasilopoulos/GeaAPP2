@@ -4,11 +4,14 @@ import {
   pushEnabled, saveSubscription, removeSubscription, subscriptionCountForUser,
 } from '../lib/push.js';
 
-export const pushRouter = Router();
-
-pushRouter.get('/public-key', (_req, res) => {
+// Not sensitive (just the public VAPID key the browser needs to subscribe) —
+// mounted before the auth middleware so it's reachable pre-login too.
+export const pushPublicRouter = Router();
+pushPublicRouter.get('/public-key', (_req, res) => {
   res.json({ publicKey: pushEnabled() ? config.push.publicKey : null });
 });
+
+export const pushRouter = Router();
 
 pushRouter.get('/status', async (req, res, next) => {
   try {
