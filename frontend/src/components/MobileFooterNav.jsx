@@ -14,6 +14,7 @@ export default function MobileFooterNav({ items, activeId, onOpen }) {
           type="button"
           className={`mobile-footer-item${activeId === n.id ? ' active' : ''}`}
           onClick={() => onOpen(n)}
+          title={n.external ? n.url : undefined}
         >
           <Icon name={n.icon} size={20} />
           <span>{n.label}</span>

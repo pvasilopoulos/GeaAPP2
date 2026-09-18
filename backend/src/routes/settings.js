@@ -6,7 +6,7 @@ import { loadTenant, getPlatformSettings, setPlatformSetting } from '../lib/tena
 import { mergeTenantSettings, parseJson, DEFAULT_PLATFORM_SETTINGS, publicAppSettings, applyAppSettingsPatch } from '../lib/tenantSettings.js';
 import { applyMessagingPatch, channelStatuses, publicMessaging } from '../lib/messaging.js';
 import { applyReminderSettingsPatch, publicReminderSettings } from '../lib/reminderSettings.js';
-import { sanitizeMenuConfig, sanitizePersonalMenuConfig } from '../lib/menu.js';
+import { sanitizeMenuConfig, sanitizePersonalMenuConfig, NAV_ITEM_IDS } from '../lib/menu.js';
 
 export const settingsRouter = Router();
 
@@ -107,12 +107,28 @@ settingsRouter.patch('/reminders', authorize(PERMISSIONS.SETTINGS_MANAGE), async
 // ---- Nav menu configuration -------------------------------------------------
 // Tenant-wide default: readable by any authenticated user (needed to render
 // their own sidebar/mobile footer), editable only by SETTINGS_MANAGE. This
-// never bypasses permissions — it only controls order/visibility among the
-// items a user's role already permits (enforced client-side on top of this).
+// never bypasses permissions — it only controls order/visibility/grouping/
+// labels among the items a user's role already permits (enforced client-side
+// on top of this, and role-restriction is re-checked client-side too).
+async function tenantRoleKeys(tenantId) {
+  const { rows } = await query('SELECT `key` FROM roles WHERE tenant_id = ?', [tenantId]);
+  return rows.map((r) => r.key);
+}
+
 settingsRouter.get('/menu', async (req, res, next) => {
   try {
     const { rows } = await query('SELECT settings FROM tenants WHERE id = ?', [req.user.tenantId]);
     res.json({ menu: mergeTenantSettings(rows[0]?.settings).menu });
+  } catch (err) { next(err); }
+});
+
+// Tenant's role keys, for the admin menu editor's role-restriction picker.
+// Scoped to authorize(SETTINGS_MANAGE) (rather than USERS_MANAGE/ROLES_MANAGE)
+// since it's specifically for this editor and must never leak across tenants.
+settingsRouter.get('/menu/roles', authorize(PERMISSIONS.SETTINGS_MANAGE), async (req, res, next) => {
+  try {
+    const { rows } = await query('SELECT `key`, name FROM roles WHERE tenant_id = ? ORDER BY id', [req.user.tenantId]);
+    res.json({ roles: rows });
   } catch (err) { next(err); }
 });
 
@@ -121,7 +137,8 @@ settingsRouter.patch('/menu', authorize(PERMISSIONS.SETTINGS_MANAGE), async (req
     const { rows } = await query('SELECT settings FROM tenants WHERE id = ?', [req.user.tenantId]);
     const current = parseJson(rows[0]?.settings, {}) || {};
     const currentMenu = mergeTenantSettings(current).menu;
-    const nextMenu = sanitizeMenuConfig({ ...currentMenu, ...(req.body || {}) });
+    const validRoleKeys = await tenantRoleKeys(req.user.tenantId);
+    const nextMenu = sanitizeMenuConfig({ ...currentMenu, ...(req.body || {}) }, { validRoleKeys });
     const nextSettings = mergeTenantSettings({ ...current, menu: nextMenu });
     await query('UPDATE tenants SET settings = ?, updated_at = NOW() WHERE id = ?',
       [JSON.stringify(nextSettings), req.user.tenantId]);
@@ -131,17 +148,31 @@ settingsRouter.patch('/menu', authorize(PERMISSIONS.SETTINGS_MANAGE), async (req
 
 // Personal per-user override — always scoped to the caller's own row, never
 // another user's, and independent from the admin-only tenant default above.
+// `allowedIds` includes the tenant's current custom link ids (in addition to
+// the fixed catalog) so a user can still personally reorder/hide those links.
 settingsRouter.get('/menu/me', async (req, res, next) => {
   try {
-    const { rows } = await query('SELECT menu_preferences FROM users WHERE id = ? AND tenant_id = ?', [req.user.id, req.user.tenantId]);
-    res.json({ menu: sanitizePersonalMenuConfig(parseJson(rows[0]?.menu_preferences, null)) });
+    const [{ rows: userRows }, { rows: tenantRows }] = await Promise.all([
+      query('SELECT menu_preferences FROM users WHERE id = ? AND tenant_id = ?', [req.user.id, req.user.tenantId]),
+      query('SELECT settings FROM tenants WHERE id = ?', [req.user.tenantId]),
+    ]);
+    const tenantMenu = mergeTenantSettings(tenantRows[0]?.settings).menu;
+    const allowedIds = [...NAV_ITEM_IDS, ...tenantMenu.links.map((l) => l.id)];
+    res.json({ menu: sanitizePersonalMenuConfig(parseJson(userRows[0]?.menu_preferences, null), allowedIds) });
   } catch (err) { next(err); }
 });
 
 settingsRouter.patch('/menu/me', async (req, res, next) => {
   try {
     const body = req.body || {};
-    const next = body.clear ? null : sanitizePersonalMenuConfig(body);
+    if (body.clear) {
+      await query('UPDATE users SET menu_preferences = NULL WHERE id = ? AND tenant_id = ?', [req.user.id, req.user.tenantId]);
+      return res.json({ menu: null });
+    }
+    const { rows } = await query('SELECT settings FROM tenants WHERE id = ?', [req.user.tenantId]);
+    const tenantMenu = mergeTenantSettings(rows[0]?.settings).menu;
+    const allowedIds = [...NAV_ITEM_IDS, ...tenantMenu.links.map((l) => l.id)];
+    const next = sanitizePersonalMenuConfig(body, allowedIds);
     await query('UPDATE users SET menu_preferences = ? WHERE id = ? AND tenant_id = ?',
       [next ? JSON.stringify(next) : null, req.user.id, req.user.tenantId]);
     res.json({ menu: next });
