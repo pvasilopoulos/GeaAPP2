@@ -6,7 +6,13 @@
 import { api } from '../api.js';
 
 const DB_NAME = 'spacehub-offline';
-const DB_VERSION = 1;
+// Bumped from 1 -> 2: some already-installed clients ended up with a
+// `spacehub-offline` database at version 1 that never received the
+// `pending_mutations` object store (onupgradeneeded only fires when the
+// requested version is higher than the existing one). Raising the version
+// forces those installs to run the upgrade and create the missing store,
+// fixing "One of the specified object stores was not found" errors.
+const DB_VERSION = 2;
 const STORE = 'pending_mutations';
 const LS_KEY = 'spacehub_offline_queue';
 export const QUEUE_EVENT = 'spacehub:offline-queue';
@@ -62,14 +68,28 @@ function hasIndexedDb() {
 function openDb() {
   if (!hasIndexedDb()) return Promise.resolve(null);
   if (!dbPromise) {
-    dbPromise = new Promise((resolve, reject) => {
+    dbPromise = new Promise((resolve) => {
       const req = indexedDB.open(DB_NAME, DB_VERSION);
       req.onupgradeneeded = () => {
         const db = req.result;
         if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'id' });
       };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
+      req.onsuccess = () => {
+        const db = req.result;
+        // Defensive self-heal: if an already-installed client somehow still
+        // ends up with a database missing the store (corrupted state,
+        // blocked upgrade, etc.), don't let it crash the app — drop the
+        // database so the *next* open starts clean, and fall back to
+        // localStorage for the rest of this session.
+        if (!db.objectStoreNames.contains(STORE)) {
+          db.close();
+          indexedDB.deleteDatabase(DB_NAME);
+          resolve(null);
+          return;
+        }
+        resolve(db);
+      };
+      req.onerror = () => resolve(null);
     });
   }
   return dbPromise;
