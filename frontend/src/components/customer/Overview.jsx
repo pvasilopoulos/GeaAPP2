@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '../../api.js';
+import { submitFollowUpCreate, submitFollowUpUpdate } from '../../lib/offlineQueue.js';
 import Icon from '../Icon.jsx';
 import { Avatar, StatusBadge, Skeleton, EmptyState } from '../ui.jsx';
 import TagsEditor from './TagsEditor.jsx';
@@ -85,7 +86,7 @@ export default function Overview({ customerId, data, onOpenTab, onEditCustomer }
   const createFollowUp = async (event) => {
     event.preventDefault();
     if (!followUpTitle.trim() || !followUpDue) return;
-    await api.createFollowUp({ customerId, branchId: followUpBranchId || undefined, title: followUpTitle, dueAt: new Date(followUpDue).toISOString() });
+    await submitFollowUpCreate({ customerId, branchId: followUpBranchId || undefined, title: followUpTitle, dueAt: new Date(followUpDue).toISOString() });
     setFollowUpTitle(''); setFollowUpDue(''); setFollowUpBranchId('');
     invalidateFollowUps();
   };
@@ -138,8 +139,8 @@ export default function Overview({ customerId, data, onOpenTab, onEditCustomer }
               <div className="search-row" key={f.id} style={{ padding: '8px 0' }}>
                 <Icon name="bell" size={15} style={{ color: f.computed_status === 'overdue' ? 'var(--red)' : f.computed_status === 'due_soon' ? 'var(--amber)' : 'var(--text-3)' }} />
                 <div style={{ flex: 1 }}><div style={{ fontWeight: 600 }}>{f.title}</div><div className="meta">{formatDateTime(f.due_at)}{f.branch_name ? ` · ${f.branch_name}` : ''}</div></div>
-                {canWrite && f.status === 'open' && <button className="btn btn-sm btn-ghost" title="Αναβολή 1 ώρα" onClick={async () => { await api.snoozeFollowUp(f.id, 60); invalidateFollowUps(); }}><Icon name="clock" size={14} /></button>}
-                {canWrite && <button className="btn btn-sm btn-ghost" onClick={async () => { await api.updateFollowUp(f.id, { status: 'completed' }); invalidateFollowUps(); }}><Icon name="check" size={14} /></button>}
+                {canWrite && f.status === 'open' && <button className="btn btn-sm btn-ghost" title="Αναβολή 1 ώρα" onClick={async () => { await submitFollowUpUpdate(f.id, null, { customerId, snoozeMinutes: 60 }); invalidateFollowUps(); }}><Icon name="clock" size={14} /></button>}
+                {canWrite && <button className="btn btn-sm btn-ghost" onClick={async () => { await submitFollowUpUpdate(f.id, { status: 'completed' }, { customerId }); invalidateFollowUps(); }}><Icon name="check" size={14} /></button>}
               </div>
             )) : <div className="muted" style={{ marginBottom: 10 }}>Δεν υπάρχουν προγραμματισμένες ενέργειες.</div>}
             {canWrite && <form onSubmit={createFollowUp} style={{ display: 'grid', gap: 7, marginTop: 8 }}>

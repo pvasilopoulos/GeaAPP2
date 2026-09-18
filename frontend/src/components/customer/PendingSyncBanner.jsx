@@ -2,24 +2,36 @@ import { useEffect, useState } from 'react';
 import Icon from '../Icon.jsx';
 import { subscribe, retryMutation, discardMutation } from '../../lib/offlineQueue.js';
 
-// Shows customer-creation submissions that are queued for background sync
-// (offline, or the request just failed to reach the server) directly above
-// the customer list, so the user can see their entry is safe and — if a
-// retry ever comes back as a definitive validation error — fix or discard it.
+function itemLabel(item) {
+  if (item.type === 'create_customer' || item.type === 'update_customer') {
+    const name = `${item.payload?.fields?.first_name || ''} ${item.payload?.fields?.last_name || ''}`.trim();
+    if (name) return name;
+    return item.type === 'update_customer' ? 'Ενημέρωση πελάτη' : 'Νέος πελάτης';
+  }
+  if (item.type === 'create_follow_up') return item.payload?.title || 'Νέα υπενθύμιση';
+  if (item.type === 'update_follow_up') return item.payload?.patch?.title || (item.payload?.snoozeMinutes != null ? 'Αναβολή υπενθύμισης' : 'Ενημέρωση υπενθύμισης');
+  if (item.type === 'create_note') return item.payload?.note?.title || 'Νέα σημείωση';
+  if (item.type === 'update_note') return item.payload?.note?.title || 'Ενημέρωση σημείωσης';
+  return 'Εκκρεμής ενέργεια';
+}
+
+// Shows queued writes (offline, or the request just failed to reach the
+// server) so the user can see they are safe and — if a retry ever comes
+// back as a definitive validation error — fix or discard them.
 export default function PendingSyncBanner() {
   const [items, setItems] = useState([]);
   useEffect(() => subscribe((snapshot) => {
-    setItems(snapshot.items.filter((i) => i.type === 'create_customer'));
+    setItems(snapshot.items);
   }), []);
   if (!items.length) return null;
   return (
     <div className="dup-box" style={{ background: 'var(--amber-soft)' }}>
-      <b>Εκκρεμεί συγχρονισμός ({items.length})</b>
+      <b>Εκκρεμείς συγχρονισμού ({items.length})</b>
       <div className="muted" style={{ margin: '4px 0 8px' }}>
-        Αυτοί οι πελάτες αποθηκεύτηκαν τοπικά και θα σταλούν αυτόματα μόλις υπάρξει σύνδεση.
+        Οι αλλαγές αποθηκεύτηκαν τοπικά και θα σταλούν αυτόματα μόλις υπάρξει σύνδεση.
       </div>
       {items.map((item) => {
-        const name = `${item.payload?.fields?.first_name || ''} ${item.payload?.fields?.last_name || ''}`.trim() || 'Νέος πελάτης';
+        const name = itemLabel(item);
         return (
           <div key={item.id} className="dup-row">
             <div>

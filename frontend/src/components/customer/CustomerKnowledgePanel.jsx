@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api.js';
+import { submitNoteCreate, submitNoteUpdate } from '../../lib/offlineQueue.js';
 import Icon from '../Icon.jsx';
 import { EmptyState, Skeleton } from '../ui.jsx';
 import { formatDateTime } from '../../lib/format.js';
@@ -42,7 +43,7 @@ export default function CustomerKnowledgePanel({ customerId, kind }) {
       refresh();
     } finally { setUploading(false); }
   };
-  const toggleArchive = async (note) => { await api.updateCustomerNote(customerId, note.id, { is_archived: note.is_archived ? 0 : 1 }); refresh(); };
+  const toggleArchive = async (note) => { await submitNoteUpdate(customerId, note.id, { is_archived: note.is_archived ? 0 : 1 }); refresh(); };
   return (
     <div className="knowledge-panel">
       <div className="knowledge-header">
@@ -81,7 +82,7 @@ function NoteEditor({ customerId, initial, existingTags, onClose, onSaved }) {
     setBusy(true);
     try {
       const payload = { title, category, is_pinned: pinned, body, body_html: bodyHtml, due_at: dueAt || null, tags: tags.split(',').map((t) => t.trim()).filter(Boolean) };
-      if (initial) await api.updateCustomerNote(customerId, initial.id, payload); else await api.createCustomerNote(customerId, payload);
+      if (initial) await submitNoteUpdate(customerId, initial.id, payload); else await submitNoteCreate(customerId, payload);
       onSaved();
     } finally { setBusy(false); }
   };

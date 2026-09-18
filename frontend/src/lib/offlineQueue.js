@@ -1,8 +1,7 @@
 // Generic offline-mutation queue: persists write requests that could not
 // reach the network so they can be retried automatically once connectivity
-// returns. Currently only customer creation is wired up (see the
-// `create_customer` handler at the bottom), but the storage/flush engine and
-// `registerHandler` API are generic so other mutations can reuse it later.
+// returns. Handlers at the bottom cover customer create/update, follow-ups,
+// and notes. The storage/flush engine and `registerHandler` API stay generic.
 import { api } from '../api.js';
 
 const DB_NAME = 'spacehub-offline';
@@ -277,10 +276,14 @@ export function initOfflineSync() {
   };
 }
 
-// -------------------------- customer creation ------------------------------
+// -------------------------- mutation handlers ------------------------------
+
+function idempotencyHeaders(item) {
+  return { headers: { 'Idempotency-Key': item.idempotencyKey } };
+}
 
 registerHandler('create_customer', async (item) => {
-  const res = await api.createCustomer(item.payload.fields, { headers: { 'Idempotency-Key': item.idempotencyKey } });
+  const res = await api.createCustomer(item.payload.fields, idempotencyHeaders(item));
   const customFields = item.payload.customFields;
   if (customFields && Object.keys(customFields).length) {
     // Best effort: the customer record itself is the part that must not be
@@ -291,6 +294,55 @@ registerHandler('create_customer', async (item) => {
   return res;
 });
 
+registerHandler('update_customer', async (item) => {
+  const res = await api.updateCustomer(item.payload.id, item.payload.fields, idempotencyHeaders(item));
+  const customFields = item.payload.customFields;
+  if (customFields && Object.keys(customFields).length) {
+    await api.saveCustomerCustomFields(item.payload.id, customFields).catch(() => {});
+  }
+  return res;
+});
+
+registerHandler('create_follow_up', async (item) => (
+  api.createFollowUp(item.payload, idempotencyHeaders(item))
+));
+
+registerHandler('update_follow_up', async (item) => {
+  if (item.payload.snoozeMinutes != null) {
+    return api.snoozeFollowUp(item.payload.id, item.payload.snoozeMinutes, idempotencyHeaders(item));
+  }
+  return api.updateFollowUp(item.payload.id, item.payload.patch, idempotencyHeaders(item));
+});
+
+registerHandler('create_note', async (item) => (
+  api.createCustomerNote(item.payload.customerId, item.payload.note, idempotencyHeaders(item))
+));
+
+registerHandler('update_note', async (item) => (
+  api.updateCustomerNote(item.payload.customerId, item.payload.noteId, item.payload.note, idempotencyHeaders(item))
+));
+
+/**
+ * Attempts a mutation online; on a genuine connectivity failure, queues it
+ * for later sync (reusing `idempotencyKey` so retries do not duplicate).
+ * Real validation/HTTP errors are rethrown.
+ */
+export async function submitOnlineOrQueue(type, payload, send, extra = {}) {
+  const idempotencyKey = makeIdempotencyKey();
+  try {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      throw new TypeError('offline: navigator.onLine is false');
+    }
+    const res = await send(idempotencyKey);
+    if (res && typeof res === 'object') return { ...res, pendingSync: false };
+    return { pendingSync: false };
+  } catch (err) {
+    if (!isNetworkFailure(err)) throw err;
+    const item = await enqueueMutation(type, payload, extra.meta || {}, idempotencyKey);
+    return { pendingSync: true, offlineId: item.id, ...extra.queued };
+  }
+}
+
 /**
  * Attempts to create a customer online; if that fails purely for
  * connectivity reasons, queues it for later sync and returns an optimistic
@@ -298,19 +350,57 @@ registerHandler('create_customer', async (item) => {
  * so the form can show them to the user as before.
  */
 export async function submitCustomerCreate(fields, customFields) {
-  const idempotencyKey = makeIdempotencyKey();
-  try {
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-      throw new TypeError('offline: navigator.onLine is false');
-    }
-    const res = await api.createCustomer(fields, { headers: { 'Idempotency-Key': idempotencyKey } });
-    return { ...res, pendingSync: false };
-  } catch (err) {
-    if (!isNetworkFailure(err)) throw err;
-    const item = await enqueueMutation('create_customer', { fields, customFields }, {}, idempotencyKey);
-    return {
-      id: null, code: null, pendingSync: true, offlineId: item.id,
-      full_name: `${fields.first_name || ''} ${fields.last_name || ''}`.trim(),
-    };
+  return submitOnlineOrQueue(
+    'create_customer',
+    { fields, customFields },
+    (key) => api.createCustomer(fields, { headers: { 'Idempotency-Key': key } }),
+    { queued: { id: null, code: null, full_name: `${fields.first_name || ''} ${fields.last_name || ''}`.trim() } },
+  );
+}
+
+export async function submitCustomerUpdate(id, fields, customFields) {
+  const result = await submitOnlineOrQueue(
+    'update_customer',
+    { id, fields, customFields },
+    (key) => api.updateCustomer(id, fields, { headers: { 'Idempotency-Key': key } }),
+    { meta: { customerId: id }, queued: { id } },
+  );
+  if (!result.pendingSync && customFields && Object.keys(customFields).length) {
+    await api.saveCustomerCustomFields(id, customFields).catch(() => {});
   }
+  return result;
+}
+
+export function submitFollowUpCreate(payload) {
+  return submitOnlineOrQueue('create_follow_up', payload, (key) => (
+    api.createFollowUp(payload, { headers: { 'Idempotency-Key': key } })
+  ), { meta: { customerId: payload.customerId } });
+}
+
+export function submitFollowUpUpdate(id, patch, { customerId, snoozeMinutes } = {}) {
+  const payload = snoozeMinutes != null ? { id, snoozeMinutes } : { id, patch };
+  return submitOnlineOrQueue('update_follow_up', payload, (key) => {
+    const opts = { headers: { 'Idempotency-Key': key } };
+    return snoozeMinutes != null ? api.snoozeFollowUp(id, snoozeMinutes, opts) : api.updateFollowUp(id, patch, opts);
+  }, { meta: { customerId } });
+}
+
+export function submitNoteCreate(customerId, note) {
+  return submitOnlineOrQueue('create_note', { customerId, note }, (key) => (
+    api.createCustomerNote(customerId, note, { headers: { 'Idempotency-Key': key } })
+  ), { meta: { customerId } });
+}
+
+export function submitNoteUpdate(customerId, noteId, note) {
+  return submitOnlineOrQueue('update_note', { customerId, noteId, note }, (key) => (
+    api.updateCustomerNote(customerId, noteId, note, { headers: { 'Idempotency-Key': key } })
+  ), { meta: { customerId } });
+}
+
+/** Query keys to refresh after a queued mutation has synced. */
+export function queryKeysForMutation(type) {
+  if (type === 'create_customer' || type === 'update_customer') return ['customers', 'customer', 'meta', 'stats'];
+  if (type === 'create_follow_up' || type === 'update_follow_up') return ['c-follow-ups', 'calendar', 'stats', 'customer'];
+  if (type === 'create_note' || type === 'update_note') return ['knowledge'];
+  return [];
 }

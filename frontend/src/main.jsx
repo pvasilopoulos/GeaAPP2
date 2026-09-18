@@ -7,7 +7,7 @@ import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import { useAuth } from './store/auth.js';
 import { captureInstallPrompt, installReloadGuard, registerServiceWorker } from './lib/pwa.js';
-import { initOfflineSync } from './lib/offlineQueue.js';
+import { initOfflineSync, QUEUE_EVENT, queryKeysForMutation } from './lib/offlineQueue.js';
 import './styles.css';
 
 captureInstallPrompt();
@@ -18,6 +18,16 @@ initOfflineSync();
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30000, refetchOnWindowFocus: false, retry: 1 } },
 });
+
+if (typeof window !== 'undefined') {
+  window.addEventListener(QUEUE_EVENT, (e) => {
+    const type = e.detail?.synced?.item?.type;
+    if (!type) return;
+    for (const key of queryKeysForMutation(type)) {
+      queryClient.invalidateQueries({ queryKey: [key] });
+    }
+  });
+}
 
 function Splash() {
   return <div className="auth-wrap"><span className="spinner" style={{ width: 28, height: 28 }} /></div>;

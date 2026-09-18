@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { isNetworkFailure, buildMutation, makeIdempotencyKey } from './offlineQueue.js';
+import { isNetworkFailure, buildMutation, makeIdempotencyKey, queryKeysForMutation } from './offlineQueue.js';
 
 // navigator is undefined in Node, so only the TypeError branch is exercised here.
 assert.equal(isNetworkFailure(new TypeError('Failed to fetch')), true);
@@ -24,5 +24,18 @@ assert.notEqual(item.id, item.idempotencyKey, 'record id and idempotency key are
 
 const reused = buildMutation('create_customer', payload, {}, 'fixed-key');
 assert.equal(reused.idempotencyKey, 'fixed-key', 'an explicit idempotency key is preserved (e.g. reused from a failed online attempt)');
+
+for (const type of ['update_customer', 'create_follow_up', 'update_follow_up', 'create_note', 'update_note']) {
+  const mut = buildMutation(type, { id: 1 }, { customerId: 2 });
+  assert.equal(mut.type, type);
+  assert.equal(mut.status, 'pending');
+  assert.ok(mut.idempotencyKey);
+}
+
+assert.ok(queryKeysForMutation('update_customer').includes('customers'));
+assert.ok(queryKeysForMutation('create_follow_up').includes('c-follow-ups'));
+assert.ok(queryKeysForMutation('update_follow_up').includes('calendar'));
+assert.ok(queryKeysForMutation('create_note').includes('knowledge'));
+assert.deepEqual(queryKeysForMutation('unknown'), []);
 
 console.log('offlineQueue tests passed');

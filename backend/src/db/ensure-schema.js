@@ -224,6 +224,23 @@ export async function ensureSchema() {
   }
   await addColumn('customer_saved_views', 'visibility', "ENUM('personal', 'shared') NOT NULL DEFAULT 'personal'");
 
+  if (!(await tableExists('idempotency_keys'))) {
+    await query(`CREATE TABLE idempotency_keys (
+      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      tenant_id BIGINT NOT NULL, user_id BIGINT NOT NULL,
+      idempotency_key VARCHAR(100) NOT NULL,
+      method VARCHAR(10) NOT NULL, path VARCHAR(255) NOT NULL,
+      request_hash CHAR(64) NOT NULL, status_code INT NOT NULL,
+      response_json JSON NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_idempotency_tenant_user_key (tenant_id, user_id, idempotency_key),
+      KEY idx_idempotency_created (created_at),
+      CONSTRAINT fk_idempotency_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      CONSTRAINT fk_idempotency_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    console.log('[schema] created idempotency_keys');
+  }
+
   const admins = await query('SELECT COUNT(*) AS c FROM users WHERE is_platform_admin = 1');
   if (!Number(admins.rows[0].c)) {
     await query(
