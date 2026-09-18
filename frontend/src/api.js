@@ -25,11 +25,12 @@ async function handle(res) {
 async function get(path, { signal } = {}) {
   return handle(await fetch(`/api${path}`, { signal, headers: authHeaders() }));
 }
-async function send(method, path, body) {
+async function send(method, path, body, { headers, signal } = {}) {
   return handle(await fetch(`/api${path}`, {
     method,
-    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    headers: authHeaders({ 'Content-Type': 'application/json', ...headers }),
     body: body ? JSON.stringify(body) : undefined,
+    signal,
   }));
 }
 
@@ -118,7 +119,7 @@ export const api = {
   countCustomers: (params, opts) => get(`/customers/count${qs(params)}`, opts),
   globalSearch: (q, opts) => get(`/search/global${qs({ q })}`, opts),
   customer: (id, opts) => get(`/customers/${id}`, opts),
-  createCustomer: (payload) => send('POST', '/customers', payload),
+  createCustomer: (payload, opts) => send('POST', '/customers', payload, opts),
   updateCustomer: (id, payload) => send('PATCH', `/customers/${id}`, payload),
   deleteCustomer: (id) => send('DELETE', `/customers/${id}`),
   createBranch: (payload) => send('POST', '/branches', payload),

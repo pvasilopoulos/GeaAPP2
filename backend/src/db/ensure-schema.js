@@ -68,6 +68,12 @@ export async function ensureSchema() {
   await addColumn('customers', 'next_action_followup_id', 'BIGINT NULL');
   await addIndex('customers', 'idx_customers_next_action_followup', 'next_action_followup_id');
   await addColumn('customers', 'erp_id', 'VARCHAR(160) NULL');
+  // Idempotency key for offline-created customers: a retried submission with
+  // the same key returns the existing record instead of duplicating it.
+  // NULL values are excluded from MySQL unique-index enforcement, so requests
+  // without a key (the pre-existing behaviour) are unaffected.
+  await addColumn('customers', 'client_request_id', 'VARCHAR(100) NULL');
+  await addUniqueIndex('customers', 'uq_customers_tenant_client_request', 'tenant_id, client_request_id');
   await addColumn('branches', 'erp_id', 'VARCHAR(160) NULL');
   await addColumn('branches', 'customer_erp_id', 'VARCHAR(160) NULL');
   await addColumn('spaces', 'erp_id', 'VARCHAR(160) NULL');

@@ -4,6 +4,7 @@ import Icon from './components/Icon.jsx';
 import GlobalSearch from './components/GlobalSearch.jsx';
 import TabBar from './components/TabBar.jsx';
 import { Avatar } from './components/ui.jsx';
+import OfflineSyncStatus from './components/OfflineSyncStatus.jsx';
 import { useTabs } from './store/tabs.js';
 import { useAuth } from './store/auth.js';
 import { PERMS } from './lib/perms.js';
@@ -197,6 +198,7 @@ export default function App() {
           </button>
           <GlobalSearch />
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <OfflineSyncStatus />
             <AppRefresh />
             <button className="btn btn-icon btn-ghost" aria-label="Ειδοποιήσεις"><Icon name="bell" /></button>
             <UserMenu />
