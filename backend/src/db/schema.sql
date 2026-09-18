@@ -141,6 +141,7 @@ CREATE TABLE users (
   is_active     TINYINT(1) NOT NULL DEFAULT 1,
   last_login_at DATETIME NULL,
   is_platform_admin TINYINT(1) NOT NULL DEFAULT 0,
+  menu_preferences JSON NULL,       -- personal nav-menu override (NULL = use tenant default)
   created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY idx_users_tenant (tenant_id),
   CONSTRAINT fk_users_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
