@@ -418,26 +418,26 @@ export default function Customers({ onOpenCustomer }) {
           <input value={input} placeholder="Όνομα, ΑΦΜ, email, διεύθυνση ή τηλέφωνο…" onChange={(e) => setInput(e.target.value)} />
           {isFetching && <span className="spinner" />}
         </div>
-        <button className={`filter-chip${chips.length ? ' active' : ''}`} onClick={() => setShowFilters(true)}>
-          <Icon name="filter" size={15} /> Φίλτρα {chips.length > 0 && <span className="pill" style={{ background: 'var(--accent)', color: '#fff', border: 'none' }}>{chips.length}</span>}
+        <button className={`filter-chip${chips.length ? ' active' : ''}`} title="Φίλτρα" onClick={() => setShowFilters(true)}>
+          <Icon name="filter" size={15} /> {chips.length > 0 && <span className="pill" style={{ background: 'var(--accent)', color: '#fff', border: 'none' }}>{chips.length}</span>}
         </button>
-        <div className="filter-chip sort-control">
+        <div className="filter-chip sort-control" title="Ταξινόμηση">
           <Icon name="sort" size={15} />
-          <select value={sort} onChange={(e) => setSort(e.target.value)}>
-            {SORTS.map((s) => <option key={s.value} value={s.value}>Ταξ.: {s.label}</option>)}
+          <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Ταξινόμηση">
+            {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
           <button type="button" className="sort-direction" title={sortDir === 'ASC' ? 'Αύξουσα σειρά' : 'Φθίνουσα σειρά'} onClick={() => setSortDir((direction) => direction === 'ASC' ? 'DESC' : 'ASC')}>
             <Icon name="chevronDown" size={13} style={{ transform: sortDir === 'ASC' ? 'rotate(180deg)' : undefined }} />
           </button>
         </div>
-        <div className="filter-chip customer-view-control">
+        <div className="filter-chip customer-view-control" title="Αποθηκευμένη προβολή">
           <Icon name="eye" size={15} />
-          <select value={activeView?.id || ''} onChange={(e) => applyView(views.find((view) => String(view.id) === e.target.value))}>
-            <option value="">Προβολή: Προσωρινή</option>
+          <select value={activeView?.id || ''} onChange={(e) => applyView(views.find((view) => String(view.id) === e.target.value))} aria-label="Αποθηκευμένη προβολή">
+            <option value="">Προσωρινή</option>
             {views.map((view) => <option key={view.id} value={view.id}>{view.visibility === 'shared' ? 'Κοινή · ' : ''}{view.name}</option>)}
           </select>
         </div>
-        <div className="filter-chip customer-view-scope">
+        <div className="filter-chip customer-view-scope" title="Εμβέλεια αποθήκευσης">
           <Icon name="users" size={15} />
           <select value={viewVisibility} onChange={(e) => setViewVisibility(e.target.value)} aria-label="Εμβέλεια αποθήκευσης">
             <option value="personal">Προσωπική</option>
@@ -445,7 +445,7 @@ export default function Customers({ onOpenCustomer }) {
           </select>
         </div>
         <div className="customer-columns-anchor" ref={columnsMenuRef}>
-          <button className={`btn${showColumns ? ' is-active' : ''}`} onClick={() => setShowColumns((open) => !open)}><Icon name="grid" size={15} /> Στήλες <span className="customer-columns-count">{visibleColumns.length}</span></button>
+          <button className={`btn${showColumns ? ' is-active' : ''}`} title="Στήλες" onClick={() => setShowColumns((open) => !open)}><Icon name="grid" size={15} /> <span className="customer-columns-count">{visibleColumns.length}</span></button>
           {showColumns && (
           <div className="customer-columns-menu" role="dialog" aria-label="Επιλογή στηλών">
             <div className="customer-columns-menu-head">
@@ -497,7 +497,7 @@ export default function Customers({ onOpenCustomer }) {
           </div>
           )}
         </div>
-        <button className="btn btn-accent" onClick={saveView}><Icon name="save" size={15} /> {activeView?.is_owner ? 'Αποθήκευση' : 'Αποθήκευση ως νέα'}</button>
+        <button className="btn btn-accent" title={activeView?.is_owner ? 'Αποθήκευση' : 'Αποθήκευση ως νέα'} onClick={saveView}><Icon name="save" size={15} /></button>
         {activeView?.is_owner && <button className="btn btn-sm" title="Μετονομασία προβολής" onClick={renameView}><Icon name="edit" size={14} /></button>}
         {activeView && <button className="btn btn-sm" title="Διπλότυπο" onClick={duplicateView}><Icon name="copy" size={14} /></button>}
         {activeView?.is_owner && <button className={`btn btn-sm${activeView.is_default ? ' btn-accent' : ''}`} title={activeView.is_default ? 'Κατάργηση προεπιλογής' : 'Ορισμός ως προεπιλογή'} onClick={setDefaultView}><Icon name="star" size={14} /></button>}
