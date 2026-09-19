@@ -48,8 +48,11 @@ self.addEventListener('push', (event) => {
     // must be a transparent, monochrome (white-on-transparent) silhouette —
     // Android renders it from the alpha channel only, so reusing the opaque
     // colored icon here made the status-bar/collapsed icon show up blank.
-    icon: '/app-icons/icon-192.png',
-    badge: '/app-icons/icon-badge.png',
+    // The backend sends tenant-branded URLs (/api/branding/:tenantId/push-icon
+    // and .../push-badge); these static paths are only a fallback for older
+    // cached payloads that predate that change.
+    icon: data.icon || '/app-icons/icon-192.png',
+    badge: data.badge || '/app-icons/icon-badge.png',
     data: { target: data.target || null, notificationId: data.notificationId || null },
   };
   event.waitUntil(self.registration.showNotification(title, options));

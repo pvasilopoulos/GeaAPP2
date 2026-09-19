@@ -43,4 +43,18 @@ assert(Array.isArray(mergeTenantSettings({}).menu.sidebar.order), 'default menu 
 assert(mergeTenantSettings({}).menu.mobile_footer.items.length > 0, 'default menu mobile footer populated');
 assert(mergeTenantSettings({ menu: { sidebar: { hidden: ['quotes'] } } }).menu.sidebar.hidden.includes('quotes'), 'custom menu hidden respected via mergeTenantSettings');
 
+// Branding: logos/icons stored as small data URIs, colors as hex, everything
+// else falls back to the default (empty → default asset, default colors).
+const PNG_DATA_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+assert(mergeTenantSettings({}).branding.logo_url === '', 'default logo empty');
+assert(mergeTenantSettings({}).branding.theme_color === '#4f46e5', 'default theme color');
+assert(mergeTenantSettings({ branding: { logo_url: PNG_DATA_URI } }).branding.logo_url === PNG_DATA_URI, 'valid data-uri logo kept');
+assert(mergeTenantSettings({ branding: { logo_url: 'https://evil.example/x.png' } }).branding.logo_url === '', 'non data-uri logo rejected');
+assert(mergeTenantSettings({ branding: { logo_url: 'data:image/png;base64,' + 'A'.repeat(400000) } }).branding.logo_url === '', 'oversized logo rejected');
+assert(mergeTenantSettings({ branding: { theme_color: '#ff0000' } }).branding.theme_color === '#ff0000', 'valid theme color kept');
+assert(mergeTenantSettings({ branding: { theme_color: 'not-a-color' } }).branding.theme_color === '#4f46e5', 'invalid theme color falls back');
+const brandingPatch = applyAppSettingsPatch({ branding: { logo_url: PNG_DATA_URI, theme_color: '#111111' } }, { branding: { theme_color: '#222222' } });
+assert(brandingPatch.branding.logo_url === PNG_DATA_URI, 'partial branding patch keeps other fields');
+assert(brandingPatch.branding.theme_color === '#222222', 'partial branding patch updates given field');
+
 console.log('tenantSettings slugify: ok');

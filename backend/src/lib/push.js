@@ -75,7 +75,16 @@ export async function pushToUser({ tenantId, userId, payload }, queryFn = dbQuer
     [tenantId, userId],
   );
   if (!rows.length) return { sent: 0 };
-  const body = JSON.stringify(payload);
+  // icon/badge are resolved by the browser against the SW's own origin, so a
+  // root-relative path is enough — no need to know the public base URL here.
+  // The branding route itself falls back to the shipped default asset when a
+  // tenant hasn't customized these, so this is always safe to send.
+  const enrichedPayload = {
+    ...payload,
+    icon: payload.icon || `/api/branding/${tenantId}/push-icon`,
+    badge: payload.badge || `/api/branding/${tenantId}/push-badge`,
+  };
+  const body = JSON.stringify(enrichedPayload);
   let sent = 0;
   await Promise.all(rows.map(async (row) => {
     try {

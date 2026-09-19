@@ -33,6 +33,7 @@ import { calendarRouter } from './routes/calendar.js';
 import { notificationsRouter } from './routes/notifications.js';
 import { auditRouter } from './routes/audit.js';
 import { pushRouter, pushPublicRouter } from './routes/push.js';
+import { brandingPublicRouter } from './routes/branding.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -59,6 +60,9 @@ app.get('/api/health', async (_req, res) => {
 app.use('/api/auth', authRouter);
 // Public VAPID key so the SW can subscribe before/without an active session check.
 app.use('/api/push', pushPublicRouter);
+// Public per-tenant logos/icons/manifest — consumed by <link> tags, the PWA
+// manifest and the service worker's push renderer, none of which send a JWT.
+app.use('/api/branding', brandingPublicRouter);
 
 // Everything below requires a valid token.
 app.use('/api', authenticate);

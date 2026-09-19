@@ -140,6 +140,7 @@ export default function App() {
     select: (d) => d?.settings,
   });
   const appName = appSettings?.app_name || DEFAULT_APP_NAME;
+  const branding = appSettings?.branding;
 
   // Tenant-wide default menu + the current user's personal override. Both are
   // optional (untouched tenants/users get `undefined`, which resolves to the
@@ -161,6 +162,33 @@ export default function App() {
     document.title = appSettings?.browser_tab_title || DEFAULT_BROWSER_TAB_TITLE;
   }, [appSettings?.browser_tab_title]);
 
+  // Swap favicon/apple-touch-icon/manifest/theme-color to the tenant's
+  // branded assets once we know the tenant (post-login only — there is no
+  // tenant context for the pre-auth static HTML). Falls back to the shipped
+  // defaults automatically via routes/branding.js when a tenant hasn't
+  // customized a given slot.
+  useEffect(() => {
+    if (!user?.tenantId) return;
+    const base = `/api/branding/${user.tenantId}`;
+    const setLink = (rel, href) => {
+      let link = document.querySelector(`link[rel="${rel}"]`);
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = rel;
+        document.head.appendChild(link);
+      }
+      link.href = href;
+    };
+    setLink('icon', `${base}/favicon`);
+    setLink('apple-touch-icon', `${base}/apple-touch`);
+    setLink('manifest', `${base}/manifest.webmanifest`);
+    const themeColor = branding?.theme_color;
+    if (themeColor) {
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.content = themeColor;
+    }
+  }, [user?.tenantId, branding?.theme_color]);
+
   const { items: sidebarItems } = resolveSidebarMenu({ tenantMenu, userMenu, hasPerm, roleKey: user?.roleKey });
   const sidebarGroups = resolveSidebarGroups({ tenantMenu, items: sidebarItems });
   const mobileFooterItems = resolveMobileFooterMenu({ tenantMenu, userMenu, hasPerm, roleKey: user?.roleKey });
@@ -177,7 +205,9 @@ export default function App() {
       <div className="nav-backdrop" onClick={() => setNavOpen(false)} />
       <nav className="sidebar">
         <div className="brand">
-          <span className="logo"><Icon name="layers" size={17} /></span>
+          <span className="logo">
+            {branding?.logo_url ? <img src={branding.logo_url} alt="" /> : <Icon name="layers" size={17} />}
+          </span>
           {appName}
         </div>
         <div className="nav-group">

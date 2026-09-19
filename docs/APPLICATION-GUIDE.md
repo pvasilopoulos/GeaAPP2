@@ -136,6 +136,30 @@ auto-generated από το όνομα μέσω `slugify()` με αφαίρεση
   πυκνή ή «αναπαυτική» προβολή λίστας) και ρυθμίσεις καρτέλας υποκαταστήματος (ώρες/χάρτης/KPI
   αναπτυγμένα ή όχι).
 
+**Λογότυπα &amp; εικονίδια (`branding`)** — παραμετρικό branding εικόνων ανά tenant, χωρίς νέα
+υποδομή upload: κάθε εικόνα αποθηκεύεται ως `data:image/...;base64,...` μέσα στο ίδιο
+`tenants.settings` JSON (`sanitizeBranding()` στο `tenantSettings.js` απορρίπτει μη-εικόνες και
+οτιδήποτε ξεπερνά ~260KB, γυρνώντας το πεδίο στο κενό/προεπιλογή). Πεδία: `logo_url` (πλαϊνή
+στήλη), `favicon_url`, `apple_touch_icon_url` (iOS), `pwa_icon_192`/`pwa_icon_512`, `push_icon_url`/
+`push_badge_url` (ειδοποιήσεις), και `theme_color`/`background_color` (hex).
+  - Το **λογότυπο** εφαρμόζεται αμέσως στην πλαϊνή στήλη (`App.jsx`, `<img>` αντί για το
+    προεπιλεγμένο εικονίδιο) μόλις φορτώσουν οι ρυθμίσεις — δεν χρειάζεται reload.
+  - Το **favicon**, το **apple-touch-icon** και το **PWA manifest** δεν μπορούν να είναι πραγματικά
+    per-tenant στο στατικό `index.html`/`manifest.webmanifest` (δεν υπάρχει tenant context πριν το
+    login — η αναγνώριση tenant γίνεται αποκλειστικά μέσω JWT). Αντ' αυτού, μετά το login το
+    `App.jsx` αλλάζει δυναμικά τα `<link rel="icon">`, `<link rel="apple-touch-icon">` και
+    `<link rel="manifest">` ώστε να δείχνουν σε `GET /api/branding/:tenantId/<favicon|apple-touch|
+    manifest.webmanifest>` (νέο **public** route, `routes/branding.js`, μη αυθεντικοποιημένο επειδή
+    το `tenantId` δεν είναι μυστικό και τα δεδομένα είναι μόνο εικόνες/χρώματα). Ισχύει από την
+    επόμενη σύνδεση/ανανέωση καρτέλας.
+  - Κάθε εικόνα σερβίρεται στο δικό της static URL (`/api/branding/:tenantId/<field>`): αν ο
+    tenant δεν έχει ορίσει custom εικόνα, γίνεται `302 redirect` στο προεπιλεγμένο asset
+    (`public/app-icons/*`), άρα δεν σπάει ποτέ η εμφάνιση.
+  - Οι ειδοποιήσεις **push** παίρνουν αυτόματα `icon`/`badge` = αυτά τα ίδια public URLs μέσα από
+    το `pushToUser()` (`lib/push.js`) — καμία αλλαγή δεν χρειάζεται ανά σημείο αποστολής
+    (`/push/test`, broadcast, in-app ειδοποιήσεις). Το `public/sw.js` διαβάζει `data.icon`/
+    `data.badge` από το payload, με τα παλιά στατικά path ως fallback.
+
 ### 3.3 Επικοινωνίες / Messaging (`MessagingPanel.jsx`) — **Απαιτεί ρύθμιση**
 `GET/PATCH /api/settings/messaging` (δικαίωμα `settings.manage`), `GET /api/settings/messaging/channels`
 (κατάσταση καναλιών, ανοιχτό σε `customers.read`). Τέσσερα κανάλια, κάθε ένα ενεργό/ανενεργό +

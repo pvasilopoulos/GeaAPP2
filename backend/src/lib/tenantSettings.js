@@ -6,8 +6,19 @@ export const APP_SETTING_KEYS = [
   'default_country', 'date_format', 'week_starts_on',
   'default_customer_status', 'require_email', 'strict_duplicates',
   'voice_lang', 'allow_vip', 'map_provider', 'view_preferences',
-  'quote_api', 'quote_push_api', 'app_name', 'browser_tab_title',
+  'quote_api', 'quote_push_api', 'app_name', 'browser_tab_title', 'branding',
 ];
+
+// Data-URI images accepted for branding fields (logo/favicon/icons/push
+// icon+badge). Kept generous but bounded so a tenant can't bloat the
+// `tenants.settings` JSON column with huge uploads — ~260KB decoded per image.
+const BRANDING_IMAGE_MAX_LENGTH = 350000;
+const BRANDING_IMAGE_FIELDS = [
+  'logo_url', 'favicon_url', 'apple_touch_icon_url',
+  'pwa_icon_192', 'pwa_icon_512', 'push_icon_url', 'push_badge_url',
+];
+const DATA_URI_IMAGE_RE = /^data:image\/(png|jpeg|jpg|webp|svg\+xml|x-icon);base64,[A-Za-z0-9+/]+=*$/;
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{3,8}$/;
 
 export const MAP_PROVIDER_IDS = ['google', 'osm', 'apple', 'bing'];
 const CUSTOMER_ROW_HEIGHT_MIN = 44;
@@ -28,6 +39,23 @@ export const DEFAULT_TENANT_SETTINGS = {
   // App-wide branding text (distinct from the tenant/organization name in `tenants.name`).
   app_name: 'SpaceHub',
   browser_tab_title: 'SpaceHub — Διαχείριση Πελατών',
+  // Per-tenant logos/icons. Images are stored as data URIs (like
+  // google_maps_api_key, no upload/file-storage infra needed) and served at
+  // stable, unauthenticated URLs by routes/branding.js — that route falls
+  // back to the shipped defaults in public/app-icons when a field is empty,
+  // so the sidebar, favicon, PWA manifest and Web Push icon/badge all degrade
+  // gracefully for tenants that haven't customized anything.
+  branding: {
+    logo_url: '',
+    favicon_url: '',
+    apple_touch_icon_url: '',
+    pwa_icon_192: '',
+    pwa_icon_512: '',
+    push_icon_url: '',
+    push_badge_url: '',
+    theme_color: '#4f46e5',
+    background_color: '#f6f7f9',
+  },
   quote_api: {
     enabled: true,
     url: '',
@@ -149,6 +177,32 @@ function sanitizeBrandingText(value, fallback, maxLength) {
   return trimmed ? trimmed.slice(0, maxLength) : fallback;
 }
 
+function sanitizeBrandingImage(value) {
+  if (!value) return '';
+  const trimmed = String(value).trim();
+  if (!trimmed || trimmed.length > BRANDING_IMAGE_MAX_LENGTH) return '';
+  return DATA_URI_IMAGE_RE.test(trimmed) ? trimmed : '';
+}
+
+function sanitizeBrandingColor(value, fallback) {
+  if (value == null) return fallback;
+  const trimmed = String(value).trim();
+  return HEX_COLOR_RE.test(trimmed) ? trimmed : fallback;
+}
+
+// Validates/clamps a saved `branding` object: unknown or malformed image
+// values (not a small `data:image/...;base64,...` string) are dropped back to
+// empty (→ default asset), invalid colors fall back to the tenant's current
+// theme/background color.
+export function sanitizeBranding(raw, base = DEFAULT_TENANT_SETTINGS.branding) {
+  const src = raw && typeof raw === 'object' ? raw : {};
+  const out = {};
+  for (const field of BRANDING_IMAGE_FIELDS) out[field] = sanitizeBrandingImage(src[field]);
+  out.theme_color = sanitizeBrandingColor(src.theme_color, base.theme_color);
+  out.background_color = sanitizeBrandingColor(src.background_color, base.background_color);
+  return out;
+}
+
 export function mergeTenantSettings(raw) {
   const parsed = parseJson(raw, {}) || {};
   const map_provider = MAP_PROVIDER_IDS.includes(parsed.map_provider) ? parsed.map_provider : DEFAULT_TENANT_SETTINGS.map_provider;
@@ -184,6 +238,7 @@ export function mergeTenantSettings(raw) {
     menu: sanitizeMenuConfig(parsed.menu),
     quote_api: mergeErpConfig(DEFAULT_TENANT_SETTINGS.quote_api, parsed.quote_api),
     quote_push_api: mergeErpConfig(DEFAULT_TENANT_SETTINGS.quote_push_api, parsed.quote_push_api),
+    branding: sanitizeBranding(parsed.branding),
   };
 }
 
@@ -226,7 +281,9 @@ export function applyAppSettingsPatch(current, body) {
         },
         branch_detail: { ...merged.view_preferences.branch_detail, ...(src[k]?.branch_detail || {}) },
       }
-      : src[k];
+      : k === 'branding'
+        ? { ...merged.branding, ...(src[k] || {}) }
+        : src[k];
   }
   const next = mergeTenantSettings({ ...merged, ...patch, messaging: merged.messaging });
   const incomingKey = src.google_maps_api_key;
