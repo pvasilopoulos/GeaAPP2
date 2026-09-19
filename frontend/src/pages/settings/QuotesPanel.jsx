@@ -5,9 +5,16 @@ import { api } from '../../api.js';
 
 const DEFAULT = {
   url: '', method: 'POST',
-  body_template: '{"customerId":"{{customerId}}","branchId":"{{branchId}}","referenceStartYear":"{{referenceStartYear}}","referenceEndYear":"{{referenceEndYear}}","paymentDueDate":"{{paymentDueDate}}"}',
+  body_template: '{"customerId":"{{customerId}}","customerErpId":"{{customerErpId}}","customerCode":"{{customerCode}}","customerName":"{{customerName}}","customerCompany":"{{customerCompany}}","customerTaxId":"{{customerTaxId}}","customerEmail":"{{customerEmail}}","customerPhone":"{{customerPhone}}","branchId":"{{branchId}}","branchErpId":"{{branchErpId}}","branchCode":"{{branchCode}}","branchName":"{{branchName}}","branchCity":"{{branchCity}}","branchAddress":"{{branchAddress}}","series":"{{series}}","quoteNumber":"{{quoteNumber}}","quoteDate":"{{quoteDate}}","validUntil":"{{validUntil}}","paymentTerms":"{{paymentTerms}}","sellerId":"{{sellerId}}","referenceStartYear":"{{referenceStartYear}}","referenceEndYear":"{{referenceEndYear}}","paymentDueDate":"{{paymentDueDate}}"}',
   headers: '{}', response_path: 'data.lines', response_encoding: 'auto',
 };
+
+const RESOLVE_LINES_FIELDS = [
+  'customerId', 'customerErpId', 'customerCode', 'customerName', 'customerCompany', 'customerTaxId', 'customerEmail', 'customerPhone',
+  'branchId', 'branchErpId', 'branchCode', 'branchName', 'branchCity', 'branchAddress',
+  'series', 'quoteNumber', 'quoteDate', 'validUntil', 'paymentTerms', 'sellerId',
+  'referenceStartYear', 'referenceEndYear', 'paymentDueDate',
+];
 
 const PUSH_DEFAULT = { url: '', method: 'POST', headers: '{}', body_template: '{}', response_id_path: 'id' };
 
@@ -55,7 +62,7 @@ export default function QuotesPanel() {
     <section className="customers-settings-card"><div className="customers-settings-card-head"><div><h3>Endpoint γραμμών προσφοράς</h3><p>Οι μεταβλητές στο body αντικαθίστανται με τα στοιχεία της προσφοράς.</p></div><Icon name="refresh" size={18} /></div>
       <div className="customers-settings-grid"><div className="field-group" style={{ gridColumn: '1 / -1' }}><label>URL endpoint</label><input className="settings-control" value={value.url} onChange={update('url')} placeholder="https://erp.example.gr/api/quotes/lines" /></div><div className="field-group"><label>HTTP method</label><select className="settings-control" value={value.method} onChange={update('method')}><option>POST</option><option>GET</option></select></div><div className="field-group"><label>JSON path γραμμών</label><input className="settings-control" value={value.response_path} onChange={update('response_path')} placeholder="data.lines" /></div><div className="field-group"><label>Encoding response</label><select className="settings-control" value={value.response_encoding} onChange={update('response_encoding')}><option value="auto">Αυτόματο</option><option value="utf8">UTF-8</option><option value="windows-1253">Windows-1253 / Ελληνικά ERP</option></select></div></div>
       <div className="customers-settings-grid"><div className="field-group"><label>Headers JSON</label><textarea className="settings-control settings-code" rows="6" value={value.headers} onChange={update('headers')} /></div><div className="field-group"><label>Body template JSON</label><textarea className="settings-control settings-code" rows="6" value={value.body_template} onChange={update('body_template')} /></div></div>
-      <div className="muted" style={{ marginTop: 12 }}>Διαθέσιμες μεταβλητές: <code>{'{{customerId}}'}</code>, <code>{'{{branchId}}'}</code>, <code>{'{{referenceStartYear}}'}</code>, <code>{'{{referenceEndYear}}'}</code>, <code>{'{{paymentDueDate}}'}</code>.</div>
+      <div className="muted" style={{ marginTop: 12 }}>Διαθέσιμες μεταβλητές: {RESOLVE_LINES_FIELDS.map((field) => <code key={field} style={{ marginRight: 6 }}>{`{{${field}}}`}</code>)}</div>
     </section>
     <section className="customers-settings-card"><div className="customers-settings-card-head"><div><h3>Αποστολή προσφοράς στο ERP</h3><p>Όταν πατάς «Αποστολή στο ERP» σε μια προσφορά, στέλνεται το πλήρες header + όλες οι γραμμές με βάση αυτό το template.</p></div><Icon name="send" size={18} /></div>
       <div className="customers-settings-grid"><div className="field-group" style={{ gridColumn: '1 / -1' }}><label>URL endpoint <em>Κενό = δεν επιτρέπεται αποστολή</em></label><input className="settings-control" value={pushValue.url} onChange={updatePush('url')} placeholder="https://erp.example.gr/api/quotes" /></div><div className="field-group"><label>HTTP method</label><select className="settings-control" value={pushValue.method} onChange={updatePush('method')}><option>POST</option><option>PUT</option><option>PATCH</option></select></div><div className="field-group"><label>JSON path για το ERP ID απάντησης</label><input className="settings-control" value={pushValue.response_id_path} onChange={updatePush('response_id_path')} placeholder="id" /></div></div>

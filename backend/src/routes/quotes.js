@@ -72,12 +72,32 @@ quotesRouter.get('/:id', async (req, res, next) => {
 
 quotesRouter.post('/resolve-lines', authorize(PERMISSIONS.QUOTES_FETCH_LINES), async (req, res, next) => {
   try {
-    const { customerId, branchId, referenceStartYear, referenceEndYear, paymentDueDate } = req.body || {};
+    const {
+      customerId, branchId, referenceStartYear, referenceEndYear, paymentDueDate,
+      series, quoteNumber, quoteDate, validUntil, paymentTerms, sellerId,
+    } = req.body || {};
     if (!customerId) return res.status(400).json({ error: 'Επιλέξτε πελάτη' });
     const settings = (await query('SELECT settings FROM tenants WHERE id = ?', [req.user.tenantId])).rows[0]?.settings;
     const config = mergeTenantSettings(settings).quote_api;
     if (!config?.url) return res.status(422).json({ error: 'Δεν έχει ρυθμιστεί URL στο Ρυθμίσεις → Προσφορές / ERP API' });
-    const values = { customerId, branchId: branchId || null, referenceStartYear: referenceStartYear || null, referenceEndYear: referenceEndYear || null, paymentDueDate: paymentDueDate || null };
+    const customer = (await query(
+      'SELECT id, erp_id, code, full_name, company, tax_id, email, phone FROM customers WHERE id = ? AND tenant_id = ?',
+      [customerId, req.user.tenantId])).rows[0];
+    if (!customer) return res.status(404).json({ error: 'Ο πελάτης δεν βρέθηκε' });
+    const branch = branchId
+      ? (await query('SELECT id, erp_id, code, name, city, address_line FROM branches WHERE id = ? AND tenant_id = ?', [branchId, req.user.tenantId])).rows[0]
+      : null;
+    // Full set of variables available to {{placeholders}} in quote_api.body_template.
+    const values = {
+      customerId, customerErpId: customer.erp_id || null, customerCode: customer.code || null,
+      customerName: customer.full_name || null, customerCompany: customer.company || null,
+      customerTaxId: customer.tax_id || null, customerEmail: customer.email || null, customerPhone: customer.phone || null,
+      branchId: branchId || null, branchErpId: branch?.erp_id || null, branchCode: branch?.code || null,
+      branchName: branch?.name || null, branchCity: branch?.city || null, branchAddress: branch?.address_line || null,
+      series: series || null, quoteNumber: quoteNumber || null, quoteDate: quoteDate || null, validUntil: validUntil || null,
+      paymentTerms: paymentTerms || null, sellerId: sellerId || null,
+      referenceStartYear: referenceStartYear || null, referenceEndYear: referenceEndYear || null, paymentDueDate: paymentDueDate || null,
+    };
     let rendered;
     try {
       rendered = renderPushTemplate(config.body_template, values);

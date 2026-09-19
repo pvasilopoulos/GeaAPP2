@@ -82,7 +82,16 @@ function QuoteEditor({ quoteId, onBack, onSaved }) {
   const calculate = useMemo(() => lines.reduce((sum, line) => sum + Number(line.line_total || 0), 0), [lines]);
   const loadLines = async () => {
     setLoadingLines(true);
-    try { const response = await api.resolveQuoteLines({ customerId: Number(form.customerId), branchId: form.branchId || null, referenceStartYear: Number(form.referenceStartYear) || null, referenceEndYear: Number(form.referenceEndYear) || null, paymentDueDate: form.paymentDueDate || null }); setLines(response.lines || []); } finally { setLoadingLines(false); }
+    try {
+      const response = await api.resolveQuoteLines({
+        customerId: Number(form.customerId), branchId: form.branchId || null,
+        referenceStartYear: Number(form.referenceStartYear) || null, referenceEndYear: Number(form.referenceEndYear) || null,
+        paymentDueDate: form.paymentDueDate || null,
+        series: form.series || null, quoteNumber: form.quoteNumber || null, quoteDate: form.quoteDate || null,
+        validUntil: form.validUntil || null, paymentTerms: form.paymentTerms || null, sellerId: form.sellerId || null,
+      });
+      setLines(response.lines || []);
+    } finally { setLoadingLines(false); }
   };
   const updateLine = (index, key, value) => setLines((current) => current.map((line, i) => {
     if (i !== index) return line;

@@ -456,10 +456,17 @@ Messaging (§3.3).
 
 ### 9.2 Δυναμική αντιστοίχιση γραμμών από ERP JSON response (`quoteLineMapping.js`)
 `POST /api/quotes/resolve-lines` (δικαίωμα `quotes.fetch_lines`): καλεί το **ERP API προσφορών**
-που έχει ρυθμιστεί στο tenant (`tenants.settings.quote_api`: `url`, `method`, `body_template` με
-placeholders `{{customerId}}`/`{{branchId}}`/`{{referenceStartYear}}`/`{{referenceEndYear}}`/
-`{{paymentDueDate}}`, `headers`, `response_path` — προεπιλογή `"lines"`) και μετατρέπει **κάθε
-αντικείμενο** του επιστρεφόμενου array σε μία γραμμή προσφοράς:
+που έχει ρυθμιστεί στο tenant (`tenants.settings.quote_api`: `url`, `method`, `body_template`,
+`headers`, `response_path` — προεπιλογή `"lines"`) και μετατρέπει **κάθε αντικείμενο** του
+επιστρεφόμενου array σε μία γραμμή προσφοράς. Ο server εμπλουτίζει τα δεδομένα της φόρμας με
+πλήρη στοιχεία πελάτη/υποκαταστήματος (lookup στο DB) πριν κάνει render το `body_template`, οπότε
+διαθέσιμα placeholders είναι: `{{customerId}}`, `{{customerErpId}}`, `{{customerCode}}`,
+`{{customerName}}`, `{{customerCompany}}`, `{{customerTaxId}}`, `{{customerEmail}}`,
+`{{customerPhone}}`, `{{branchId}}`, `{{branchErpId}}`, `{{branchCode}}`, `{{branchName}}`,
+`{{branchCity}}`, `{{branchAddress}}`, `{{series}}`, `{{quoteNumber}}`, `{{quoteDate}}`,
+`{{validUntil}}`, `{{paymentTerms}}`, `{{sellerId}}`, `{{referenceStartYear}}`,
+`{{referenceEndYear}}`, `{{paymentDueDate}}` (μοιράζεται τον ίδιο `renderPushTemplate` μηχανισμό με
+το §9.6, οπότε το `{{field}}` δουλεύει είτε γραμμένο μέσα σε εισαγωγικά είτε όχι):
 
 - **Χωρίς προκαθορισμένο σχήμα** — οποιοδήποτε ERP JSON αντικείμενο γίνεται αποδεκτό.
 - Γνωστά **aliases** αναγνωρίζουν τα βασικά, υπολογίσιμα πεδία ανεξάρτητα από την ονομασία που
