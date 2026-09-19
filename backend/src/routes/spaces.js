@@ -9,6 +9,7 @@ import { logActivity } from '../lib/activity.js';
 import { isSpaceStatus, parseJson, sanitizeAmenities } from '../lib/masterData.js';
 import { loadEntityCustomFields, saveEntityCustomFields } from '../lib/customFields.js';
 import { diffRecords, snapshotFields, packDetails, changeSummary } from '../lib/activityDiff.js';
+import { enqueuePush } from '../lib/pushSync.js';
 
 export const spacesRouter = Router();
 spacesRouter.use(authorize(PERMISSIONS.SPACES_READ));
@@ -84,6 +85,8 @@ spacesRouter.post('/', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, 
         }, ['name', 'space_type', 'capacity', 'floor', 'hourly_price', 'daily_price', 'status']),
       }),
     });
+    enqueuePush({ tenantId: req.user.tenantId, entityType: 'spaces', entityId: id })
+      .catch((e) => console.error('[pushSync] enqueue failed:', e.message));
     res.status(201).json({ id, code });
   } catch (err) { next(err); }
 });
@@ -171,6 +174,8 @@ spacesRouter.patch('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, r
       branchId: cur.branch_id, spaceId: id,
       details: packDetails(req, { changes }),
     });
+    enqueuePush({ tenantId: req.user.tenantId, entityType: 'spaces', entityId: id })
+      .catch((e) => console.error('[pushSync] enqueue failed:', e.message));
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

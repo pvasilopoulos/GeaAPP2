@@ -34,6 +34,8 @@ function applyCredentials(headers, credentials, authType) {
   }
 }
 
+export { applyCredentials };
+
 async function request(connector) {
   const headers = parseJson(connector.headers);
   applyCredentials(headers, decryptCredentials(connector.credentials_enc), connector.auth_type);

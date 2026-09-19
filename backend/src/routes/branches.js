@@ -11,6 +11,7 @@ import {
 } from '../lib/masterData.js';
 import { loadEntityCustomFields, saveEntityCustomFields } from '../lib/customFields.js';
 import { diffRecords, snapshotFields, packDetails, changeSummary } from '../lib/activityDiff.js';
+import { enqueuePush } from '../lib/pushSync.js';
 
 export const branchesRouter = Router();
 branchesRouter.use(authorize(PERMISSIONS.BRANCHES_READ));
@@ -82,6 +83,8 @@ branchesRouter.post('/', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res
         }, ['name', 'city', 'area', 'address_line', 'postal_code', 'phone', 'email', 'status', 'is_primary', 'lat', 'lng']),
       }),
     });
+    enqueuePush({ tenantId: req.user.tenantId, entityType: 'branches', entityId: id })
+      .catch((e) => console.error('[pushSync] enqueue failed:', e.message));
     res.status(201).json({ id, code });
   } catch (err) { next(err); }
 });
@@ -163,6 +166,8 @@ branchesRouter.patch('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req,
       branchId: id,
       details: packDetails(req, { changes }),
     });
+    enqueuePush({ tenantId: req.user.tenantId, entityType: 'branches', entityId: id })
+      .catch((e) => console.error('[pushSync] enqueue failed:', e.message));
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

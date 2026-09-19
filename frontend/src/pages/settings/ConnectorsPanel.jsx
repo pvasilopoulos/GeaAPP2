@@ -41,7 +41,14 @@ const newForm = () => ({
   username: '', password: '', api_key_name: '', api_key_value: '',
   body_template: '', headers: '{}', schedule_minutes: '', enabled: false,
   mappings: JSON.stringify(defaultMappings, null, 2),
+  push_enabled: false, push_url: '', push_method: 'POST', push_body_template: '', push_response_id_path: 'id',
 });
+
+const pushTemplateFields = {
+  customers: ['id', 'erp_id', 'code', 'first_name', 'last_name', 'company', 'email', 'phone', 'mobile', 'tax_id', 'customer_type', 'address_line', 'city', 'postal_code', 'status'],
+  branches: ['id', 'erp_id', 'customer_id', 'customer_erp_id', 'code', 'name', 'address_line', 'city', 'phone', 'status'],
+  spaces: ['id', 'erp_id', 'customer_id', 'branch_id', 'branch_erp_id', 'code', 'name', 'space_type', 'status'],
+};
 
 function parseJson(value, fallback) {
   try { return JSON.parse(value); } catch { return fallback; }
@@ -62,6 +69,8 @@ export default function ConnectorsPanel() {
   const [isCreating, setIsCreating] = useState(false);
   const [form, setForm] = useState(newForm);
   const [runs, setRuns] = useState([]);
+  const [outbox, setOutbox] = useState([]);
+  const [pushPreview, setPushPreview] = useState(null);
   const [monitoringRuns, setMonitoringRuns] = useState([]);
   const [activeEntity, setActiveEntity] = useState('customers');
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -127,6 +136,7 @@ export default function ConnectorsPanel() {
     if (!connector) {
       setForm(newForm());
       setRuns([]);
+      setOutbox([]);
       return;
     }
     setForm({
@@ -134,9 +144,39 @@ export default function ConnectorsPanel() {
       headers: JSON.stringify(connector.headers || {}, null, 2),
       mappings: JSON.stringify(connector.mappings || defaultMappings, null, 2),
       schedule_minutes: connector.schedule_minutes || '',
+      push_enabled: !!connector.push_enabled,
     });
+    setPushPreview(null);
     const response = await api.connectorRuns(connector.id);
     setRuns(response.runs || []);
+    try {
+      const outboxResponse = await api.connectorOutbox(connector.id);
+      setOutbox(outboxResponse.outbox || []);
+    } catch { setOutbox([]); }
+  };
+
+  const previewPush = async () => {
+    if (!selected) return;
+    try {
+      const sample = Object.fromEntries((pushTemplateFields[form.target_entity] || []).map((field) => [field, `<${field}>`]));
+      const result = await api.previewConnectorPush(selected.id, { template: form.push_body_template, sample });
+      setPushPreview({ ok: true, text: JSON.stringify(result.rendered, null, 2) });
+    } catch (error) {
+      setPushPreview({ ok: false, text: error.message || 'Μη έγκυρο template' });
+    }
+  };
+
+  const retryOutboxJob = async (job) => {
+    if (!selected) return;
+    setBusy(true);
+    try {
+      await api.retryConnectorOutbox(selected.id, job.id);
+      setMessage({ type: 'success', text: 'Η επανάληψη αποστολής ξεκίνησε.' });
+      const outboxResponse = await api.connectorOutbox(selected.id);
+      setOutbox(outboxResponse.outbox || []);
+    } catch (error) {
+      setMessage({ type: 'error', text: error.message || 'Δεν ήταν δυνατή η επανάληψη.' });
+    } finally { setBusy(false); }
   };
 
   const save = async (event) => {
@@ -268,6 +308,50 @@ export default function ConnectorsPanel() {
               <div className="erp-card-title"><span className="erp-step">3</span><div><h3>Request details</h3><p>Προαιρετικές παράμετροι για POST/PUT requests.</p></div></div>
               <label className="erp-field wide"><span>Headers JSON</span><textarea rows="3" value={form.headers} onChange={(e) => update('headers', e.target.value)} placeholder='{"Accept":"application/json"}' /></label>
               <label className="erp-field wide"><span>Body template</span><textarea rows="4" value={form.body_template || ''} onChange={(e) => update('body_template', e.target.value)} placeholder='{"page": 1, "limit": 100}' /></label>
+            </section>
+            <section className="erp-card">
+              <div className="erp-card-title"><span className="erp-step">4</span><div><h3>Αποστολή προς ERP (2-way sync)</h3><p>Όταν δημιουργείς/επεξεργάζεσαι πελάτη, υποκατάστημα ή χώρο εδώ, στείλε τα στοιχεία πίσω στο ERP.</p></div></div>
+              <label className="erp-toggle"><input type="checkbox" checked={!!form.push_enabled} onChange={(e) => update('push_enabled', e.target.checked)} /><span className="erp-switch" /><span>Ενεργοποίηση αποστολής προς το ERP</span></label>
+              {form.push_enabled && (
+                <>
+                  <div className="erp-form-grid" style={{ marginTop: 10 }}>
+                    <label className="erp-field wide"><span>Push URL <em>Άδειο = ίδιο με το Endpoint URL παραπάνω</em></span><input type="url" value={form.push_url || ''} onChange={(e) => update('push_url', e.target.value)} placeholder={form.base_url || 'https://erp.example.com/api/customers'} /></label>
+                    <label className="erp-field"><span>Μέθοδος</span><select value={form.push_method || 'POST'} onChange={(e) => update('push_method', e.target.value)}><option>POST</option><option>PUT</option><option>PATCH</option></select></label>
+                    <label className="erp-field"><span>JSON path για το νέο ERP ID <em>Στην απάντηση όταν δημιουργείς νέα εγγραφή</em></span><input value={form.push_response_id_path || 'id'} onChange={(e) => update('push_response_id_path', e.target.value)} placeholder="id" /></label>
+                  </div>
+                  <label className="erp-field wide" style={{ marginTop: 10 }}>
+                    <span>Body template <em>Χρησιμοποίησε {'{{field}}'} χωρίς εισαγωγικά — διαθέσιμα πεδία: {(pushTemplateFields[form.target_entity] || []).join(', ')}</em></span>
+                    <textarea rows="5" className="erp-codearea" value={form.push_body_template || ''} onChange={(e) => update('push_body_template', e.target.value)} placeholder='{"code": {{code}}, "onoma": {{first_name}}, "email": {{email}}}' />
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
+                    <button type="button" className="btn btn-ghost" onClick={previewPush} disabled={!selected}>Προεπισκόπηση template</button>
+                    {!selected && <small className="muted">Αποθήκευσε πρώτα τη σύνδεση για προεπισκόπηση.</small>}
+                  </div>
+                  {pushPreview && (
+                    <pre className="erp-codearea" style={{ marginTop: 8, color: pushPreview.ok ? 'inherit' : 'var(--danger, #dc2626)' }}>{pushPreview.text}</pre>
+                  )}
+                  {selected && (
+                    <div style={{ marginTop: 14 }}>
+                      <div className="erp-mapping-head"><div><b>Ιστορικό αποστολών</b><span>Τελευταίες 50 αποστολές προς το ERP</span></div></div>
+                      {outbox.length ? (
+                        <div className="erp-run-table">
+                          {outbox.slice(0, 10).map((job) => (
+                            <div className="erp-run-row" key={job.id}>
+                              <span className={`erp-run-dot ${job.status === 'sent' ? 'success' : job.status === 'failed' ? 'failed' : 'running'}`} />
+                              <div>
+                                <b>{job.entity_type} #{job.entity_id} · {job.action === 'create' ? 'Δημιουργία' : 'Ενημέρωση'}</b>
+                                <small>{formatDate(job.sent_at || job.created_at)} · {job.attempts} προσπάθειες</small>
+                                {job.last_error && <span className="erp-run-error">{job.last_error}</span>}
+                              </div>
+                              {job.status === 'failed' && <button className="btn btn-ghost" type="button" onClick={() => retryOutboxJob(job)} disabled={busy}>Επανάληψη</button>}
+                            </div>
+                          ))}
+                        </div>
+                      ) : <div className="erp-empty-mini"><Icon name="activity" size={20} /><span>Δεν έχουν σταλεί ακόμη αλλαγές προς το ERP.</span></div>}
+                    </div>
+                  )}
+                </>
+              )}
             </section>
           </div>
           <aside className="erp-editor-side">

@@ -194,6 +194,16 @@ export async function ensureSchema() {
   await addColumn('connectors', 'body_template', 'TEXT NULL');
   await addColumn('connectors', 'target_entity', "VARCHAR(20) NOT NULL DEFAULT 'customers'");
   await addColumn('connectors', 'response_encoding', "VARCHAR(30) NOT NULL DEFAULT 'auto'");
+  // Two-way sync (outbound push back to the ERP) — reuses the connector's
+  // existing base_url/auth/headers unless push_url overrides them.
+  // push_body_template uses {{field}} placeholders (see lib/pushSync.js);
+  // push_response_id_path is the JSON path to read the ERP-assigned id from
+  // the response body when creating a brand-new record.
+  await addColumn('connectors', 'push_enabled', 'TINYINT(1) NOT NULL DEFAULT 0');
+  await addColumn('connectors', 'push_url', 'VARCHAR(500) NULL');
+  await addColumn('connectors', 'push_method', "VARCHAR(10) NOT NULL DEFAULT 'POST'");
+  await addColumn('connectors', 'push_body_template', 'TEXT NULL');
+  await addColumn('connectors', 'push_response_id_path', "VARCHAR(120) NOT NULL DEFAULT 'id'");
   if (!(await tableExists('sync_runs'))) {
     await query(`CREATE TABLE sync_runs (
       id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, tenant_id BIGINT NOT NULL,
@@ -206,6 +216,27 @@ export async function ensureSchema() {
       CONSTRAINT fk_sync_runs_connector FOREIGN KEY (connector_id) REFERENCES connectors(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
   }
+
+  // Outbound queue for two-way sync: one row per local create/update that
+  // needs to be pushed to a push_enabled connector. Processed by the
+  // scheduler (see lib/pushSync.js) with retry/backoff like sync_runs.
+  if (!(await tableExists('sync_outbox'))) {
+    await query(`CREATE TABLE sync_outbox (
+      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, tenant_id BIGINT NOT NULL,
+      connector_id BIGINT NOT NULL, entity_type VARCHAR(20) NOT NULL, entity_id BIGINT NOT NULL,
+      action VARCHAR(10) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'pending',
+      attempts INT NOT NULL DEFAULT 0, last_error TEXT NULL,
+      next_attempt_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      sent_at DATETIME NULL,
+      KEY idx_sync_outbox_pending (status, next_attempt_at),
+      KEY idx_sync_outbox_connector (connector_id, created_at),
+      CONSTRAINT fk_sync_outbox_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      CONSTRAINT fk_sync_outbox_connector FOREIGN KEY (connector_id) REFERENCES connectors(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    console.log('[schema] created sync_outbox');
+  }
+
   if (!(await tableExists('customer_saved_views'))) {
     await query(`CREATE TABLE customer_saved_views (
       id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
