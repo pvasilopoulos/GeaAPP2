@@ -108,11 +108,16 @@ quotesRouter.post('/resolve-lines', authorize(PERMISSIONS.QUOTES_FETCH_LINES), a
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 30000);
     let response;
+    let rawBody;
     try {
       response = await fetch(config.url, { method: config.method === 'GET' ? 'GET' : 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: config.method === 'GET' ? undefined : JSON.stringify(rendered), signal: controller.signal });
+      rawBody = Buffer.from(await response.arrayBuffer());
     } finally { clearTimeout(timer); }
-    if (!response.ok) return res.status(502).json({ error: `Το ERP API επέστρεψε HTTP ${response.status}` });
-    const payload = parseEncodedJson(Buffer.from(await response.arrayBuffer()), {
+    // Truncated raw ERP response, surfaced in the error `detail` for troubleshooting
+    // (e.g. the ERP rejecting the request body or using an unexpected JSON shape).
+    const rawSnippet = () => rawBody.toString('utf8').slice(0, 500);
+    if (!response.ok) return res.status(502).json({ error: `Το ERP API επέστρεψε HTTP ${response.status}`, detail: rawSnippet() });
+    const payload = parseEncodedJson(rawBody, {
       encoding: config.response_encoding || 'auto',
       contentType: response.headers.get('content-type'),
     }).value;
@@ -123,7 +128,7 @@ quotesRouter.post('/resolve-lines', authorize(PERMISSIONS.QUOTES_FETCH_LINES), a
     // when older settings still contain the legacy `lines` path.
     if (!Array.isArray(lines) && configuredPath === 'lines') lines = payload?.data?.lines;
     if (!Array.isArray(lines)) lines = payload?.data?.lines || payload?.lines || (Array.isArray(payload?.data) ? payload.data : lines);
-    if (!Array.isArray(lines)) return res.status(502).json({ error: 'Το response του ERP δεν περιέχει array γραμμών στο JSON path που ορίστηκε' });
+    if (!Array.isArray(lines)) return res.status(502).json({ error: 'Το response του ERP δεν περιέχει array γραμμών στο JSON path που ορίστηκε', detail: rawSnippet() });
     res.json({ lines: mapErpLinesToQuoteLines(lines) });
   } catch (err) { next(err); }
 });
