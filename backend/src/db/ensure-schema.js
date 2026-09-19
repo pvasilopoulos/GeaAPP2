@@ -334,6 +334,51 @@ export async function ensureSchema() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
     console.log('[schema] created push_broadcasts');
   }
+  // Rich push notification composer fields: media, action buttons, behavior
+  // (require-interaction/silent/vibrate/tag/renotify), delivery priority
+  // (urgency/TTL), targeting beyond all-users (role or explicit id list —
+  // recipient_ids re-resolved at send time so scheduled sends stay fresh),
+  // scheduling (send_at/status) and click-through analytics (clicked_count).
+  await addColumn('push_broadcasts', 'image_url', 'VARCHAR(500) NULL');
+  await addColumn('push_broadcasts', 'icon_url', 'VARCHAR(500) NULL');
+  await addColumn('push_broadcasts', 'badge_url', 'VARCHAR(500) NULL');
+  await addColumn('push_broadcasts', 'actions', 'JSON NULL');
+  await addColumn('push_broadcasts', 'require_interaction', 'TINYINT(1) NOT NULL DEFAULT 0');
+  await addColumn('push_broadcasts', 'silent', 'TINYINT(1) NOT NULL DEFAULT 0');
+  await addColumn('push_broadcasts', 'vibrate', 'VARCHAR(100) NULL');
+  await addColumn('push_broadcasts', 'tag', 'VARCHAR(100) NULL');
+  await addColumn('push_broadcasts', 'renotify', 'TINYINT(1) NOT NULL DEFAULT 0');
+  await addColumn('push_broadcasts', 'urgency', "VARCHAR(20) NOT NULL DEFAULT 'normal'");
+  await addColumn('push_broadcasts', 'ttl_seconds', 'INT NOT NULL DEFAULT 259200');
+  await addColumn('push_broadcasts', 'recipient_role_id', 'BIGINT NULL');
+  await addColumn('push_broadcasts', 'recipient_ids', 'JSON NULL');
+  await addColumn('push_broadcasts', 'send_at', 'DATETIME NULL');
+  await addColumn('push_broadcasts', 'status', "VARCHAR(20) NOT NULL DEFAULT 'sent'");
+  await addColumn('push_broadcasts', 'clicked_count', 'INT NOT NULL DEFAULT 0');
+  await addIndex('push_broadcasts', 'idx_push_broadcasts_pending', 'status, send_at');
+
+  // Reusable notification presets (title/body/media/actions/behavior) that
+  // the composer can save and reload — every field mirrors push_broadcasts'
+  // rich columns above so a template can be applied as-is.
+  if (!(await tableExists('push_templates'))) {
+    await query(`CREATE TABLE push_templates (
+      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      tenant_id BIGINT NOT NULL, created_by BIGINT NULL,
+      name VARCHAR(120) NOT NULL,
+      title VARCHAR(200) NOT NULL, body VARCHAR(1000) NULL, url VARCHAR(500) NULL,
+      image_url VARCHAR(500) NULL, icon_url VARCHAR(500) NULL, badge_url VARCHAR(500) NULL,
+      actions JSON NULL,
+      require_interaction TINYINT(1) NOT NULL DEFAULT 0, silent TINYINT(1) NOT NULL DEFAULT 0,
+      vibrate VARCHAR(100) NULL, tag VARCHAR(100) NULL, renotify TINYINT(1) NOT NULL DEFAULT 0,
+      urgency VARCHAR(20) NOT NULL DEFAULT 'normal', ttl_seconds INT NOT NULL DEFAULT 259200,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_push_templates_name (tenant_id, name),
+      CONSTRAINT fk_push_templates_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      CONSTRAINT fk_push_templates_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    console.log('[schema] created push_templates');
+  }
 
   if (!(await tableExists('audit_events'))) {
     await query(`CREATE TABLE audit_events (

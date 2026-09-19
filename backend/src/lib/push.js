@@ -67,8 +67,13 @@ export async function subscriptionCountForUser({ tenantId, userId }, queryFn = d
  * Deliver a Web Push message to every device a user has subscribed on.
  * Best-effort: individual failures are swallowed (and expired subscriptions
  * pruned) so a bad device never breaks the caller's request/insert flow.
+ * `options.ttl`/`options.urgency` control the push *transport* (how long the
+ * push service should retry, and its delivery priority on the recipient's
+ * device) — they are never part of the JSON `payload` the browser renders.
  */
-export async function pushToUser({ tenantId, userId, payload }, queryFn = dbQuery) {
+export async function pushToUser({
+  tenantId, userId, payload, options,
+}, queryFn = dbQuery) {
   if (!ensureConfigured()) return { sent: 0, skipped: 'not_configured' };
   const { rows } = await queryFn(
     'SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE tenant_id = ? AND user_id = ?',
@@ -85,12 +90,17 @@ export async function pushToUser({ tenantId, userId, payload }, queryFn = dbQuer
     badge: payload.badge || `/api/branding/${tenantId}/push-badge`,
   };
   const body = JSON.stringify(enrichedPayload);
+  const sendOptions = {};
+  if (options?.ttl != null) sendOptions.TTL = options.ttl;
+  if (options?.urgency) sendOptions.urgency = options.urgency;
+  if (options?.topic) sendOptions.topic = options.topic;
   let sent = 0;
   await Promise.all(rows.map(async (row) => {
     try {
       await webpush.sendNotification(
         { endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth } },
         body,
+        sendOptions,
       );
       sent += 1;
     } catch (err) {

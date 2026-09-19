@@ -136,8 +136,196 @@ export function quoteExpiredRecipientIds({ createdBy, sellerUserId, quoteViewerI
   return [...new Set((quoteViewerIds || []).map(Number).filter(Boolean))];
 }
 
+export function publicPushBroadcast(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    title: row.title,
+    body: row.body,
+    url: row.url,
+    recipient_type: row.recipient_type,
+    recipient_role_id: row.recipient_role_id ?? null,
+    recipient_count: row.recipient_count,
+    push_sent_count: row.push_sent_count,
+    clicked_count: row.clicked_count,
+    image_url: row.image_url || '',
+    icon_url: row.icon_url || '',
+    badge_url: row.badge_url || '',
+    actions: parseJson(row.actions, []) || [],
+    require_interaction: !!row.require_interaction,
+    silent: !!row.silent,
+    vibrate: row.vibrate || '',
+    tag: row.tag || '',
+    renotify: !!row.renotify,
+    urgency: row.urgency,
+    ttl_seconds: row.ttl_seconds,
+    send_at: row.send_at,
+    status: row.status,
+    created_at: row.created_at,
+    sender_name: row.sender_name,
+  };
+}
+
+export function publicPushTemplate(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    title: row.title,
+    body: row.body,
+    url: row.url,
+    image_url: row.image_url || '',
+    icon_url: row.icon_url || '',
+    badge_url: row.badge_url || '',
+    actions: parseJson(row.actions, []) || [],
+    require_interaction: !!row.require_interaction,
+    silent: !!row.silent,
+    vibrate: row.vibrate || '',
+    tag: row.tag || '',
+    renotify: !!row.renotify,
+    urgency: row.urgency,
+    ttl_seconds: row.ttl_seconds,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+const URGENCY_VALUES = ['very-low', 'low', 'normal', 'high'];
+const MAX_ACTIONS = 2;
+const MIN_TTL_SECONDS = 60;
+const MAX_TTL_SECONDS = 2419200; // 28 days — the practical ceiling push services honor
+const DEFAULT_TTL_SECONDS = 259200; // 3 days
+
+/**
+ * Normalizes every "rich" push-composer field (media, action buttons,
+ * behavior, priority) shared by both `push_broadcasts` and `push_templates`.
+ * Anything malformed is dropped/clamped rather than rejected, so the
+ * composer never hard-fails on a stray field.
+ */
+export function sanitizeRichPush(input = {}) {
+  const url = (v) => (v ? String(v).trim().slice(0, 500) : '');
+  const imageUrl = url(input.imageUrl ?? input.image_url);
+  const iconUrl = url(input.iconUrl ?? input.icon_url);
+  const badgeUrl = url(input.badgeUrl ?? input.badge_url);
+  const rawActions = Array.isArray(input.actions) ? input.actions : [];
+  const actions = rawActions
+    .slice(0, MAX_ACTIONS)
+    .map((a, i) => ({
+      action: String(a?.action || `action${i + 1}`).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 30) || `action${i + 1}`,
+      title: String(a?.title || '').trim().slice(0, 40),
+      url: url(a?.url),
+    }))
+    .filter((a) => a.title);
+  const rawVibrate = Array.isArray(input.vibrate)
+    ? input.vibrate
+    : (typeof input.vibrate === 'string' && input.vibrate.trim() ? input.vibrate.split(',') : []);
+  const vibrate = rawVibrate
+    .map((v) => Math.max(0, Math.min(5000, Math.round(Number(v)) || 0)))
+    .slice(0, 8)
+    .join(',');
+  const tag = input.tag ? String(input.tag).trim().slice(0, 100) : '';
+  const urgency = URGENCY_VALUES.includes(input.urgency) ? input.urgency : 'normal';
+  const ttlNumber = Number(input.ttlSeconds ?? input.ttl_seconds);
+  const ttlSeconds = Number.isFinite(ttlNumber)
+    ? Math.max(MIN_TTL_SECONDS, Math.min(MAX_TTL_SECONDS, Math.round(ttlNumber)))
+    : DEFAULT_TTL_SECONDS;
+  return {
+    imageUrl,
+    iconUrl,
+    badgeUrl,
+    actions,
+    requireInteraction: !!(input.requireInteraction ?? input.require_interaction),
+    silent: !!input.silent,
+    vibrate,
+    tag,
+    renotify: !!input.renotify,
+    urgency,
+    ttlSeconds,
+  };
+}
+
+/**
+ * Resolves the actual recipient user ids for a broadcast at *send* time
+ * (rather than at composition time) so `all`/`role` targeting always reaches
+ * whoever is currently active — important for scheduled sends where the
+ * user list may have changed between scheduling and delivery.
+ */
+async function resolveRecipients({
+  tenantId, recipientType, recipientRoleId, recipientIds,
+}, queryFn) {
+  if (recipientType === 'all') {
+    const { rows } = await queryFn('SELECT id FROM users WHERE tenant_id = ? AND is_active = 1', [tenantId]);
+    return rows.map((r) => Number(r.id));
+  }
+  if (recipientType === 'role') {
+    if (!recipientRoleId) return [];
+    const { rows } = await queryFn(
+      'SELECT id FROM users WHERE tenant_id = ? AND is_active = 1 AND role_id = ?',
+      [tenantId, recipientRoleId],
+    );
+    return rows.map((r) => Number(r.id));
+  }
+  const ids = [...new Set((recipientIds || []).map(Number).filter(Boolean))];
+  if (!ids.length) return [];
+  const placeholders = ids.map(() => '?').join(',');
+  const { rows } = await queryFn(
+    `SELECT id FROM users WHERE tenant_id = ? AND is_active = 1 AND id IN (${placeholders})`,
+    [tenantId, ...ids],
+  );
+  return rows.map((r) => Number(r.id));
+}
+
+/** Builds the extra push-payload/transport fields from a rich broadcast/template row. */
+function pushOverridesFromRich(rich) {
+  return {
+    icon: rich.iconUrl || undefined,
+    badge: rich.badgeUrl || undefined,
+    image: rich.imageUrl || undefined,
+    actions: rich.actions?.length ? rich.actions : undefined,
+    requireInteraction: rich.requireInteraction || undefined,
+    silent: rich.silent || undefined,
+    vibrate: rich.vibrate ? rich.vibrate.split(',').map(Number) : undefined,
+    tag: rich.tag || undefined,
+    renotify: rich.renotify || undefined,
+    ttl: rich.ttlSeconds,
+    urgency: rich.urgency,
+  };
+}
+
+/** Actually delivers a (immediate or now-due scheduled) broadcast to its resolved recipients. */
+async function deliverBroadcast({
+  id, tenantId, title, body, url, recipientIds, rich,
+}, queryFn) {
+  const push = pushOverridesFromRich(rich);
+  let notified = 0;
+  let pushSent = 0;
+  await Promise.all(recipientIds.map(async (userId) => {
+    const created = await createNotification({
+      tenantId,
+      userId,
+      type: NOTIFICATION_TYPES.ADMIN_MESSAGE,
+      title,
+      body,
+      sourceType: SOURCE_TYPES.BROADCAST,
+      sourceId: id,
+      payload: url ? { url } : null,
+      push,
+    }, queryFn);
+    if (created.inserted) {
+      notified += 1;
+      const pushResult = await created.pushPromise;
+      pushSent += pushResult?.sent || 0;
+    }
+  }));
+  await queryFn(
+    'UPDATE push_broadcasts SET push_sent_count = ?, recipient_count = ?, status = ? WHERE id = ?',
+    [pushSent, recipientIds.length, 'sent', id],
+  ).catch(() => {});
+  return { notified, pushSent };
+}
+
 export async function createNotification({
-  tenantId, userId, type, title, body, sourceType, sourceId, customerId = null, payload = null,
+  tenantId, userId, type, title, body, sourceType, sourceId, customerId = null, payload = null, push = null,
 }, queryFn = dbQuery) {
   if (!tenantId || !userId || !type || sourceId == null) return { inserted: false, reason: 'invalid' };
   try {
@@ -157,16 +345,25 @@ export async function createNotification({
     );
     // Best-effort Web Push mirror of the in-app notification — captured as a
     // promise so callers that need delivery counts (e.g. admin broadcasts)
-    // can await it; other callers simply let it run fire-and-forget.
+    // can await it; other callers simply let it run fire-and-forget. `push`
+    // carries the optional rich-composer overrides (image/actions/vibrate/…
+    // plus ttl/urgency transport options) — see sanitizeRichPush().
+    const pushPayload = {
+      title: String(title || 'Ειδοποίηση').slice(0, 200),
+      body: body ? String(body).slice(0, 1000) : '',
+      notificationId: result.rows.insertId,
+      target: { source_type: sourceType || null, source_id: sourceId, customer_id: customerId || null, payload },
+    };
+    if (push) {
+      for (const key of ['icon', 'badge', 'image', 'actions', 'requireInteraction', 'silent', 'vibrate', 'tag', 'renotify']) {
+        if (push[key] !== undefined) pushPayload[key] = push[key];
+      }
+    }
     const pushPromise = pushToUser({
       tenantId,
       userId,
-      payload: {
-        title: String(title || 'Ειδοποίηση').slice(0, 200),
-        body: body ? String(body).slice(0, 1000) : '',
-        notificationId: result.rows.insertId,
-        target: { source_type: sourceType || null, source_id: sourceId, customer_id: customerId || null, payload },
-      },
+      payload: pushPayload,
+      options: push ? { ttl: push.ttl, urgency: push.urgency } : undefined,
     }, queryFn).catch((err) => {
       console.error('[push] mirror failed:', err.message);
       return { sent: 0, error: err.message };
@@ -194,67 +391,136 @@ function badRequest(message) {
 }
 
 /**
- * Admin-triggered message: creates an in-app notification (and its Web Push
- * mirror, via createNotification) for every active user, or a chosen subset.
- * Logged in `push_broadcasts` for a history/audit trail.
+ * Admin-triggered rich push notification: title/body plus optional image,
+ * icon/badge overrides, up to 2 action buttons, behavior flags
+ * (require-interaction/silent/tag/renotify/vibration pattern), delivery
+ * priority (urgency/TTL), targeting (all users / a role / an explicit user
+ * list) and optional scheduling (`sendAt` in the future defers delivery to
+ * the scheduler sweep instead of sending immediately). Every send is logged
+ * in `push_broadcasts` for history, click tracking and cancellation.
  */
 export async function sendBroadcast({
-  tenantId, senderUserId, title, body, url, recipients,
+  tenantId, senderUserId, title, body, url, recipients, roleId, sendAt, ...richInput
 }, queryFn = dbQuery) {
   const cleanTitle = String(title || '').trim().slice(0, 200);
   if (!cleanTitle) throw badRequest('Ο τίτλος είναι υποχρεωτικός');
   const cleanBody = body ? String(body).trim().slice(0, 1000) : null;
   const cleanUrl = url ? String(url).trim().slice(0, 500) : null;
-  const isAll = recipients === 'all';
 
-  let targetIds;
-  if (isAll) {
-    const { rows } = await queryFn('SELECT id FROM users WHERE tenant_id = ? AND is_active = 1', [tenantId]);
-    targetIds = rows.map((r) => Number(r.id));
-  } else {
-    const ids = [...new Set((Array.isArray(recipients) ? recipients : []).map(Number).filter(Boolean))];
-    if (!ids.length) throw badRequest('Επίλεξε τουλάχιστον έναν παραλήπτη');
-    const placeholders = ids.map(() => '?').join(',');
-    const { rows } = await queryFn(
-      `SELECT id FROM users WHERE tenant_id = ? AND is_active = 1 AND id IN (${placeholders})`,
-      [tenantId, ...ids],
-    );
-    targetIds = rows.map((r) => Number(r.id));
-  }
+  const recipientType = recipients === 'all' ? 'all' : recipients === 'role' ? 'role' : 'users';
+  const recipientRoleId = recipientType === 'role' ? Number(roleId) || null : null;
+  const recipientIdsInput = recipientType === 'users'
+    ? [...new Set((Array.isArray(recipients) ? recipients : []).map(Number).filter(Boolean))]
+    : null;
+  if (recipientType === 'role' && !recipientRoleId) throw badRequest('Επίλεξε ρόλο παραληπτών');
+  if (recipientType === 'users' && !recipientIdsInput.length) throw badRequest('Επίλεξε τουλάχιστον έναν παραλήπτη');
+
+  const rich = sanitizeRichPush(richInput);
+
+  const targetIds = await resolveRecipients({
+    tenantId, recipientType, recipientRoleId, recipientIds: recipientIdsInput,
+  }, queryFn);
   if (!targetIds.length) throw badRequest('Δεν βρέθηκαν ενεργοί παραλήπτες');
 
+  const scheduledDate = sendAt ? new Date(sendAt) : null;
+  // A send_at more than a minute out is treated as scheduled; anything
+  // sooner (or in the past) just sends immediately to avoid a spurious
+  // "pending" row the scheduler sweep would fire a few seconds later.
+  const isScheduled = !!(scheduledDate && !Number.isNaN(scheduledDate.getTime()) && scheduledDate.getTime() > Date.now() + 60000);
+
   const insertResult = await queryFn(
-    `INSERT INTO push_broadcasts (tenant_id, sender_user_id, title, body, url, recipient_type, recipient_count)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [tenantId, senderUserId, cleanTitle, cleanBody, cleanUrl, isAll ? 'all' : 'users', targetIds.length],
+    `INSERT INTO push_broadcasts
+      (tenant_id, sender_user_id, title, body, url, recipient_type, recipient_role_id, recipient_ids, recipient_count,
+       image_url, icon_url, badge_url, actions, require_interaction, silent, vibrate, tag, renotify, urgency, ttl_seconds,
+       send_at, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      tenantId, senderUserId, cleanTitle, cleanBody, cleanUrl,
+      recipientType, recipientRoleId, recipientIdsInput ? JSON.stringify(recipientIdsInput) : null, targetIds.length,
+      rich.imageUrl || null, rich.iconUrl || null, rich.badgeUrl || null, rich.actions.length ? JSON.stringify(rich.actions) : null,
+      rich.requireInteraction ? 1 : 0, rich.silent ? 1 : 0, rich.vibrate || null, rich.tag || null, rich.renotify ? 1 : 0,
+      rich.urgency, rich.ttlSeconds,
+      isScheduled ? scheduledDate : null, isScheduled ? 'pending' : 'sent',
+    ],
   );
   const broadcastId = insertResult.rows.insertId;
 
-  let notified = 0;
-  let pushSent = 0;
-  await Promise.all(targetIds.map(async (userId) => {
-    const created = await createNotification({
-      tenantId,
-      userId,
-      type: NOTIFICATION_TYPES.ADMIN_MESSAGE,
-      title: cleanTitle,
-      body: cleanBody,
-      sourceType: SOURCE_TYPES.BROADCAST,
-      sourceId: broadcastId,
-      payload: cleanUrl ? { url: cleanUrl } : null,
-    }, queryFn);
-    if (created.inserted) {
-      notified += 1;
-      const pushResult = await created.pushPromise;
-      pushSent += pushResult?.sent || 0;
-    }
-  }));
+  if (isScheduled) {
+    return {
+      broadcastId, scheduled: true, sendAt: scheduledDate.toISOString(), recipients: targetIds.length, notified: 0, pushSent: 0,
+    };
+  }
 
-  await queryFn('UPDATE push_broadcasts SET push_sent_count = ? WHERE id = ?', [pushSent, broadcastId]).catch(() => {});
+  const delivery = await deliverBroadcast({
+    id: broadcastId, tenantId, title: cleanTitle, body: cleanBody, url: cleanUrl, recipientIds: targetIds, rich,
+  }, queryFn);
   return {
-    broadcastId, recipients: targetIds.length, notified, pushSent,
+    broadcastId, recipients: targetIds.length, notified: delivery.notified, pushSent: delivery.pushSent,
   };
 }
+
+/** Cancels a scheduled broadcast that hasn't been delivered yet. */
+export async function cancelBroadcast({ tenantId, broadcastId }, queryFn = dbQuery) {
+  const result = await queryFn(
+    "UPDATE push_broadcasts SET status = 'cancelled' WHERE id = ? AND tenant_id = ? AND status = 'pending'",
+    [broadcastId, tenantId],
+  );
+  return { cancelled: Number(result.rows.affectedRows || 0) > 0 };
+}
+
+/** Records a click on a delivered notification, attributing it back to its broadcast for analytics. */
+export async function recordNotificationClick({ notificationId }, queryFn = dbQuery) {
+  const { rows } = await queryFn(
+    'SELECT tenant_id, source_type, source_id FROM notifications WHERE id = ?',
+    [notificationId],
+  );
+  const row = rows[0];
+  if (!row || row.source_type !== SOURCE_TYPES.BROADCAST) return { recorded: false };
+  await queryFn(
+    'UPDATE push_broadcasts SET clicked_count = clicked_count + 1 WHERE id = ? AND tenant_id = ?',
+    [row.source_id, row.tenant_id],
+  );
+  return { recorded: true };
+}
+
+/** Scheduler sweep: delivers any pending broadcast whose `send_at` is now due. */
+export async function sendScheduledBroadcasts(queryFn = dbQuery) {
+  const { rows } = await queryFn(
+    `SELECT * FROM push_broadcasts WHERE status = 'pending' AND send_at IS NOT NULL AND send_at <= NOW() LIMIT 100`,
+  );
+  let delivered = 0;
+  for (const row of rows) {
+    const rich = sanitizeRichPush({
+      imageUrl: row.image_url,
+      iconUrl: row.icon_url,
+      badgeUrl: row.badge_url,
+      actions: parseJson(row.actions, []),
+      requireInteraction: row.require_interaction,
+      silent: row.silent,
+      vibrate: row.vibrate,
+      tag: row.tag,
+      renotify: row.renotify,
+      urgency: row.urgency,
+      ttlSeconds: row.ttl_seconds,
+    });
+    const targetIds = await resolveRecipients({
+      tenantId: row.tenant_id,
+      recipientType: row.recipient_type,
+      recipientRoleId: row.recipient_role_id,
+      recipientIds: parseJson(row.recipient_ids, []),
+    }, queryFn);
+    if (!targetIds.length) {
+      await queryFn("UPDATE push_broadcasts SET status = 'failed' WHERE id = ?", [row.id]).catch(() => {});
+      continue;
+    }
+    await deliverBroadcast({
+      id: row.id, tenantId: row.tenant_id, title: row.title, body: row.body, url: row.url, recipientIds: targetIds, rich,
+    }, queryFn);
+    delivered += 1;
+  }
+  return { delivered, scanned: rows.length };
+}
+
 
 async function loadTenantUsers(tenantId, queryFn) {
   const { rows } = await queryFn(
