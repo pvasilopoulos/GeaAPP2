@@ -17,7 +17,9 @@ async function handle(res) {
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail ? `${body.error || 'Request failed'}: ${body.detail}` : (body.error || `Request failed: ${res.status}`));
+    const err = new Error(body.detail ? `${body.error || 'Request failed'}: ${body.detail}` : (body.error || `Request failed: ${res.status}`));
+    if (body.debug) err.debug = body.debug;
+    throw err;
   }
   return res.json();
 }
@@ -93,6 +95,7 @@ export const api = {
   quotes: (opts) => get('/quotes', opts),
   quote: (id, opts) => get(`/quotes/${id}`, opts),
   resolveQuoteLines: (payload) => send('POST', '/quotes/resolve-lines', payload),
+  previewQuoteFetch: (template) => send('POST', '/quotes/fetch-preview', { template }),
   createQuote: (payload) => send('POST', '/quotes', payload),
   updateQuote: (id, payload) => send('PATCH', `/quotes/${id}`, payload),
   updateQuoteStatus: (id, status) => send('POST', `/quotes/${id}/status`, { status }),

@@ -456,17 +456,18 @@ Messaging (§3.3).
 
 ### 9.2 Δυναμική αντιστοίχιση γραμμών από ERP JSON response (`quoteLineMapping.js`)
 `POST /api/quotes/resolve-lines` (δικαίωμα `quotes.fetch_lines`): καλεί το **ERP API προσφορών**
-που έχει ρυθμιστεί στο tenant (`tenants.settings.quote_api`: `url`, `method`, `body_template`,
-`headers`, `response_path` — προεπιλογή `"lines"`) και μετατρέπει **κάθε αντικείμενο** του
-επιστρεφόμενου array σε μία γραμμή προσφοράς. Ο server εμπλουτίζει τα δεδομένα της φόρμας με
-πλήρη στοιχεία πελάτη/υποκαταστήματος (lookup στο DB) πριν κάνει render το `body_template`, οπότε
-διαθέσιμα placeholders είναι: `{{customerId}}`, `{{customerErpId}}`, `{{customerCode}}`,
-`{{customerName}}`, `{{customerCompany}}`, `{{customerTaxId}}`, `{{customerEmail}}`,
-`{{customerPhone}}`, `{{branchId}}`, `{{branchErpId}}`, `{{branchCode}}`, `{{branchName}}`,
-`{{branchCity}}`, `{{branchAddress}}`, `{{series}}`, `{{quoteNumber}}`, `{{quoteDate}}`,
-`{{validUntil}}`, `{{paymentTerms}}`, `{{sellerId}}`, `{{referenceStartYear}}`,
-`{{referenceEndYear}}`, `{{paymentDueDate}}` (μοιράζεται τον ίδιο `renderPushTemplate` μηχανισμό με
-το §9.6, οπότε το `{{field}}` δουλεύει είτε γραμμένο μέσα σε εισαγωγικά είτε όχι):
+που έχει ρυθμιστεί στο tenant (`tenants.settings.quote_api`: `enabled`, `url`, `method`,
+`body_template`, `headers`, `auth`, `timeout_ms`, `debug`, `response_path` — προεπιλογή
+`"lines"`) και μετατρέπει **κάθε αντικείμενο** του επιστρεφόμενου array σε μία γραμμή προσφοράς.
+Ο server εμπλουτίζει τα δεδομένα της φόρμας με πλήρη στοιχεία πελάτη/υποκαταστήματος (lookup στο
+DB) πριν κάνει render το `body_template`, οπότε διαθέσιμα placeholders είναι: `{{customerId}}`,
+`{{customerErpId}}`, `{{customerCode}}`, `{{customerName}}`, `{{customerCompany}}`,
+`{{customerTaxId}}`, `{{customerEmail}}`, `{{customerPhone}}`, `{{branchId}}`, `{{branchErpId}}`,
+`{{branchCode}}`, `{{branchName}}`, `{{branchCity}}`, `{{branchAddress}}`, `{{series}}`,
+`{{quoteNumber}}`, `{{quoteDate}}`, `{{validUntil}}`, `{{paymentTerms}}`, `{{sellerId}}`,
+`{{referenceStartYear}}`, `{{referenceEndYear}}`, `{{paymentDueDate}}` (μοιράζεται τον ίδιο
+`renderPushTemplate` μηχανισμό με το §9.6, οπότε το `{{field}}` δουλεύει είτε γραμμένο μέσα σε
+εισαγωγικά είτε όχι):
 
 - **Χωρίς προκαθορισμένο σχήμα** — οποιοδήποτε ERP JSON αντικείμενο γίνεται αποδεκτό.
 - Γνωστά **aliases** αναγνωρίζουν τα βασικά, υπολογίσιμα πεδία ανεξάρτητα από την ονομασία που
@@ -519,7 +520,8 @@ cancelled  cancelled         (καμία περαιτέρω μετάβαση)
 Χειροκίνητο κουμπί **«Αποστολή στο ERP»** στη σελίδα προσφοράς· αντίστροφη κατεύθυνση από το §9.2
 (εκεί το ERP δίνει τις γραμμές, εδώ ολόκληρη η προσφορά — header + array γραμμών — στέλνεται προς
 τα έξω). Ρυθμίζεται στο **Ρυθμίσεις → Προσφορές / ERP API** (`tenants.settings.quote_push_api`:
-`url`, `method`, `headers`, `body_template`, `response_id_path` — προεπιλογή `"id"`).
+`enabled`, `url`, `method`, `headers`, `body_template`, `auth`, `timeout_ms`, `debug`,
+`response_id_path` — προεπιλογή `"id"`).
 
 - Το `body_template` χρησιμοποιεί το ίδιο μηχανισμό `{{field}}` → `JSON.stringify(value)` με το
   two-way sync των connectors (`renderPushTemplate` σε `lib/pushSync.js`, reused εδώ) — γράφεται
@@ -539,6 +541,28 @@ cancelled  cancelled         (καμία περαιτέρω μετάβαση)
   `quote_pushed_erp` και audit entry.
 - Με αποτυχία (network error ή μη-2xx): `erp_push_status = 'failed'` + `erp_push_error` με το
   μήνυμα/HTTP status, εμφανίζεται στο UI της προσφοράς.
+
+### 9.7 Κοινό ERP HTTP client (`lib/erpClient.js`) — αυθεντικοποίηση, timeout, debug
+Και τα δύο endpoints του §9.2/§9.6 (και το dry-run `POST /api/quotes/fetch-preview` του §9.2)
+καλούν το ERP μέσω κοινού helper (`callConfiguredErp`) που προσθέτει στα δύο tenant configs
+(`quote_api`, `quote_push_api`) τα εξής παραμετρικά πεδία:
+
+- **`enabled`** (boolean, default `true`) — απενεργοποιεί προσωρινά την ενσωμάτωση χωρίς να
+  χρειάζεται να σβηστεί το URL/template· επιστρέφει `422` αν κάποιος προσπαθήσει να τη
+  χρησιμοποιήσει ενώ είναι ανενεργή.
+- **`auth`** (`{ type: 'none'|'bearer'|'basic'|'apikey', token, username, password,
+  api_key_name, api_key_value, api_key_in: 'header'|'query' }`) — αντί να γράφεις χειροκίνητα
+  `Authorization` header μέσα στο πεδίο Headers, επιλέγεις τύπο αυθεντικοποίησης και ο server
+  φτιάχνει μόνος του το σωστό header (ή query param για API key).
+- **`timeout_ms`** (default `30000`, όρια `2000`–`120000`) — configurable timeout ανά endpoint.
+- **`debug`** (boolean, default `false`) — όταν ενεργό, η απάντηση του API (`resolve-lines` ή
+  `push-erp`) περιλαμβάνει επιπλέον πεδίο `debug: { request, response }` με το ακριβές αίτημα
+  (URL, method, headers — με τα secrets masked, body) και την ακριβή απάντηση του ERP (status,
+  headers, body). Το frontend (`Quotes.jsx`) εμφανίζει αυτό αυτόματα σε αναδυόμενο panel μετά από
+  κάθε κλήση («Λήψη γραμμών» ή «Αποστολή στο ERP»), ώστε να μπορεί κανείς να διαγνώσει προβλήματα
+  template/αυθεντικοποίησης χωρίς πρόσβαση στα server logs.
+- **GET requests**: το rendered body μετατρέπεται αυτόματα σε query string και προστίθεται στο
+  URL (πριν αυτό αγνοούνταν σιωπηλά σε GET requests).
 
 ---
 

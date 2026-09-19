@@ -9,6 +9,21 @@ import { PERMS } from '../lib/perms.js';
 const today = new Date().toISOString().slice(0, 10);
 const initial = { series: '7001', quoteNumber: '', quoteDate: today, customerId: '', branchId: '', emailTemplate: 'SALES - Προσφορά // EVENTS', paymentTerms: 'Επί Πίστωση', validUntil: '', sellerId: '', referenceStartYear: '', referenceEndYear: '', paymentDueDate: '', sendEmail: false };
 
+// Popup panel shown after an ERP call when the config's "debug" toggle is on
+// (Settings → Προσφορές / ERP API) — surfaces the exact request sent and the
+// response received, so template/auth issues can be diagnosed without
+// digging through server logs.
+function ErpDebugPanel({ debug, onClose }) {
+  if (!debug) return null;
+  return <div className="erp-debug-overlay" role="dialog" aria-label="ERP request/response debug">
+    <div className="erp-debug-panel">
+      <div className="erp-debug-head"><h4><Icon name="bell" size={16} /> Debug: αίτημα &amp; απάντηση ERP</h4><button type="button" className="btn btn-icon btn-sm" onClick={onClose}><Icon name="x" size={14} /></button></div>
+      {debug.request && <div className="erp-debug-block"><h5>Αίτημα</h5><pre className="settings-control settings-code">{JSON.stringify(debug.request, null, 2)}</pre></div>}
+      {debug.response && <div className="erp-debug-block"><h5>Απάντηση (HTTP {debug.response.status})</h5><pre className="settings-control settings-code">{JSON.stringify(debug.response, null, 2)}</pre></div>}
+    </div>
+  </div>;
+}
+
 // Renders any JSON value safely (never "[object Object]"): scalars as text,
 // arrays/objects recursively as an expandable readable tree.
 function MetadataValue({ value }) {
@@ -92,7 +107,11 @@ function QuoteEditor({ quoteId, onBack, onSaved }) {
       });
       setLines(response.lines || []);
       setErpError('');
-    } catch (error) { setErpError(error.message || 'Η λήψη γραμμών από το API απέτυχε'); }
+      if (response.debug) setDebugInfo(response.debug);
+    } catch (error) {
+      setErpError(error.message || 'Η λήψη γραμμών από το API απέτυχε');
+      if (error.debug) setDebugInfo(error.debug);
+    }
     finally { setLoadingLines(false); }
   };
   const updateLine = (index, key, value) => setLines((current) => current.map((line, i) => {
@@ -119,10 +138,11 @@ function QuoteEditor({ quoteId, onBack, onSaved }) {
   const current = quote.data?.quote;
   const sendEmail = async () => { if (!quoteId) return; setActionBusy(true); try { await api.sendQuoteEmail(quoteId); await quote.refetch(); } finally { setActionBusy(false); } };
   const [erpError, setErpError] = useState('');
+  const [debugInfo, setDebugInfo] = useState(null);
   const pushErp = async () => {
     if (!quoteId) return; setActionBusy(true); setErpError('');
-    try { await api.pushQuoteToErp(quoteId); await quote.refetch(); }
-    catch (error) { setErpError(error.message || 'Η αποστολή στο ERP απέτυχε'); }
+    try { const response = await api.pushQuoteToErp(quoteId); await quote.refetch(); if (response.debug) setDebugInfo(response.debug); }
+    catch (error) { setErpError(error.message || 'Η αποστολή στο ERP απέτυχε'); if (error.debug) setDebugInfo(error.debug); }
     finally { setActionBusy(false); }
   };
   const downloadPdf = async () => { if (!quoteId) return; setActionBusy(true); try { await api.downloadQuotePdf(quoteId); } finally { setActionBusy(false); } };
@@ -142,5 +162,6 @@ function QuoteEditor({ quoteId, onBack, onSaved }) {
       {quoteId && <div className="quote-email-status"><span className={`status-dot ${current?.erp_push_status === 'sent' ? 'sent' : ''}`} /> {current?.erp_push_status === 'sent' ? `Στάλθηκε στο ERP ${current.erp_pushed_at ? formatDate(current.erp_pushed_at) : ''}${current.erp_id ? ` · ERP ID ${current.erp_id}` : ''}` : current?.erp_push_status === 'failed' ? 'Η αποστολή στο ERP απέτυχε' : 'Δεν έχει σταλεί στο ERP'}</div>}
       {(current?.erp_push_error || erpError) && <div className="quote-error">{erpError || current?.erp_push_error}</div>}
       {quoteId && <div className="quote-actions"><button type="button" className="btn" disabled={actionBusy} onClick={downloadPdf}><Icon name="download" size={15} /> PDF</button>{hasPerm(PERMS.QUOTES_SEND_EMAIL) && <button type="button" className="btn btn-accent" disabled={actionBusy} onClick={sendEmail}><Icon name="message" size={15} /> Αποστολή</button>}{hasPerm(PERMS.QUOTES_SEND_ERP) && <button type="button" className="btn" disabled={actionBusy} onClick={pushErp}><Icon name="send" size={15} /> Αποστολή στο ERP</button>}{hasPerm(PERMS.QUOTES_EDIT) && <select value={current?.status || 'draft'} disabled={actionBusy} onChange={(event) => changeStatus(event.target.value)}><option value="draft">Πρόχειρη</option><option value="ready">Έτοιμη</option><option value="accepted">Αποδεκτή</option><option value="rejected">Απορριφθείσα</option><option value="expired">Έληξε</option><option value="cancelled">Ακυρωμένη</option></select>}</div>}</div></aside></form>
-  </div>;
-}
+          <ErpDebugPanel debug={debugInfo} onClose={() => setDebugInfo(null)} />
+        </div>;
+      }

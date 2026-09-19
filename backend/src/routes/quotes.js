@@ -14,6 +14,7 @@ import { parseEncodedJson } from '../lib/responseEncoding.js';
 import { logAuditFromReq } from '../lib/audit.js';
 import { renderPushTemplate } from '../lib/pushSync.js';
 import { getPath } from '../lib/mapping.js';
+import { callConfiguredErp, responseSnapshot } from '../lib/erpClient.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FONT = path.resolve(__dirname, '../../assets/fonts/DejaVuSans.ttf');
@@ -80,6 +81,7 @@ quotesRouter.post('/resolve-lines', authorize(PERMISSIONS.QUOTES_FETCH_LINES), a
     const settings = (await query('SELECT settings FROM tenants WHERE id = ?', [req.user.tenantId])).rows[0]?.settings;
     const config = mergeTenantSettings(settings).quote_api;
     if (!config?.url) return res.status(422).json({ error: 'Δεν έχει ρυθμιστεί URL στο Ρυθμίσεις → Προσφορές / ERP API' });
+    if (config.enabled === false) return res.status(422).json({ error: 'Η ενσωμάτωση με το ERP είναι απενεργοποιημένη (δες Ρυθμίσεις → Προσφορές / ERP API).' });
     const customer = (await query(
       'SELECT id, erp_id, code, full_name, company, tax_id, email, phone FROM customers WHERE id = ? AND tenant_id = ?',
       [customerId, req.user.tenantId])).rows[0];
@@ -105,18 +107,21 @@ quotesRouter.post('/resolve-lines', authorize(PERMISSIONS.QUOTES_FETCH_LINES), a
       return res.status(422).json({ error: `Μη έγκυρο body template: ${templateError.message}` });
     }
     const headers = parseJson(config.headers, {});
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 30000);
-    let response;
-    let rawBody;
+    let call;
     try {
-      response = await fetch(config.url, { method: config.method === 'GET' ? 'GET' : 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: config.method === 'GET' ? undefined : JSON.stringify(rendered), signal: controller.signal });
-      rawBody = Buffer.from(await response.arrayBuffer());
-    } finally { clearTimeout(timer); }
+      call = await callConfiguredErp(config, headers, rendered);
+    } catch (callError) {
+      return res.status(callError.status || 502).json({
+        error: callError.message,
+        ...(config.debug && callError.requestSnapshot ? { debug: { request: callError.requestSnapshot } } : {}),
+      });
+    }
+    const { response, rawBody, requestSnapshot } = call;
     // Truncated raw ERP response, surfaced in the error `detail` for troubleshooting
     // (e.g. the ERP rejecting the request body or using an unexpected JSON shape).
     const rawSnippet = () => rawBody.toString('utf8').slice(0, 500);
-    if (!response.ok) return res.status(502).json({ error: `Το ERP API επέστρεψε HTTP ${response.status}`, detail: rawSnippet() });
+    const debugPayload = () => (config.debug ? { debug: { request: requestSnapshot, response: responseSnapshot(response, rawBody) } } : {});
+    if (!response.ok) return res.status(502).json({ error: `Το ERP API επέστρεψε HTTP ${response.status}`, detail: rawSnippet(), ...debugPayload() });
     const payload = parseEncodedJson(rawBody, {
       encoding: config.response_encoding || 'auto',
       contentType: response.headers.get('content-type'),
@@ -128,9 +133,27 @@ quotesRouter.post('/resolve-lines', authorize(PERMISSIONS.QUOTES_FETCH_LINES), a
     // when older settings still contain the legacy `lines` path.
     if (!Array.isArray(lines) && configuredPath === 'lines') lines = payload?.data?.lines;
     if (!Array.isArray(lines)) lines = payload?.data?.lines || payload?.lines || (Array.isArray(payload?.data) ? payload.data : lines);
-    if (!Array.isArray(lines)) return res.status(502).json({ error: 'Το response του ERP δεν περιέχει array γραμμών στο JSON path που ορίστηκε', detail: rawSnippet() });
-    res.json({ lines: mapErpLinesToQuoteLines(lines) });
+    if (!Array.isArray(lines)) return res.status(502).json({ error: 'Το response του ERP δεν περιέχει array γραμμών στο JSON path που ορίστηκε', detail: rawSnippet(), ...debugPayload() });
+    res.json({ lines: mapErpLinesToQuoteLines(lines), ...debugPayload() });
   } catch (err) { next(err); }
+});
+
+// Dry-run render of a fetch-lines (quote_api) body template against sample
+// data, without calling the real ERP endpoint. Mirrors /push-preview, used by
+// the "Δοκιμή template με δείγμα" button in Settings.
+quotesRouter.post('/fetch-preview', authorize(PERMISSIONS.QUOTES_FETCH_LINES), async (req, res, next) => {
+  try {
+    const sample = {
+      customerId: 15, customerErpId: 'C-100', customerCode: 'C015', customerName: 'Δοκιμαστικός πελάτης', customerCompany: 'Acme ΑΕ',
+      customerTaxId: '123456789', customerEmail: 'test@acme.gr', customerPhone: '2101234567',
+      branchId: 4, branchErpId: 'B-55', branchCode: 'B004', branchName: 'Κεντρικό', branchCity: 'Αθήνα', branchAddress: 'Λ. Συγγρού 1',
+      series: '7001', quoteNumber: 42, quoteDate: new Date().toISOString().slice(0, 10), validUntil: new Date().toISOString().slice(0, 10),
+      paymentTerms: 'Επί Πίστωση', sellerId: 3,
+      referenceStartYear: new Date().getFullYear(), referenceEndYear: new Date().getFullYear() + 1, paymentDueDate: new Date().toISOString().slice(0, 10),
+    };
+    const rendered = renderPushTemplate(req.body?.template, sample);
+    res.json({ rendered });
+  } catch (err) { res.status(400).json({ error: `Μη έγκυρο template: ${err.message}` }); }
 });
 
 quotesRouter.post('/', authorize(PERMISSIONS.QUOTES_CREATE), async (req, res, next) => {
@@ -325,24 +348,22 @@ quotesRouter.post('/:id/push-erp', authorize(PERMISSIONS.QUOTES_SEND_ERP), async
       return res.status(422).json({ error: `Μη έγκυρο body template: ${templateError.message}` });
     }
     const headers = parseJson(config.headers, {});
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 30000);
-    let response;
+    let call;
     try {
-      response = await fetch(config.url, {
-        method: config.method === 'GET' ? 'GET' : (config.method || 'POST'),
-        headers: { 'Content-Type': 'application/json', ...headers },
-        body: config.method === 'GET' ? undefined : JSON.stringify(rendered),
-        signal: controller.signal,
+      call = await callConfiguredErp(config, headers, rendered);
+    } catch (callError) {
+      await query('UPDATE quotes SET erp_push_status = ?, erp_push_error = ? WHERE id = ? AND tenant_id = ?', ['failed', callError.message, id, req.user.tenantId]);
+      return res.status(callError.status || 502).json({
+        error: callError.message,
+        ...(config.debug && callError.requestSnapshot ? { debug: { request: callError.requestSnapshot } } : {}),
       });
-    } catch (networkError) {
-      await query('UPDATE quotes SET erp_push_status = ?, erp_push_error = ? WHERE id = ? AND tenant_id = ?', ['failed', networkError.message, id, req.user.tenantId]);
-      return res.status(502).json({ error: `Αποτυχία σύνδεσης με το ERP: ${networkError.message}` });
-    } finally { clearTimeout(timer); }
-    const raw = await response.text();
+    }
+    const { response, rawBody, requestSnapshot } = call;
+    const raw = rawBody.toString('utf8');
+    const debugPayload = () => (config.debug ? { debug: { request: requestSnapshot, response: responseSnapshot(response, rawBody) } } : {});
     if (!response.ok) {
       await query('UPDATE quotes SET erp_push_status = ?, erp_push_error = ? WHERE id = ? AND tenant_id = ?', ['failed', `HTTP ${response.status}: ${raw.slice(0, 500)}`, id, req.user.tenantId]);
-      return res.status(502).json({ error: `Το ERP API επέστρεψε HTTP ${response.status}` });
+      return res.status(502).json({ error: `Το ERP API επέστρεψε HTTP ${response.status}`, detail: raw.slice(0, 500), ...debugPayload() });
     }
     let erpId = null;
     try {
@@ -358,6 +379,6 @@ quotesRouter.post('/:id/push-erp', authorize(PERMISSIONS.QUOTES_SEND_ERP), async
       summary: `Αποστολή προσφοράς ${quote.series}-${quote.quote_number} στο ERP`,
       details: { erp_id: erpId },
     });
-    res.json({ id, erp_id: erpId, status: 'sent' });
+    res.json({ id, erp_id: erpId, status: 'sent', ...debugPayload() });
   } catch (err) { next(err); }
 });

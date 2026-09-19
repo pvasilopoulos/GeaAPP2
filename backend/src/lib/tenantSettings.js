@@ -29,12 +29,16 @@ export const DEFAULT_TENANT_SETTINGS = {
   app_name: 'SpaceHub',
   browser_tab_title: 'SpaceHub — Διαχείριση Πελατών',
   quote_api: {
+    enabled: true,
     url: '',
     method: 'POST',
     body_template: '{"customerId":"{{customerId}}","customerErpId":"{{customerErpId}}","customerCode":"{{customerCode}}","customerName":"{{customerName}}","customerCompany":"{{customerCompany}}","customerTaxId":"{{customerTaxId}}","customerEmail":"{{customerEmail}}","customerPhone":"{{customerPhone}}","branchId":"{{branchId}}","branchErpId":"{{branchErpId}}","branchCode":"{{branchCode}}","branchName":"{{branchName}}","branchCity":"{{branchCity}}","branchAddress":"{{branchAddress}}","series":"{{series}}","quoteNumber":"{{quoteNumber}}","quoteDate":"{{quoteDate}}","validUntil":"{{validUntil}}","paymentTerms":"{{paymentTerms}}","sellerId":"{{sellerId}}","referenceStartYear":"{{referenceStartYear}}","referenceEndYear":"{{referenceEndYear}}","paymentDueDate":"{{paymentDueDate}}"}',
     headers: '{}',
     response_path: 'data.lines',
     response_encoding: 'auto',
+    timeout_ms: 30000,
+    auth: { type: 'none', token: '', username: '', password: '', api_key_name: '', api_key_value: '', api_key_in: 'header' },
+    debug: false,
   },
   // Reverse direction of quote_api: pushes a finalized quote (header + lines)
   // TO the ERP when the user clicks "Αποστολή στο ERP" on a quote. Uses the
@@ -42,6 +46,7 @@ export const DEFAULT_TENANT_SETTINGS = {
   // (renderPushTemplate in pushSync.js) — {{lines}} expands to the full JSON
   // array of quote lines, every other placeholder is a scalar header field.
   quote_push_api: {
+    enabled: true,
     url: '',
     method: 'POST',
     headers: '{}',
@@ -60,6 +65,9 @@ export const DEFAULT_TENANT_SETTINGS = {
       // JSON.stringify(value) substitution produces correctly-typed output.
       .replace(/"(\{\{[\w.]+}})"/g, '$1'),
     response_id_path: 'id',
+    timeout_ms: 30000,
+    auth: { type: 'none', token: '', username: '', password: '', api_key_name: '', api_key_value: '', api_key_in: 'header' },
+    debug: false,
   },
   google_maps_api_key: '',
   // Tenant-wide default sidebar/mobile-footer nav configuration. Defaults
@@ -122,6 +130,19 @@ export function parseJson(v, fallback) {
   return fallback;
 }
 
+// Deep-merges a persisted quote_api/quote_push_api config with its defaults so
+// tenants that saved a config before new fields (auth, timeout_ms, debug,
+// enabled…) were introduced still get sane defaults for the missing ones,
+// instead of losing them entirely to the top-level shallow spread below.
+function mergeErpConfig(defaultConfig, saved) {
+  const cfg = saved && typeof saved === 'object' ? saved : {};
+  return {
+    ...defaultConfig,
+    ...cfg,
+    auth: { ...defaultConfig.auth, ...(cfg.auth && typeof cfg.auth === 'object' ? cfg.auth : {}) },
+  };
+}
+
 function sanitizeBrandingText(value, fallback, maxLength) {
   if (value == null) return fallback;
   const trimmed = String(value).trim();
@@ -161,6 +182,8 @@ export function mergeTenantSettings(raw) {
     messaging: mergeMessaging(parsed.messaging),
     reminders: mergeReminderSettings(parsed.reminders),
     menu: sanitizeMenuConfig(parsed.menu),
+    quote_api: mergeErpConfig(DEFAULT_TENANT_SETTINGS.quote_api, parsed.quote_api),
+    quote_push_api: mergeErpConfig(DEFAULT_TENANT_SETTINGS.quote_push_api, parsed.quote_push_api),
   };
 }
 
