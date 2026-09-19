@@ -78,13 +78,18 @@ quotesRouter.post('/resolve-lines', authorize(PERMISSIONS.QUOTES_FETCH_LINES), a
     const config = mergeTenantSettings(settings).quote_api;
     if (!config?.url) return res.status(422).json({ error: 'Δεν έχει ρυθμιστεί URL στο Ρυθμίσεις → Προσφορές / ERP API' });
     const values = { customerId, branchId: branchId || null, referenceStartYear: referenceStartYear || null, referenceEndYear: referenceEndYear || null, paymentDueDate: paymentDueDate || null };
-    const rendered = String(config.body_template || '{}').replace(/\{\{(\w+)\}\}/g, (_, key) => JSON.stringify(values[key] ?? ''));
+    let rendered;
+    try {
+      rendered = renderPushTemplate(config.body_template, values);
+    } catch (templateError) {
+      return res.status(422).json({ error: `Μη έγκυρο body template: ${templateError.message}` });
+    }
     const headers = parseJson(config.headers, {});
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 30000);
     let response;
     try {
-      response = await fetch(config.url, { method: config.method === 'GET' ? 'GET' : 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: config.method === 'GET' ? undefined : rendered, signal: controller.signal });
+      response = await fetch(config.url, { method: config.method === 'GET' ? 'GET' : 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: config.method === 'GET' ? undefined : JSON.stringify(rendered), signal: controller.signal });
     } finally { clearTimeout(timer); }
     if (!response.ok) return res.status(502).json({ error: `Το ERP API επέστρεψε HTTP ${response.status}` });
     const payload = parseEncodedJson(Buffer.from(await response.arrayBuffer()), {

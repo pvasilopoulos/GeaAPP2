@@ -11,6 +11,14 @@ assert.deepEqual(
 assert.deepEqual(renderPushTemplate('{"n": {{missing}}}', {}), { n: null });
 assert.deepEqual(renderPushTemplate('', { a: 1 }), {});
 assert.throws(() => renderPushTemplate('{"bad": {{code}', { code: 'x' }));
+// Placeholders written wrapped in manual quotes (a common authoring mistake /
+// legacy convention, e.g. the quotes-module default template) must not
+// produce double-quoted strings — the surrounding quotes are dropped in
+// favour of JSON.stringify's own quoting.
+assert.deepEqual(
+  renderPushTemplate('{"customerId":"{{customerId}}","paymentDueDate":"{{paymentDueDate}}","branchId":"{{branchId}}"}', { customerId: 15, paymentDueDate: '2026-11-01', branchId: null }),
+  { customerId: 15, paymentDueDate: '2026-11-01', branchId: null },
+);
 
 // --- in-memory fake store ----------------------------------------------------
 const state = {

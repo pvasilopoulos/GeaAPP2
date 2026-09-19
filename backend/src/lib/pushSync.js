@@ -35,14 +35,22 @@ function parseJson(value, fallback = {}) {
  * Renders a JSON body template containing `{{field}}` placeholders. Each
  * placeholder is replaced with `JSON.stringify(value)`, so authors write the
  * template WITHOUT surrounding quotes (e.g. `{"code": {{code}}}`) and both
- * strings and numbers/null come out as valid JSON.
+ * strings and numbers/null come out as valid JSON. For backward/forward
+ * compatibility, placeholders that ARE written wrapped in manual quotes
+ * (e.g. `{"code": "{{code}}"}`) are also handled correctly: the surrounding
+ * quotes are treated as part of the placeholder and dropped in favour of
+ * `JSON.stringify`'s own quoting — otherwise a string value would end up
+ * double-quoted (`""value""`) and break the resulting JSON.
  */
 export function renderPushTemplate(template, data) {
   const src = template && String(template).trim() ? String(template) : '{}';
-  const rendered = src.replace(/\{\{\s*([\w.]+)\s*}}/g, (_match, key) => {
+  const substitute = (key) => {
     const value = Object.prototype.hasOwnProperty.call(data, key) ? data[key] : null;
     return JSON.stringify(value === undefined ? null : value);
-  });
+  };
+  const rendered = src
+    .replace(/"\{\{\s*([\w.]+)\s*}}"/g, (_match, key) => substitute(key))
+    .replace(/\{\{\s*([\w.]+)\s*}}/g, (_match, key) => substitute(key));
   return JSON.parse(rendered); // throws if the template + values don't produce valid JSON
 }
 
