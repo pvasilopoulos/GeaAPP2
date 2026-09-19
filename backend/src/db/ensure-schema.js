@@ -138,6 +138,10 @@ export async function ensureSchema() {
   await addColumn('quotes', 'status_updated_at', 'DATETIME NULL');
   await addColumn('quotes', 'status_updated_by', 'BIGINT NULL');
   await addColumn('quotes', 'pdf_generated_at', 'DATETIME NULL');
+  await addColumn('quotes', 'erp_id', 'VARCHAR(100) NULL');
+  await addColumn('quotes', 'erp_pushed_at', 'DATETIME NULL');
+  await addColumn('quotes', 'erp_push_status', 'VARCHAR(20) NULL');
+  await addColumn('quotes', 'erp_push_error', 'TEXT NULL');
   if (!(await tableExists('quote_lines'))) {
     await query(`CREATE TABLE quote_lines (
       id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, quote_id BIGINT NOT NULL,

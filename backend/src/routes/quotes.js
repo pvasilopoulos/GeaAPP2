@@ -12,6 +12,8 @@ import { QUOTE_STATUSES, QUOTE_STATUS_TRANSITIONS } from '../lib/quoteWorkflow.j
 import { mapErpLinesToQuoteLines } from '../lib/quoteLineMapping.js';
 import { parseEncodedJson } from '../lib/responseEncoding.js';
 import { logAuditFromReq } from '../lib/audit.js';
+import { renderPushTemplate } from '../lib/pushSync.js';
+import { getPath } from '../lib/mapping.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FONT = path.resolve(__dirname, '../../assets/fonts/DejaVuSans.ttf');
@@ -173,7 +175,8 @@ function quoteEmailBody(quote, lines, customBody) {
 
 async function loadQuote(id, tenantId) {
   const quote = (await query(
-    `SELECT q.*, c.full_name AS customer_name, c.company, c.email AS customer_email, b.name AS branch_name
+    `SELECT q.*, c.full_name AS customer_name, c.company, c.email AS customer_email, c.erp_id AS customer_erp_id,
+            b.name AS branch_name, b.erp_id AS branch_erp_id
      FROM quotes q JOIN customers c ON c.id = q.customer_id LEFT JOIN branches b ON b.id = q.branch_id
      WHERE q.id = ? AND q.tenant_id = ?`, [id, tenantId])).rows[0];
   if (quote) quote.lines = (await query('SELECT * FROM quote_lines WHERE quote_id = ? ORDER BY line_order, id', [id])).rows;
@@ -235,5 +238,96 @@ quotesRouter.post('/:id/send', authorize(PERMISSIONS.QUOTES_SEND_EMAIL), async (
     await logActivity({ tenantId: req.user.tenantId, customerId: quote.customer_id, type: 'quote_email_sent', description: `Email προσφοράς προς ${to}`, details: { actor: { id: req.user.id }, quote_id: id, delivery_status: delivery.status, error: delivery.detail || null } });
     if (!sent) return res.status(502).json({ error: delivery.detail || 'Η αποστολή απέτυχε', delivery_status: delivery.status });
     res.json({ id, status: 'sent', delivery_status: delivery.status });
+  } catch (err) { next(err); }
+});
+
+// Builds the flat + `lines` data object available to {{placeholders}} in
+// quote_push_api.body_template — mirrors ENTITY_TEMPLATE_FIELDS in pushSync.js
+// but for the quotes/quote_lines domain.
+function quotePushData(quote) {
+  return {
+    quoteId: quote.id, series: quote.series, quoteNumber: quote.quote_number,
+    quoteDate: quote.quote_date ? String(quote.quote_date).slice(0, 10) : null,
+    validUntil: quote.valid_until ? String(quote.valid_until).slice(0, 10) : null,
+    status: quote.status,
+    customerId: quote.customer_id, customerErpId: quote.customer_erp_id || null,
+    customerName: quote.customer_name, customerCompany: quote.company,
+    branchId: quote.branch_id || null, branchErpId: quote.branch_erp_id || null, branchName: quote.branch_name || null,
+    sellerId: quote.seller_id || null,
+    paymentTerms: quote.payment_terms, paymentDueDate: quote.payment_due_date ? String(quote.payment_due_date).slice(0, 10) : null,
+    referenceStartYear: quote.reference_start_year || null, referenceEndYear: quote.reference_end_year || null,
+    subtotal: Number(quote.subtotal || 0), taxTotal: Number(quote.tax_total || 0), total: Number(quote.total || 0),
+    lines: (quote.lines || []).map((line) => ({
+      description: line.description, quantity: Number(line.quantity || 0), unitPrice: Number(line.unit_price || 0),
+      discountPercent: Number(line.discount_percent || 0), taxPercent: Number(line.tax_percent || 0), lineTotal: Number(line.line_total || 0),
+    })),
+  };
+}
+
+quotesRouter.post('/push-preview', authorize(PERMISSIONS.QUOTES_SEND_ERP), async (req, res, next) => {
+  try {
+    const sampleLines = [{ description: 'Ενδεικτική γραμμή', quantity: 2, unit_price: 50, discount_percent: 0, tax_percent: 24, line_total: 124 }];
+    const sample = quotePushData({
+      id: 1, series: '7001', quote_number: 42, quote_date: new Date(), valid_until: new Date(), status: 'ready',
+      customer_id: 10, customer_erp_id: 'C-100', customer_name: 'Δοκιμαστικός πελάτης', company: 'Acme ΑΕ',
+      branch_id: 20, branch_erp_id: 'B-5', branch_name: 'Κεντρικό',
+      seller_id: 3, payment_terms: 'Επί Πίστωση', payment_due_date: new Date(),
+      reference_start_year: new Date().getFullYear(), reference_end_year: new Date().getFullYear() + 1,
+      subtotal: 100, tax_total: 24, total: 124, lines: sampleLines,
+    });
+    const rendered = renderPushTemplate(req.body?.template, sample);
+    res.json({ rendered });
+  } catch (err) { res.status(400).json({ error: `Μη έγκυρο template: ${err.message}` }); }
+});
+
+quotesRouter.post('/:id/push-erp', authorize(PERMISSIONS.QUOTES_SEND_ERP), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const quote = await loadQuote(id, req.user.tenantId);
+    if (!quote) return res.status(404).json({ error: 'Η προσφορά δεν βρέθηκε' });
+    const settings = (await query('SELECT settings FROM tenants WHERE id = ?', [req.user.tenantId])).rows[0]?.settings;
+    const config = mergeTenantSettings(settings).quote_push_api;
+    if (!config?.url) return res.status(422).json({ error: 'Δεν έχει ρυθμιστεί URL στο Ρυθμίσεις → Προσφορές / ERP API' });
+    let rendered;
+    try {
+      rendered = renderPushTemplate(config.body_template, quotePushData(quote));
+    } catch (templateError) {
+      return res.status(422).json({ error: `Μη έγκυρο body template: ${templateError.message}` });
+    }
+    const headers = parseJson(config.headers, {});
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30000);
+    let response;
+    try {
+      response = await fetch(config.url, {
+        method: config.method === 'GET' ? 'GET' : (config.method || 'POST'),
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: config.method === 'GET' ? undefined : JSON.stringify(rendered),
+        signal: controller.signal,
+      });
+    } catch (networkError) {
+      await query('UPDATE quotes SET erp_push_status = ?, erp_push_error = ? WHERE id = ? AND tenant_id = ?', ['failed', networkError.message, id, req.user.tenantId]);
+      return res.status(502).json({ error: `Αποτυχία σύνδεσης με το ERP: ${networkError.message}` });
+    } finally { clearTimeout(timer); }
+    const raw = await response.text();
+    if (!response.ok) {
+      await query('UPDATE quotes SET erp_push_status = ?, erp_push_error = ? WHERE id = ? AND tenant_id = ?', ['failed', `HTTP ${response.status}: ${raw.slice(0, 500)}`, id, req.user.tenantId]);
+      return res.status(502).json({ error: `Το ERP API επέστρεψε HTTP ${response.status}` });
+    }
+    let erpId = null;
+    try {
+      const parsed = raw ? JSON.parse(raw) : null;
+      erpId = parsed ? getPath(parsed, config.response_id_path || 'id') : null;
+    } catch { /* non-JSON response, skip erp_id capture */ }
+    await query(
+      'UPDATE quotes SET erp_id = COALESCE(?, erp_id), erp_pushed_at = NOW(), erp_push_status = ?, erp_push_error = NULL WHERE id = ? AND tenant_id = ?',
+      [erpId != null ? String(erpId) : null, 'sent', id, req.user.tenantId]);
+    await logActivity({ tenantId: req.user.tenantId, customerId: quote.customer_id, type: 'quote_pushed_erp', description: `Αποστολή προσφοράς ${quote.series}-${quote.quote_number} στο ERP`, details: { actor: { id: req.user.id }, quote_id: id, erp_id: erpId } });
+    await logAuditFromReq(query, req, {
+      action: 'push_erp', entityType: 'quote', entityId: id, customerId: quote.customer_id,
+      summary: `Αποστολή προσφοράς ${quote.series}-${quote.quote_number} στο ERP`,
+      details: { erp_id: erpId },
+    });
+    res.json({ id, erp_id: erpId, status: 'sent' });
   } catch (err) { next(err); }
 });

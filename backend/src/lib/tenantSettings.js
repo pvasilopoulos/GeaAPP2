@@ -6,7 +6,7 @@ export const APP_SETTING_KEYS = [
   'default_country', 'date_format', 'week_starts_on',
   'default_customer_status', 'require_email', 'strict_duplicates',
   'voice_lang', 'allow_vip', 'map_provider', 'view_preferences',
-  'quote_api', 'app_name', 'browser_tab_title',
+  'quote_api', 'quote_push_api', 'app_name', 'browser_tab_title',
 ];
 
 export const MAP_PROVIDER_IDS = ['google', 'osm', 'apple', 'bing'];
@@ -35,6 +35,31 @@ export const DEFAULT_TENANT_SETTINGS = {
     headers: '{}',
     response_path: 'data.lines',
     response_encoding: 'auto',
+  },
+  // Reverse direction of quote_api: pushes a finalized quote (header + lines)
+  // TO the ERP when the user clicks "Αποστολή στο ERP" on a quote. Uses the
+  // same {{field}} templating engine as connectors' two-way sync
+  // (renderPushTemplate in pushSync.js) — {{lines}} expands to the full JSON
+  // array of quote lines, every other placeholder is a scalar header field.
+  quote_push_api: {
+    url: '',
+    method: 'POST',
+    headers: '{}',
+    body_template: JSON.stringify({
+      series: '{{series}}', number: '{{quoteNumber}}', date: '{{quoteDate}}', validUntil: '{{validUntil}}', status: '{{status}}',
+      customer: { id: '{{customerId}}', erpId: '{{customerErpId}}', name: '{{customerName}}', company: '{{customerCompany}}' },
+      branch: { id: '{{branchId}}', erpId: '{{branchErpId}}', name: '{{branchName}}' },
+      seller: '{{sellerId}}',
+      paymentTerms: '{{paymentTerms}}', paymentDueDate: '{{paymentDueDate}}',
+      referenceStartYear: '{{referenceStartYear}}', referenceEndYear: '{{referenceEndYear}}',
+      totals: { subtotal: '{{subtotal}}', tax: '{{taxTotal}}', total: '{{total}}' },
+      lines: '{{lines}}',
+    }, null, 2)
+      // JSON.stringify above quotes the placeholders (needed so the object is
+      // itself valid JSON); strip those quotes so renderPushTemplate's
+      // JSON.stringify(value) substitution produces correctly-typed output.
+      .replace(/"(\{\{[\w.]+}})"/g, '$1'),
+    response_id_path: 'id',
   },
   google_maps_api_key: '',
   // Tenant-wide default sidebar/mobile-footer nav configuration. Defaults

@@ -97,6 +97,8 @@ export const api = {
   updateQuote: (id, payload) => send('PATCH', `/quotes/${id}`, payload),
   updateQuoteStatus: (id, status) => send('POST', `/quotes/${id}/status`, { status }),
   sendQuoteEmail: (id, payload = {}) => send('POST', `/quotes/${id}/send`, payload),
+  pushQuoteToErp: (id) => send('POST', `/quotes/${id}/push-erp`),
+  previewQuotePush: (template) => send('POST', '/quotes/push-preview', { template }),
   async downloadQuotePdf(id) {
     const res = await fetch(`/api/quotes/${id}/pdf`, { headers: authHeaders() });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Η λήψη PDF απέτυχε');

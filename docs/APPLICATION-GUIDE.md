@@ -508,6 +508,31 @@ cancelled  cancelled         (καμία περαιτέρω μετάβαση)
 γράφει activity `quote_email_sent` με το αποτέλεσμα παράδοσης. Χωρίς SMTP διαπιστευτήρια το
 μήνυμα καταγράφεται ως `logged`/αποτυγχάνει με σαφές σφάλμα αντί να αποτυγχάνει σιωπηλά.
 
+### 9.6 Αποστολή προσφοράς στο ERP (`POST /api/quotes/:id/push-erp`) — **Απαιτεί ρύθμιση, δικαίωμα `quotes.send_erp`**
+Χειροκίνητο κουμπί **«Αποστολή στο ERP»** στη σελίδα προσφοράς· αντίστροφη κατεύθυνση από το §9.2
+(εκεί το ERP δίνει τις γραμμές, εδώ ολόκληρη η προσφορά — header + array γραμμών — στέλνεται προς
+τα έξω). Ρυθμίζεται στο **Ρυθμίσεις → Προσφορές / ERP API** (`tenants.settings.quote_push_api`:
+`url`, `method`, `headers`, `body_template`, `response_id_path` — προεπιλογή `"id"`).
+
+- Το `body_template` χρησιμοποιεί το ίδιο μηχανισμό `{{field}}` → `JSON.stringify(value)` με το
+  two-way sync των connectors (`renderPushTemplate` σε `lib/pushSync.js`, reused εδώ) — γράφεται
+  **χωρίς εισαγωγικά** γύρω από τα placeholders ώστε strings/αριθμοί/arrays να βγαίνουν σωστά
+  τυποποιημένα. Διαθέσιμα scalar πεδία: `quoteId`, `series`, `quoteNumber`, `quoteDate`,
+  `validUntil`, `status`, `customerId`, `customerErpId`, `customerName`, `customerCompany`,
+  `branchId`, `branchErpId`, `branchName`, `sellerId`, `paymentTerms`, `paymentDueDate`,
+  `referenceStartYear`, `referenceEndYear`, `subtotal`, `taxTotal`, `total`. Το `{{lines}}`
+  επεκτείνεται σε **ολόκληρο JSON array** με ανά γραμμή: `description`, `quantity`, `unitPrice`,
+  `discountPercent`, `taxPercent`, `lineTotal`.
+- `POST /api/quotes/push-preview` κάνει dry-run rendering του template πάνω σε δείγμα δεδομένων
+  (χωρίς πραγματικό HTTP call) — χρησιμοποιείται από το κουμπί «Δοκιμή template με δείγμα» στις
+  ρυθμίσεις για επαλήθευση πριν αποθηκευτεί.
+- Με επιτυχία (`2xx`): προαιρετική εξαγωγή του ERP ID της απάντησης μέσω `response_id_path`
+  (`getPath`, ίδιο helper με τους connectors) και αποθήκευση σε `quotes.erp_id`· ενημερώνει επίσης
+  `erp_pushed_at`/`erp_push_status = 'sent'`, καθαρίζει το `erp_push_error`, γράφει activity
+  `quote_pushed_erp` και audit entry.
+- Με αποτυχία (network error ή μη-2xx): `erp_push_status = 'failed'` + `erp_push_error` με το
+  μήνυμα/HTTP status, εμφανίζεται στο UI της προσφοράς.
+
 ---
 
 ## 10. Dashboard

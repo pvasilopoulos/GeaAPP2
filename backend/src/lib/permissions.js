@@ -21,7 +21,7 @@ export const PERMISSIONS = {
   BOOKINGS_MENU: 'bookings.menu', BOOKINGS_VIEW: 'bookings.view', BOOKINGS_CREATE: 'bookings.create', BOOKINGS_EDIT: 'bookings.edit', BOOKINGS_DELETE: 'bookings.delete',
   PAYMENTS_MENU: 'payments.menu', PAYMENTS_VIEW: 'payments.view', PAYMENTS_CREATE: 'payments.create', PAYMENTS_EDIT: 'payments.edit', PAYMENTS_DELETE: 'payments.delete',
   COMMUNICATIONS_MENU: 'communications.menu', COMMUNICATIONS_VIEW: 'communications.view', COMMUNICATIONS_CREATE: 'communications.create',
-  QUOTES_MENU: 'quotes.menu', QUOTES_VIEW: 'quotes.view', QUOTES_CREATE: 'quotes.create', QUOTES_EDIT: 'quotes.edit', QUOTES_DELETE: 'quotes.delete', QUOTES_FETCH_LINES: 'quotes.fetch_lines', QUOTES_SEND_EMAIL: 'quotes.send_email',
+  QUOTES_MENU: 'quotes.menu', QUOTES_VIEW: 'quotes.view', QUOTES_CREATE: 'quotes.create', QUOTES_EDIT: 'quotes.edit', QUOTES_DELETE: 'quotes.delete', QUOTES_FETCH_LINES: 'quotes.fetch_lines', QUOTES_SEND_EMAIL: 'quotes.send_email', QUOTES_SEND_ERP: 'quotes.send_erp',
   REPORTS_MENU: 'reports.menu', REPORTS_VIEW: 'reports.view', SETTINGS_MENU: 'settings.menu', USERS_MENU: 'users.menu', ROLES_MENU: 'roles.menu',
 };
 
@@ -36,9 +36,14 @@ export const PERMISSION_CATALOG = [
     ['BOOKINGS', 'Κρατήσεις', ['MENU', 'VIEW', 'CREATE', 'EDIT', 'DELETE']],
     ['PAYMENTS', 'Πληρωμές', ['MENU', 'VIEW', 'CREATE', 'EDIT', 'DELETE']],
     ['COMMUNICATIONS', 'Επικοινωνίες', ['MENU', 'VIEW', 'CREATE']],
-    ['QUOTES', 'Προσφορές', ['MENU', 'VIEW', 'CREATE', 'EDIT', 'DELETE', 'FETCH_LINES', 'SEND_EMAIL']],
+    ['QUOTES', 'Προσφορές', ['MENU', 'VIEW', 'CREATE', 'EDIT', 'DELETE', 'FETCH_LINES', 'SEND_EMAIL', 'SEND_ERP']],
   ].flatMap(([prefix, label, actions]) => actions.map((action) => ({
-    code: P[`${prefix}_${action}`], label: `${action === 'MENU' ? 'Menu' : action === 'VIEW' ? 'Προβολή' : action === 'CREATE' ? 'Δημιουργία' : action === 'EDIT' ? 'Επεξεργασία' : 'Διαγραφή'} ${label.toLowerCase()}`, group: label,
+    code: P[`${prefix}_${action}`],
+    label: `${{
+      MENU: 'Menu', VIEW: 'Προβολή', CREATE: 'Δημιουργία', EDIT: 'Επεξεργασία', DELETE: 'Διαγραφή',
+      FETCH_LINES: 'Λήψη γραμμών', SEND_EMAIL: 'Αποστολή email', SEND_ERP: 'Αποστολή στο ERP',
+    }[action] || action} ${label.toLowerCase()}`,
+    group: label,
   }))),
   { code: P.CUSTOMERS_READ, label: 'Προβολή πελατών', group: 'Πελάτες' },
   { code: P.CUSTOMERS_WRITE, label: 'Επεξεργασία πελατών', group: 'Πελάτες' },
