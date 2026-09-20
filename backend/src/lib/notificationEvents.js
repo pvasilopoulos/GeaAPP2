@@ -37,6 +37,9 @@ export const EVENT_CATALOG = {
       { key: 'title', label: 'Τίτλος υπενθύμισης', type: 'text' },
       { key: 'customerName', label: 'Όνομα πελάτη', type: 'text' },
       { key: 'daysOverdue', label: 'Ημέρες καθυστέρησης', type: 'number' },
+      { key: 'customerPhone', label: 'Τηλέφωνο πελάτη', type: 'text' },
+      { key: 'customerMobile', label: 'Κινητό πελάτη', type: 'text' },
+      { key: 'customerEmail', label: 'Email πελάτη', type: 'text' },
     ],
   },
   follow_up_due_soon: {
@@ -45,6 +48,9 @@ export const EVENT_CATALOG = {
     fields: [
       { key: 'title', label: 'Τίτλος υπενθύμισης', type: 'text' },
       { key: 'customerName', label: 'Όνομα πελάτη', type: 'text' },
+      { key: 'customerPhone', label: 'Τηλέφωνο πελάτη', type: 'text' },
+      { key: 'customerMobile', label: 'Κινητό πελάτη', type: 'text' },
+      { key: 'customerEmail', label: 'Email πελάτη', type: 'text' },
     ],
   },
   follow_up_assigned: {
@@ -53,6 +59,9 @@ export const EVENT_CATALOG = {
     fields: [
       { key: 'title', label: 'Τίτλος υπενθύμισης', type: 'text' },
       { key: 'customerName', label: 'Όνομα πελάτη', type: 'text' },
+      { key: 'customerPhone', label: 'Τηλέφωνο πελάτη', type: 'text' },
+      { key: 'customerMobile', label: 'Κινητό πελάτη', type: 'text' },
+      { key: 'customerEmail', label: 'Email πελάτη', type: 'text' },
     ],
   },
   connector_run_failed: {
@@ -69,6 +78,9 @@ export const EVENT_CATALOG = {
     fields: [
       { key: 'customerName', label: 'Όνομα πελάτη', type: 'text' },
       { key: 'total', label: 'Συνολική αξία', type: 'number' },
+      { key: 'customerPhone', label: 'Τηλέφωνο πελάτη', type: 'text' },
+      { key: 'customerMobile', label: 'Κινητό πελάτη', type: 'text' },
+      { key: 'customerEmail', label: 'Email πελάτη', type: 'text' },
     ],
   },
   quote_status_changed: {
@@ -79,6 +91,9 @@ export const EVENT_CATALOG = {
       { key: 'toStatus', label: 'Σε κατάσταση', type: 'text' },
       { key: 'customerName', label: 'Όνομα πελάτη', type: 'text' },
       { key: 'total', label: 'Συνολική αξία', type: 'number' },
+      { key: 'customerPhone', label: 'Τηλέφωνο πελάτη', type: 'text' },
+      { key: 'customerMobile', label: 'Κινητό πελάτη', type: 'text' },
+      { key: 'customerEmail', label: 'Email πελάτη', type: 'text' },
     ],
   },
   quote_created: {
@@ -87,6 +102,9 @@ export const EVENT_CATALOG = {
     fields: [
       { key: 'customerName', label: 'Όνομα πελάτη', type: 'text' },
       { key: 'total', label: 'Συνολική αξία', type: 'number' },
+      { key: 'customerPhone', label: 'Τηλέφωνο πελάτη', type: 'text' },
+      { key: 'customerMobile', label: 'Κινητό πελάτη', type: 'text' },
+      { key: 'customerEmail', label: 'Email πελάτη', type: 'text' },
     ],
   },
   customer_assigned: {
@@ -94,6 +112,9 @@ export const EVENT_CATALOG = {
     description: 'Ένας πελάτης ανατέθηκε (ή άλλαξε ανάθεση) σε υπάλληλο.',
     fields: [
       { key: 'customerName', label: 'Όνομα πελάτη', type: 'text' },
+      { key: 'customerPhone', label: 'Τηλέφωνο πελάτη', type: 'text' },
+      { key: 'customerMobile', label: 'Κινητό πελάτη', type: 'text' },
+      { key: 'customerEmail', label: 'Email πελάτη', type: 'text' },
     ],
   },
   booking_created: {
@@ -103,6 +124,9 @@ export const EVENT_CATALOG = {
       { key: 'customerName', label: 'Όνομα πελάτη', type: 'text' },
       { key: 'branchName', label: 'Υποκατάστημα', type: 'text' },
       { key: 'spaceName', label: 'Χώρος', type: 'text' },
+      { key: 'customerPhone', label: 'Τηλέφωνο πελάτη', type: 'text' },
+      { key: 'customerMobile', label: 'Κινητό πελάτη', type: 'text' },
+      { key: 'customerEmail', label: 'Email πελάτη', type: 'text' },
     ],
   },
 };

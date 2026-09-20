@@ -25,6 +25,14 @@ const OPERATOR_LABELS = {
 
 const RECIPIENT_LABELS = { all: 'Όλοι οι χρήστες', role: 'Συγκεκριμένος ρόλος', users: 'Συγκεκριμένοι χρήστες', dynamic: 'Δυναμικός παραλήπτης (από το ίδιο το γεγονός)' };
 
+const CHANNEL_RECIPIENT_LABELS = { inherit: 'Ίδιος με τους παραπάνω παραλήπτες', customer: 'Ο πελάτης της εγγραφής', custom: 'Προσαρμοσμένο (τηλέφωνο/email/μεταβλητή)' };
+
+const STATUS_LABELS = {
+  sent: 'Στάλθηκε', failed: 'Απέτυχε', throttled: 'Ανεστάλη (throttle)', opted_out: 'Εξαίρεση χρήστη',
+  quiet_hours: 'Ώρες ησυχίας', queued_digest: 'Σε αναμονή (συγκεντρωτικό)', dry_run: 'Δοκιμή (dry-run)',
+  not_applicable: 'Μη εφαρμόσιμο', no_contact: 'Χωρίς στοιχεία επικοινωνίας',
+};
+
 const RECURRENCE_LABELS = { once: 'Μία φορά (ανά εγγραφή)', recurring: 'Επανάληψη κάθε μέρα όσο ισχύει' };
 const DIGEST_LABELS = { none: 'Άμεση αποστολή', hourly: 'Συγκεντρωτικά ανά ώρα', daily: 'Συγκεντρωτικά 1 φορά/ημέρα (08:00)' };
 const EXTRA_ACTION_TYPES = { create_follow_up: 'Δημιουργία follow-up', add_tag: 'Προσθήκη ετικέτας πελάτη', webhook: 'Κλήση webhook (URL)' };
@@ -62,6 +70,7 @@ function emptyForm() {
     recipientIds: [],
     recipientDynamic: '',
     channels: ['app'],
+    channelOverrides: {},
     titleTemplate: '',
     bodyTemplate: '',
     urlTemplate: '',
@@ -155,6 +164,7 @@ export default function NotificationRulesPanel() {
       recipientType: rule.recipientType,
       recipientRoleId: rule.recipientRoleId || '', recipientIds: rule.recipientIds || [],
       recipientDynamic: rule.recipientDynamic || '', channels: rule.channels || [],
+      channelOverrides: rule.channelOverrides || {},
       titleTemplate: rule.titleTemplate || '', bodyTemplate: rule.bodyTemplate || '', urlTemplate: rule.urlTemplate || '',
       throttleSeconds: rule.throttleSeconds || 0,
       priority: rule.priority || 'normal', digestMode: rule.digestMode || 'none',
@@ -186,6 +196,15 @@ export default function NotificationRulesPanel() {
   }
   function toggleChannel(ch) {
     setForm((f) => ({ ...f, channels: f.channels.includes(ch) ? f.channels.filter((c) => c !== ch) : [...f.channels, ch] }));
+  }
+  function updateChannelOverride(ch, patch) {
+    setForm((f) => ({
+      ...f,
+      channelOverrides: {
+        ...f.channelOverrides,
+        [ch]: { recipientType: 'inherit', customValue: '', titleTemplate: '', bodyTemplate: '', ...(f.channelOverrides[ch] || {}), ...patch },
+      },
+    }));
   }
   function addExtraAction(type) {
     setForm((f) => ({
@@ -405,6 +424,52 @@ export default function NotificationRulesPanel() {
           </div>
         </div>
 
+        {!!form.channels.length && (
+          <div style={card}>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>Εξατομίκευση ανά κανάλι (προαιρετικό)</div>
+            <div className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
+              Στείλε ένα κανάλι σε διαφορετικό παραλήπτη (π.χ. SMS/Viber απευθείας στο τηλέφωνο του πελάτη της εγγραφής) ή/και με δικό του κείμενο, ενώ τα υπόλοιπα κανάλια ακολουθούν τους παραπάνω παραλήπτες και το βασικό περιεχόμενο.
+            </div>
+            <div style={{ display: 'grid', gap: 10 }}>
+              {form.channels.map((ch) => {
+                const ov = form.channelOverrides[ch] || {};
+                const recipientType = ov.recipientType || 'inherit';
+                return (
+                  <div key={ch} style={{ border: '1px dashed var(--border)', borderRadius: 8, padding: 10 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>{CHANNEL_LABELS[ch]?.label || ch}</div>
+                    {ch !== 'app' && (
+                      <div style={{ ...row, alignItems: 'center' }}>
+                        <label style={{ ...label, flex: '1 1 220px' }}>
+                          <span style={labelText}>Παραλήπτης</span>
+                          <select value={recipientType} onChange={(e) => updateChannelOverride(ch, { recipientType: e.target.value })}>
+                            {Object.entries(CHANNEL_RECIPIENT_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                          </select>
+                        </label>
+                        {recipientType === 'custom' && (
+                          <label style={{ ...label, flex: '1 1 220px' }}>
+                            <span style={labelText}>Τιμή (μπορεί να έχει {'{{'}μεταβλητές{'}}'})</span>
+                            <input value={ov.customValue || ''} onChange={(e) => updateChannelOverride(ch, { customValue: e.target.value })} placeholder="π.χ. {{customerPhone}} ή +306912345678" />
+                          </label>
+                        )}
+                      </div>
+                    )}
+                    <div style={{ display: 'grid', gap: 8, marginTop: ch !== 'app' ? 8 : 0 }}>
+                      <label style={label}>
+                        <span style={labelText}>Τίτλος (προαιρετικό — αλλιώς το βασικό)</span>
+                        <input value={ov.titleTemplate || ''} onChange={(e) => updateChannelOverride(ch, { titleTemplate: e.target.value })} placeholder={form.titleTemplate || '—'} />
+                      </label>
+                      <label style={label}>
+                        <span style={labelText}>Κείμενο (προαιρετικό — αλλιώς το βασικό)</span>
+                        <textarea rows={2} value={ov.bodyTemplate || ''} onChange={(e) => updateChannelOverride(ch, { bodyTemplate: e.target.value })} placeholder={form.bodyTemplate || '—'} />
+                      </label>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div style={card}>
           <div style={{ fontWeight: 700, marginBottom: 6 }}>Περιεχόμενο</div>
           <div className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
@@ -563,7 +628,12 @@ export default function NotificationRulesPanel() {
               {(runsQ.data?.runs || []).map((r) => (
                 <div key={r.id} style={{ fontSize: 12.5, display: 'flex', justifyContent: 'space-between', gap: 8, borderBottom: '1px solid var(--border)', paddingBottom: 4 }}>
                   <span>{new Date(r.createdAt).toLocaleString('el-GR')}</span>
-                  <span>{r.status}{r.dryRun ? ' (dry-run)' : ''} · {r.recipientCount ?? 0} παραλήπτες</span>
+                  <span>
+                    {STATUS_LABELS[r.status] || r.status}
+                    {r.channel ? ` · ${CHANNEL_LABELS[r.channel]?.label || r.channel}` : ''}
+                    {r.recipientLabel ? ` · ${r.recipientLabel}` : ''}
+                    {r.reason ? ` (${r.reason})` : ''}
+                  </span>
                 </div>
               ))}
             </div>

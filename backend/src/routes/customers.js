@@ -225,6 +225,7 @@ customersRouter.post('/', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, re
       evaluateNotificationRules('customer_assigned', {
         tenantId: req.user.tenantId,
         entityId: id,
+        customerId: id,
         customerName: `${b.first_name} ${b.last_name}`,
         assignedEmployeeId: vals.assigned_employee_id,
       }).catch((e) => console.error('[notificationRules]', e.message));
@@ -276,6 +277,7 @@ customersRouter.patch('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req
         evaluateNotificationRules('customer_assigned', {
           tenantId: req.user.tenantId,
           entityId: id,
+          customerId: id,
           customerName: [merged.first_name, merged.last_name].filter(Boolean).join(' ') || merged.company,
           assignedEmployeeId: b.assigned_employee_id,
         }).catch((e) => console.error('[notificationRules]', e.message));

@@ -77,6 +77,7 @@ bookingsRouter.post('/', authorize(PERMISSIONS.BOOKINGS_CREATE), async (req, res
     evaluateNotificationRules('booking_created', {
       tenantId: req.user.tenantId,
       entityId: id,
+      customerId,
       customerName: names?.customer_name,
       branchName: names?.branch_name,
       spaceName: names?.space_name,
