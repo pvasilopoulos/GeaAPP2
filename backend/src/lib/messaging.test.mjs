@@ -1,5 +1,5 @@
 import {
-  applyMessagingPatch, channelStatuses, CHANNEL_CAPS, isConfigured, mergeMessaging, publicMessaging,
+  applyMessagingPatch, buildViberRouteeMessages, channelStatuses, CHANNEL_CAPS, isConfigured, mergeMessaging, publicMessaging,
 } from './messaging.js';
 
 function assert(cond, msg) {
@@ -56,5 +56,29 @@ assert(CHANNEL_CAPS.sms.attachments === false, 'sms has no attachments');
 assert(CHANNEL_CAPS.sms.button === false, 'sms has no button');
 assert(CHANNEL_CAPS.email.attachmentsMax > 1, 'email allows several attachments');
 assert(CHANNEL_CAPS.viber.attachmentsMax === 1, 'viber allows a single attachment per message');
+
+// Viber Routee: a viberFile message has no caption field, so text + a
+// non-image attachment must be split into a text-only message followed by
+// the file message (which carries the button, if any).
+const fileMsgs = buildViberRouteeMessages({
+  text: 'Hello',
+  attachment: { name: 'doc.pdf', mime: 'application/pdf', url: 'https://x/doc.pdf' },
+  action: { caption: 'Open', targetUrl: 'https://x' },
+});
+assert(fileMsgs.length === 2, 'file attachment + text splits into two messages');
+assert(fileMsgs[0].text === 'Hello' && !fileMsgs[0].viberFile, 'first message is text-only');
+assert(fileMsgs[1].viberFile?.fileURL === 'https://x/doc.pdf', 'second message carries the file');
+assert(!fileMsgs[1].text, 'file message has no caption/text field');
+assert(fileMsgs[1].action?.targetUrl === 'https://x', 'file message carries the button');
+
+const imageMsgs = buildViberRouteeMessages({
+  text: 'Hello',
+  attachment: { name: 'pic.jpg', mime: 'image/jpeg', url: 'https://x/pic.jpg' },
+});
+assert(imageMsgs.length === 1, 'image attachment stays a single message');
+assert(imageMsgs[0].text === 'Hello' && imageMsgs[0].imageURL === 'https://x/pic.jpg', 'image message carries both caption and imageURL');
+
+const noAttachMsgs = buildViberRouteeMessages({ text: 'Hello' });
+assert(noAttachMsgs.length === 1 && noAttachMsgs[0].text === 'Hello' && !noAttachMsgs[0].imageURL && !noAttachMsgs[0].viberFile, 'plain text message unaffected');
 
 console.log('messaging: ok');
