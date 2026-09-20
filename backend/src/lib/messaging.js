@@ -259,11 +259,49 @@ async function routeeAccessToken(applicationId, applicationSecret, { force } = {
 // no caption field — bundling `text` with `viberFile` in one request is
 // rejected by Viber as invalid data, so a non-image attachment with body
 // text is split into a text message followed by the file message.
-// Viber's file message validates `fileType` against a fixed whitelist of
-// bare extensions (pdf, doc, docx, xlsx, ...) — a full MIME string like
-// "application/pdf" is rejected as an "unsupported file type", even though
-// PDF itself is supported. Derive the extension from the file name (falling
-// back to a MIME lookup) rather than passing the MIME type through as-is.
+//
+// Reference: Routee "Send a Viber Single Message" API
+// (https://docs.routee.net/reference/viber/send-a-viber-single-message) and
+// "Other Viber Messaging concept"
+// (https://docs.routee.net/docs/other-viber-messaging-concept), summarized
+// here since Routee's own error responses never explain *why* a request was
+// rejected (just an opaque "Provided viber file is not valid"):
+//
+//   body.text            string, optional, max 1000 chars.
+//   body.imageURL         string, optional, HTTPS, max 1000 chars.
+//   body.action           object, optional CTA button.
+//     .caption             string, required if action present, 1-30 chars.
+//     .targetUrl           string, required if action present.
+//   body.viberFile         object, optional document attachment.
+//     .fileName             string, required, max 25 chars.
+//     .fileType             string, required, bare extension (not a MIME
+//                           string) from the whitelist in
+//                           VIBER_ROUTEE_FILE_TYPES below.
+//     .fileURL              string, required, HTTPS, max 1000 chars; up to
+//                           600KB recommended for reliable delivery.
+//   body.viberVideo         object, optional video attachment (videoURL,
+//                           videoThumbnail, fileSize in MB, duration in s).
+//   body.carousel           object, optional carousel of cards.
+//
+// Supported message layouts (unsupported combinations are rejected as
+// errorCode 007 "Invalid viber message type combination"):
+//   Text only · Image only · File only · Text + Button ·
+//   Text + Image + Button · Video only · Video + Text ·
+//   Video + Text + Button · Carousel
+// Explicitly unsupported: Text + Image (no button) · Image + Button ·
+// File + Text · File + Image · File + Button · Video + File · Video + Button
+// — hence a non-image attachment always goes out as its own File-only
+// message (button included, since File + Button is unsupported too — see
+// below), and an image with caption text but no button is split in two.
+const VIBER_ROUTEE_FILE_TYPES = new Set([
+  // Document
+  'doc', 'docx', 'rtf', 'dot', 'dotx', 'odt', 'odf', 'fodt', 'txt', 'info',
+  // PDF
+  'pdf', 'xps', 'pdax', 'eps',
+  // Spreadsheet
+  'xls', 'xlsx', 'ods', 'fods', 'csv', 'xlsm', 'xltx',
+]);
+
 const MIME_TO_FILE_EXT = {
   'application/pdf': 'pdf',
   'application/msword': 'doc',
@@ -299,11 +337,19 @@ export function buildViberRouteeMessages({ text, attachment, action }) {
     if (String(attachment.name || '').length > VIBER_ROUTEE_MAX_FILE_NAME_LEN) {
       throw new Error(`Το όνομα αρχείου "${attachment.name}" ξεπερνά τους 25 χαρακτήρες που επιτρέπει το Viber (Routee) για αρχεία.`);
     }
-    if (text) messages.push({ text });
-    messages.push({
-      viberFile: { fileName: attachment.name || 'file', fileType: viberFileType(attachment), fileURL: attachment.url },
-      action,
-    });
+    const fileType = viberFileType(attachment);
+    if (!VIBER_ROUTEE_FILE_TYPES.has(fileType)) {
+      throw new Error(`Ο τύπος αρχείου ".${fileType}" δεν υποστηρίζεται από το Viber (Routee). Υποστηριζόμενοι τύποι: ${[...VIBER_ROUTEE_FILE_TYPES].join(', ')}.`);
+    }
+    // "File + Text" and "File + Button" are both unsupported layouts, so a
+    // viberFile message never carries text or an action — any text and/or
+    // button go out first as their own (supported) "Text + Button" message.
+    // A button with no text of its own borrows the button's caption so that
+    // message isn't sent empty.
+    if (text || action) {
+      messages.push(action ? { text: text || action.caption, action } : { text });
+    }
+    messages.push({ viberFile: { fileName: attachment.name || 'file', fileType, fileURL: attachment.url } });
   } else if (isImage) {
     // Routee's Viber module only accepts specific message-type combinations
     // (errorCode 007 lists e.g. "Text, Image, File, Text + Action,
@@ -369,13 +415,14 @@ async function sendViberRoutee(cfg, payload) {
   for (const msgBody of messages) {
     const kind = msgBody.viberFile ? 'file' : (msgBody.imageURL ? 'image' : 'text');
     const mediaUrl = msgBody.viberFile?.fileURL || msgBody.imageURL || '';
+    const fileInfo = msgBody.viberFile ? ` (fileName="${msgBody.viberFile.fileName}", fileType="${msgBody.viberFile.fileType}")` : '';
     let { res, text: respText } = await sendOnce(auth.token, msgBody);
     if (res.status === 401 || res.status === 403) {
       routeeTokenCache.delete(auth.key);
       auth = await routeeAccessToken(cfg.application_id, cfg.application_secret, { force: true });
       ({ res, text: respText } = await sendOnce(auth.token, msgBody));
     }
-    diagnostics.push(`${kind}${mediaUrl ? ` [${mediaUrl}]` : ''}: HTTP ${res.status} ${respText.slice(0, 400)}`);
+    diagnostics.push(`${kind}${mediaUrl ? ` [${mediaUrl}]` : ''}${fileInfo}: HTTP ${res.status} ${respText.slice(0, 400)}`);
     console.log(`[messaging][viber_routee] ${res.status}`, JSON.stringify(msgBody), '->', respText.slice(0, 300));
     if (!res.ok && !failure) failure = `${kind}: ${routeeErrorMessage(respText, res.status)}`;
   }
