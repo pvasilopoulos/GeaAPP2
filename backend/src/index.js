@@ -39,6 +39,11 @@ import { brandingPublicRouter } from './routes/branding.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 
+// Trust the reverse proxy's X-Forwarded-* headers in production so
+// req.protocol/req.get('host') report the real public https:// origin
+// (needed to build attachment/button links for Viber/Telegram/Routee).
+if (config.nodeEnv === 'production') app.set('trust proxy', 1);
+
 // CORS is only needed for the split-origin dev setup (Vite on :5173). In
 // production the same Express process serves the SPA, so it is same-origin.
 if (config.nodeEnv !== 'production') app.use(cors());
