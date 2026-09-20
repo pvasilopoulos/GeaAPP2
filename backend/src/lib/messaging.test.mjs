@@ -57,27 +57,28 @@ assert(CHANNEL_CAPS.sms.button === false, 'sms has no button');
 assert(CHANNEL_CAPS.email.attachmentsMax > 1, 'email allows several attachments');
 assert(CHANNEL_CAPS.viber.attachmentsMax === 1, 'viber allows a single attachment per message');
 
-// Viber Routee: a viberFile message has no caption field, and "File + Text"
-// / "File + Button" are both unsupported layouts, so text and/or a button
-// travel in their own "Text + Button" message ahead of the file-only message.
+// Viber Routee: a non-image attachment is delivered as a "Text + Button"
+// message whose button links to the file's own URL, not via the unreliable
+// viberFile message type.
 const fileMsgs = buildViberRouteeMessages({
   text: 'Hello',
   attachment: { name: 'doc.pdf', mime: 'application/pdf', url: 'https://x/doc.pdf', size: 1024 },
   action: { caption: 'Open', targetUrl: 'https://x' },
 });
-assert(fileMsgs.length === 2, 'file attachment + text splits into two messages');
-assert(fileMsgs[0].text === 'Hello' && fileMsgs[0].action?.targetUrl === 'https://x' && !fileMsgs[0].viberFile, 'first message carries text + button');
-assert(fileMsgs[1].viberFile?.fileURL === 'https://x/doc.pdf', 'second message carries the file');
-assert(!fileMsgs[1].text && !fileMsgs[1].action, 'file message has no caption/text/action field (unsupported combos)');
-assert(fileMsgs[1].viberFile?.fileType === 'pdf', 'fileType is a bare extension, not a MIME string (Viber rejects "application/pdf" as unsupported)');
+assert(fileMsgs.length === 1, 'file attachment stays a single text+button message');
+assert(fileMsgs[0].text === 'Hello', 'message keeps the body text');
+assert(fileMsgs[0].action?.caption === 'Open', 'existing button caption is kept');
+assert(fileMsgs[0].action?.targetUrl === 'https://x/doc.pdf', 'button targets the file URL, not the original button URL');
+assert(!fileMsgs[0].viberFile, 'no viberFile message is built');
 
-const fileButtonNoTextMsgs = buildViberRouteeMessages({
+const fileNoActionMsgs = buildViberRouteeMessages({
   text: '',
   attachment: { name: 'doc.pdf', mime: 'application/pdf', url: 'https://x/doc.pdf', size: 1024 },
-  action: { caption: 'Open', targetUrl: 'https://x' },
 });
-assert(fileButtonNoTextMsgs.length === 2, 'file attachment + button (no text) still splits into two messages');
-assert(fileButtonNoTextMsgs[0].text === 'Open', 'button-only message borrows the button caption as its text');
+assert(fileNoActionMsgs.length === 1, 'file attachment with no text/button still stays a single message');
+assert(fileNoActionMsgs[0].action?.caption === 'doc.pdf', 'caption falls back to the file name');
+assert(fileNoActionMsgs[0].text === 'doc.pdf', 'text falls back to the button caption when there is none');
+assert(fileNoActionMsgs[0].action?.targetUrl === 'https://x/doc.pdf', 'button targets the file URL');
 
 const imageMsgs = buildViberRouteeMessages({
   text: 'Hello',
@@ -108,38 +109,14 @@ assert(imageOnlyMsgs.length === 1 && imageOnlyMsgs[0].imageURL === 'https://x/pi
 const noAttachMsgs = buildViberRouteeMessages({ text: 'Hello' });
 assert(noAttachMsgs.length === 1 && noAttachMsgs[0].text === 'Hello' && !noAttachMsgs[0].imageURL && !noAttachMsgs[0].viberFile, 'plain text message unaffected');
 
-// Routee documents (docs.routee.net/docs/other-viber-messaging-concept) a
-// hard 600KB size limit and 25-character name limit for viberFile — both
-// are silently rejected as the opaque errorCode 019 "not valid" with no
-// size/length detail, so these are checked up front with an actionable
-// message instead.
-function assertThrows(fn, pattern, msg) {
-  try {
-    fn();
-  } catch (err) {
-    assert(pattern.test(err.message), `${msg} (unexpected message: ${err.message})`);
-    return;
-  }
-  throw new Error(`${msg} (did not throw)`);
-}
-
-assertThrows(() => buildViberRouteeMessages({
+// A non-image attachment of any size/type/name is now just a URL in a
+// button, so none of Routee's viberFile-specific limits (600KB, 25-char
+// name, extension whitelist) apply anymore — verify a large, long-named,
+// otherwise-unsupported-as-a-file attachment still builds a plain message.
+const bigZipMsgs = buildViberRouteeMessages({
   text: '',
-  attachment: { name: 'big.pdf', mime: 'application/pdf', url: 'https://x/big.pdf', size: 700 * 1024 },
-}), /600KB/, 'oversized viberFile attachment is rejected before calling Routee');
-
-assertThrows(() => buildViberRouteeMessages({
-  text: '',
-  attachment: { name: 'a-very-long-file-name-indeed.pdf', mime: 'application/pdf', url: 'https://x/a.pdf', size: 1024 },
-}), /25 χαρακτ/, 'overly long viberFile file name is rejected before calling Routee');
-
-// Routee's documented viberFile.fileType whitelist (docs.routee.net) does
-// not include zip archives — verify unsupported extensions are rejected
-// up front with the whitelist in the message, instead of a cryptic Routee
-// rejection.
-assertThrows(() => buildViberRouteeMessages({
-  text: '',
-  attachment: { name: 'archive.zip', mime: 'application/zip', url: 'https://x/archive.zip', size: 1024 },
-}), /δεν υποστηρίζεται/, 'unsupported viberFile fileType (zip) is rejected before calling Routee');
+  attachment: { name: 'a-very-long-file-name-indeed.zip', mime: 'application/zip', url: 'https://x/archive.zip', size: 5 * 1024 * 1024 },
+});
+assert(bigZipMsgs.length === 1 && bigZipMsgs[0].action?.targetUrl === 'https://x/archive.zip', 'large/long-named/any-type attachment is unaffected by former viberFile limits');
 
 console.log('messaging: ok');
