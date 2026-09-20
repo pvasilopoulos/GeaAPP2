@@ -21,7 +21,7 @@ assert.equal(renderTemplate('{{missing}}', {}), '');
 assert.equal(renderTemplate(null, {}), '');
 assert.equal(renderTemplate('{{a.b}}', { a: { b: 'ναι' } }), 'ναι');
 
-assert.deepEqual(ALL_CHANNELS.sort(), ['app', 'email', 'sms', 'telegram', 'viber']);
+assert.deepEqual(ALL_CHANNELS.sort(), ['app', 'email', 'sms', 'telegram', 'viber', 'viber_routee']);
 
 // --- evaluateNotificationRules: static + dynamic recipients, throttle, prefs
 function makeDb({ rules = [], users = [], throttleRows = [], prefRows = [] } = {}) {

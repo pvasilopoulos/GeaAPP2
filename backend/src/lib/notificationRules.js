@@ -30,7 +30,7 @@ import { mergeTenantSettings } from './tenantSettings.js';
 import { EVENT_CATALOG } from './notificationEvents.js';
 import { SCHEDULE_ENTITIES } from './scheduleEntities.js';
 
-export const ALL_CHANNELS = ['app', 'email', 'sms', 'viber', 'telegram'];
+export const ALL_CHANNELS = ['app', 'email', 'sms', 'viber', 'viber_routee', 'telegram'];
 
 function parseJson(value, fallback) {
   if (value == null) return fallback;
