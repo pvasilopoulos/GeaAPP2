@@ -105,6 +105,12 @@ export default function MessageComposer({ customer, contacts = [], channelId, ch
   const segments = caps.encoding === 'gsm' ? smsSegments(plainText(body, isHtml)) : null;
   const attachmentsMax = caps.attachmentsMax || 1;
 
+  // The upload API only returns a relative /uploads/... path. That's fine for
+  // sending (the backend resolves it against PUBLIC_URL), but a relative link
+  // isn't openable/clickable as-is in this browser tab, so build an absolute
+  // one here purely so the user can actually open/preview the file.
+  const toAbsoluteUrl = (u) => (/^https?:\/\//i.test(u) ? u : `${window.location.origin}${u}`);
+
   const addFiles = async (fileList) => {
     const files = Array.from(fileList || []).slice(0, Math.max(0, attachmentsMax - attachments.length));
     if (!files.length) return;
@@ -114,10 +120,11 @@ export default function MessageComposer({ customer, contacts = [], channelId, ch
         const res = await api.uploadFile(file, customer.id);
         setAttachments((list) => [...list, { url: res.url, name: file.name, mime: file.type, size: file.size }]);
         // Convenience default: prefill the button with the just-uploaded
-        // file's own link (e.g. so recipients can tap through to it), but
-        // never override something the user already typed themselves.
+        // file's own absolute, clickable link (so the user can verify it
+        // opens the file, and recipients can tap through to it), but never
+        // override something the user already typed themselves.
         if (caps.button) {
-          setButtonUrl((cur) => (cur.trim() ? cur : res.url));
+          setButtonUrl((cur) => (cur.trim() ? cur : toAbsoluteUrl(res.url)));
           setButtonLabel((cur) => (cur.trim() ? cur : 'Click Me'));
         }
       }
@@ -248,7 +255,7 @@ export default function MessageComposer({ customer, contacts = [], channelId, ch
               {attachments.map((a, i) => (
                 <div key={i} className="msg-attach-chip">
                   <Icon name={a.mime?.startsWith('image/') ? 'file' : 'paperclip'} size={13} />
-                  <span>{a.name}</span>
+                  <a href={toAbsoluteUrl(a.url)} target="_blank" rel="noreferrer" title="Άνοιγμα αρχείου">{a.name}</a>
                   <button type="button" onClick={() => setAttachments((list) => list.filter((_, x) => x !== i))}>
                     <Icon name="x" size={12} />
                   </button>
@@ -274,6 +281,12 @@ export default function MessageComposer({ customer, contacts = [], channelId, ch
                 placeholder="Κείμενο κουμπιού (π.χ. Δείτε την προσφορά)" maxLength={60} />
               <input style={{ flex: '2 1 220px' }} value={buttonUrl} onChange={(e) => setButtonUrl(e.target.value)}
                 placeholder="https://…" />
+              {buttonUrl.trim() && (
+                <a className="btn btn-sm btn-ghost" href={toAbsoluteUrl(buttonUrl.trim())} target="_blank" rel="noreferrer"
+                  title="Άνοιγμα συνδέσμου κουμπιού">
+                  <Icon name="link" size={14} />
+                </a>
+              )}
             </div>
           </div>
         )}
