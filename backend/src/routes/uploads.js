@@ -66,7 +66,13 @@ uploadsRouter.post('/', async (req, res, next) => {
     }
     const targetDir = path.join(UPLOADS_DIR, relativeDir);
     await mkdir(targetDir, { recursive: true });
-    const originalName = safePathSegment(String(req.body?.fileName || ''), 'document');
+    // Strip the user's own extension (if any) before appending ours — a raw
+    // "photo.pdf" upload would otherwise become "photo.pdf-<ts>-<hash>.pdf",
+    // a file name with an embedded ".pdf-" mid-string that some providers'
+    // file-type/extension sniffing (e.g. Viber's "invalid file" check) can
+    // choke on even though it technically still ends in ".pdf".
+    const rawName = String(req.body?.fileName || '').replace(/\.[a-z0-9]{1,8}$/i, '');
+    const originalName = safePathSegment(rawName, 'document');
     const name = `${originalName}-${Date.now()}-${randomBytes(6).toString('hex')}.${ext}`;
     await writeFile(path.join(targetDir, name), buf);
     const urlPath = relativeDir ? `${relativeDir.replace(/\\/g, '/')}/${name}` : name;
