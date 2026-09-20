@@ -8,7 +8,8 @@ import { normalizeFields } from '../lib/normalize.js';
 import { loadEntityCustomFields, saveEntityCustomFields } from '../lib/customFields.js';
 import { logActivity } from '../lib/activity.js';
 import { parseJson } from '../lib/masterData.js';
-import { CHANNELS, CHANNEL_META, deliverMessage, mergeMessaging } from '../lib/messaging.js';
+import { CHANNELS, CHANNEL_CAPS, CHANNEL_META, deliverMessage, mergeMessaging } from '../lib/messaging.js';
+import { renderBody } from '../lib/richText.js';
 import { mergeTenantSettings } from '../lib/tenantSettings.js';
 import { loadTenant } from '../lib/tenants.js';
 import { computeReminderState } from '../lib/reminderSettings.js';
@@ -482,25 +483,34 @@ customersRouter.post('/:id/messages', authorize(PERMISSIONS.CUSTOMERS_WRITE), as
     const customerId = Number(req.params.id);
     const channel = String(req.body?.channel || '').trim();
     const to = String(req.body?.to || '').trim();
-    const subject = String(req.body?.subject || '').trim().slice(0, 255);
-    const body = String(req.body?.body || '').trim();
     if (!CHANNELS.includes(channel)) return res.status(400).json({ error: 'Μη έγκυρο κανάλι' });
+    const caps = CHANNEL_CAPS[channel];
+    // Only channels whose capability set allows it may store markup — every
+    // other channel is forced to plain text so what's saved always matches
+    // what the provider is actually able to deliver.
+    const bodyFormat = caps.richText && req.body?.bodyFormat === 'html' ? 'html' : 'text';
+    const body = String(req.body?.body || '').trim();
+    const subject = caps.subject ? String(req.body?.subject || '').trim().slice(0, 255) : '';
     if (!to) return res.status(400).json({ error: 'Απαιτείται παραλήπτης' });
     if (!body) return res.status(400).json({ error: 'Απαιτείται κείμενο μηνύματος' });
+    const plainBody = renderBody(body, bodyFormat, 'text');
+    if (caps.maxLength && plainBody.length > caps.maxLength) {
+      return res.status(400).json({ error: `Το μήνυμα υπερβαίνει το όριο των ${caps.maxLength} χαρακτήρων για ${CHANNEL_META[channel].label}` });
+    }
 
     const { rows: tenantRows } = await query('SELECT settings FROM tenants WHERE id = ?', [req.user.tenantId]);
     const messaging = mergeMessaging(mergeTenantSettings(tenantRows[0]?.settings).messaging);
     const cfg = messaging[channel];
     if (!cfg?.enabled) return res.status(400).json({ error: `Το κανάλι ${CHANNEL_META[channel].label} είναι απενεργοποιημένο στις ρυθμίσεις` });
 
-    const delivery = await deliverMessage(channel, cfg, { to, subject, body });
+    const delivery = await deliverMessage(channel, cfg, { to, subject, body, bodyFormat });
     const channelLabel = CHANNEL_META[channel].label;
     const subjectLine = subject || `${channelLabel} προς ${to}`;
 
     const ins = await query(
       `INSERT INTO communications (customer_id, channel, direction, subject, body, recipient, delivery_status, employee_id)
        VALUES (?,?,?,?,?,?,?,?)`,
-      [customerId, channel, 'outbound', subjectLine, body, to, delivery.status, req.user.id]);
+      [customerId, channel, 'outbound', subjectLine, plainBody, to, delivery.status, req.user.id]);
 
     await logActivity({
       tenantId: req.user.tenantId,
@@ -513,7 +523,7 @@ customersRouter.post('/:id/messages', authorize(PERMISSIONS.CUSTOMERS_WRITE), as
           channel_label: channelLabel,
           to,
           subject: subject || null,
-          body,
+          body: plainBody,
           delivery_status: delivery.status,
           delivery_detail: delivery.detail || null,
         },
@@ -525,7 +535,7 @@ customersRouter.post('/:id/messages', authorize(PERMISSIONS.CUSTOMERS_WRITE), as
       channel,
       to,
       subject: subjectLine,
-      body,
+      body: plainBody,
       delivery,
     });
   } catch (err) { next(err); }

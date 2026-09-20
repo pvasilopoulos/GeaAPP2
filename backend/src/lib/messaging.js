@@ -1,3 +1,5 @@
+import { renderBody } from './richText.js';
+
 export const CHANNELS = ['email', 'viber', 'viber_routee', 'sms', 'telegram'];
 
 export const CHANNEL_META = {
@@ -6,6 +8,17 @@ export const CHANNEL_META = {
   viber_routee: { label: 'Viber Routee', recipientKind: 'phone' },
   sms: { label: 'SMS', recipientKind: 'phone' },
   telegram: { label: 'Telegram', recipientKind: 'telegram' },
+};
+
+// What the composer may offer per channel, driven by what each provider's API
+// actually accepts — richText/subject/maxLength/encoding are read by the
+// frontend to show/hide fields instead of hardcoding a channel list there.
+export const CHANNEL_CAPS = {
+  email: { richText: true, subject: true, maxLength: null, encoding: 'unicode' },
+  telegram: { richText: true, subject: false, maxLength: 4096, encoding: 'unicode' },
+  viber: { richText: false, subject: false, maxLength: 7000, encoding: 'unicode' },
+  viber_routee: { richText: false, subject: false, maxLength: 1000, encoding: 'unicode' },
+  sms: { richText: false, subject: false, maxLength: 1530, encoding: 'gsm' },
 };
 
 const SECRET_FIELDS = {
@@ -132,6 +145,7 @@ export function channelStatuses(raw) {
     recipientKind: CHANNEL_META[id].recipientKind,
     enabled: m[id].enabled !== false,
     configured: isConfigured(id, m[id]),
+    caps: CHANNEL_CAPS[id],
   }));
 }
 
@@ -245,7 +259,7 @@ async function sendViberRoutee(cfg, payload) {
   if (!res.ok) throw new Error(routeeErrorMessage(text, res.status));
 }
 
-async function sendEmail(cfg, { to, subject, body }) {
+async function sendEmail(cfg, { to, subject, body, bodyFormat }) {
   const nodemailer = (await import('nodemailer')).default;
   const transporter = nodemailer.createTransport({
     host: cfg.smtp_host,
@@ -260,7 +274,8 @@ async function sendEmail(cfg, { to, subject, body }) {
     from: cfg.from_name ? `"${cfg.from_name.replace(/"/g, '')}" <${cfg.from_email}>` : cfg.from_email,
     to,
     subject: subject || '(χωρίς θέμα)',
-    text: body,
+    text: renderBody(body, bodyFormat, 'text'),
+    html: renderBody(body, bodyFormat, 'html'),
   });
 }
 
@@ -278,7 +293,8 @@ export async function deliverMessage(channel, cfg, payload) {
       const chatId = String(payload.to || '').replace(/^@/, '').trim();
       await postJson(`https://api.telegram.org/bot${c.bot_token}/sendMessage`, {
         chat_id: chatId,
-        text: payload.body,
+        text: renderBody(payload.body, payload.bodyFormat, 'telegram'),
+        parse_mode: 'HTML',
       });
       return { status: 'sent' };
     }
@@ -286,13 +302,13 @@ export async function deliverMessage(channel, cfg, payload) {
       await postJson('https://chatapi.viber.com/pa/send_message', {
         receiver: String(payload.to || '').replace(/\s+/g, ''),
         type: 'text',
-        text: payload.body,
+        text: renderBody(payload.body, payload.bodyFormat, 'text'),
         sender: { name: c.sender_name || 'SpaceHub' },
       }, { 'X-Viber-Auth-Token': c.auth_token });
       return { status: 'sent' };
     }
     if (channel === 'viber_routee') {
-      await sendViberRoutee(c, payload);
+      await sendViberRoutee(c, { ...payload, body: renderBody(payload.body, payload.bodyFormat, 'text') });
       return { status: 'sent' };
     }
     if (channel === 'sms') {
@@ -300,7 +316,7 @@ export async function deliverMessage(channel, cfg, payload) {
       await postJson(c.api_url, {
         to: payload.to,
         from: c.sender_id || undefined,
-        body: payload.body,
+        body: renderBody(payload.body, payload.bodyFormat, 'text'),
       }, headers);
       return { status: 'sent' };
     }
