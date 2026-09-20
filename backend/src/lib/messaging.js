@@ -290,11 +290,23 @@ export function buildViberRouteeMessages({ text, attachment, action }) {
       viberFile: { fileName: attachment.name || 'file', fileType: viberFileType(attachment), fileURL: attachment.url },
       action,
     });
+  } else if (isImage) {
+    // Routee's Viber module only accepts specific message-type combinations
+    // (errorCode 007 lists e.g. "Text, Image, File, Text + Action,
+    // Text + Action + Image, ..."); a plain "Text + Image" with no button
+    // is not one of them, so an image + caption text needs a button to stay
+    // in one message — otherwise split into a text message and an image-only
+    // message, same pattern used for non-image files.
+    if (text && !action) {
+      messages.push({ text });
+      messages.push({ imageURL: attachment.url });
+    } else {
+      const msgBody = { text: text || undefined, imageURL: attachment.url };
+      if (action) msgBody.action = action;
+      messages.push(msgBody);
+    }
   } else {
-    const msgBody = { text };
-    if (attachment) msgBody.imageURL = attachment.url;
-    if (action) msgBody.action = action;
-    messages.push(msgBody);
+    messages.push({ text, action });
   }
   return messages;
 }
@@ -349,7 +361,7 @@ async function sendViberRoutee(cfg, payload) {
       auth = await routeeAccessToken(cfg.application_id, cfg.application_secret, { force: true });
       ({ res, text: respText } = await sendOnce(auth.token, msgBody));
     }
-    diagnostics.push(`${kind}${mediaUrl ? ` [${mediaUrl}]` : ''}: HTTP ${res.status} ${respText.slice(0, 250)}`);
+    diagnostics.push(`${kind}${mediaUrl ? ` [${mediaUrl}]` : ''}: HTTP ${res.status} ${respText.slice(0, 400)}`);
     console.log(`[messaging][viber_routee] ${res.status}`, JSON.stringify(msgBody), '->', respText.slice(0, 300));
     if (!res.ok && !failure) failure = `${kind}: ${routeeErrorMessage(respText, res.status)}`;
   }

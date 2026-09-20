@@ -76,8 +76,27 @@ const imageMsgs = buildViberRouteeMessages({
   text: 'Hello',
   attachment: { name: 'pic.jpg', mime: 'image/jpeg', url: 'https://x/pic.jpg' },
 });
-assert(imageMsgs.length === 1, 'image attachment stays a single message');
-assert(imageMsgs[0].text === 'Hello' && imageMsgs[0].imageURL === 'https://x/pic.jpg', 'image message carries both caption and imageURL');
+// Routee's Viber module rejects a plain "Text + Image" combination with no
+// button (errorCode 007, "Invalid viber message type combination") — only
+// "Text + Action + Image" is supported alongside image, so caption text
+// without a button must be split into its own message.
+assert(imageMsgs.length === 2, 'image + text with no button splits into two messages');
+assert(imageMsgs[0].text === 'Hello' && !imageMsgs[0].imageURL, 'first message is text-only');
+assert(imageMsgs[1].imageURL === 'https://x/pic.jpg' && !imageMsgs[1].text, 'second message is the image alone');
+
+const imageWithButtonMsgs = buildViberRouteeMessages({
+  text: 'Hello',
+  attachment: { name: 'pic.jpg', mime: 'image/jpeg', url: 'https://x/pic.jpg' },
+  action: { caption: 'Open', targetUrl: 'https://x' },
+});
+assert(imageWithButtonMsgs.length === 1, 'image + text + button stays one message (a supported combination)');
+assert(imageWithButtonMsgs[0].text === 'Hello' && imageWithButtonMsgs[0].imageURL === 'https://x/pic.jpg' && imageWithButtonMsgs[0].action?.targetUrl === 'https://x', 'combined message carries text, image and button');
+
+const imageOnlyMsgs = buildViberRouteeMessages({
+  text: '',
+  attachment: { name: 'pic.jpg', mime: 'image/jpeg', url: 'https://x/pic.jpg' },
+});
+assert(imageOnlyMsgs.length === 1 && imageOnlyMsgs[0].imageURL === 'https://x/pic.jpg' && !imageOnlyMsgs[0].text, 'image with no caption stays a single message');
 
 const noAttachMsgs = buildViberRouteeMessages({ text: 'Hello' });
 assert(noAttachMsgs.length === 1 && noAttachMsgs[0].text === 'Hello' && !noAttachMsgs[0].imageURL && !noAttachMsgs[0].viberFile, 'plain text message unaffected');
