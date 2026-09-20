@@ -14,8 +14,17 @@ const CHANNEL_LABELS = { app: 'Εφαρμογή', email: 'Email', sms: 'SMS', vi
 function MyNotificationPreferences() {
   const qc = useQueryClient();
   const prefsQ = useQuery({ queryKey: ['my-notification-preferences'], queryFn: () => api.myNotificationPreferences() });
-  const [contact, setContact] = useState({ phone: '', telegramChatId: '' });
+  const [contact, setContact] = useState({ phone: '', telegramChatId: '', quietHoursStart: '', quietHoursEnd: '' });
   const [savedMsg, setSavedMsg] = useState('');
+
+  useEffect(() => {
+    if (!prefsQ.data) return;
+    setContact((c) => ({
+      ...c,
+      quietHoursStart: prefsQ.data.quietHoursStart ? String(prefsQ.data.quietHoursStart).slice(0, 5) : '',
+      quietHoursEnd: prefsQ.data.quietHoursEnd ? String(prefsQ.data.quietHoursEnd).slice(0, 5) : '',
+    }));
+  }, [prefsQ.data]);
 
   const overridesMap = new Map((prefsQ.data?.overrides || []).map((o) => [`${o.eventKey}:${o.channel}`, o.enabled]));
 
@@ -81,6 +90,22 @@ function MyNotificationPreferences() {
             <span style={{ fontSize: 12.5 }}>Telegram chat id</span>
             <input value={contact.telegramChatId} onChange={(e) => setContact({ ...contact, telegramChatId: e.target.value })} placeholder="π.χ. 123456789" />
           </label>
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <b style={{ fontSize: 13.5 }}>Ώρες ησυχίας</b>
+          <div className="muted" style={{ fontSize: 12.5, marginTop: 2 }}>
+            Οι κανόνες που το επιλέγουν δεν θα σου στέλνουν push/SMS/Viber/Telegram μέσα σε αυτό το διάστημα (τα επείγοντα το αγνοούν).
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span style={{ fontSize: 12.5 }}>Από</span>
+              <input type="time" value={contact.quietHoursStart} onChange={(e) => setContact({ ...contact, quietHoursStart: e.target.value })} />
+            </label>
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span style={{ fontSize: 12.5 }}>Έως</span>
+              <input type="time" value={contact.quietHoursEnd} onChange={(e) => setContact({ ...contact, quietHoursEnd: e.target.value })} />
+            </label>
+          </div>
         </div>
         <button type="button" className="btn ghost" style={{ marginTop: 8 }} disabled={contactMut.isPending} onClick={() => contactMut.mutate(contact)}>
           Αποθήκευση στοιχείων επικοινωνίας

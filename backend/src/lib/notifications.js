@@ -3,7 +3,7 @@ import { isDuplicateKeyError } from './idempotency.js';
 import { computeReminderState, mergeReminderSettings } from './reminderSettings.js';
 import { PERMISSIONS, expandPermissions } from './permissions.js';
 import { pushToUser } from './push.js';
-import { evaluateNotificationRules } from './notificationRules.js';
+import { evaluateNotificationRules, sweepScheduleTriggers, sweepEscalations, sweepDigests } from './notificationRules.js';
 
 export const NOTIFICATION_TYPES = {
   FOLLOW_UP_OVERDUE: 'follow_up_overdue',
@@ -760,7 +760,13 @@ export async function sweepNotifications(queryFn = dbQuery) {
     const followUps = await sweepFollowUpReminders(queryFn);
     const quotes = await sweepExpiredQuotes(queryFn);
     const syncs = await sweepFailedSyncRuns(queryFn);
-    return { followUps, quotes, syncs };
+    // Notification rules engine v2: schedule-based triggers ("N days
+    // before/after a date field"), pending escalations, and digest
+    // batching — all additive, all self-guarded against throwing.
+    const scheduleRules = await sweepScheduleTriggers(queryFn).catch(() => ({ fired: 0 }));
+    const escalations = await sweepEscalations(queryFn).catch(() => ({ escalated: 0 }));
+    const digests = await sweepDigests(queryFn).catch(() => ({ sent: 0 }));
+    return { followUps, quotes, syncs, scheduleRules, escalations, digests };
   } finally {
     sweeping = false;
   }

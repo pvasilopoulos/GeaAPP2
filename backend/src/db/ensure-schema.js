@@ -48,6 +48,16 @@ async function addIndex(table, index, columns) {
   console.log(`[schema] added index ${table}.${index}`);
 }
 
+async function ensureColumnNullable(table, column, ddl) {
+  const { rows } = await query(
+    `SELECT IS_NULLABLE AS n FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+    [table, column]);
+  if (!rows.length || rows[0].n === 'YES') return;
+  await query(`ALTER TABLE ${table} MODIFY COLUMN ${column} ${ddl}`);
+  console.log(`[schema] made ${table}.${column} nullable`);
+}
+
 export async function ensureSchema() {
   await addColumn('tenants', 'status', "VARCHAR(20) NOT NULL DEFAULT 'active'");
   await addColumn('tenants', 'locale', "VARCHAR(10) NOT NULL DEFAULT 'el'");
@@ -447,6 +457,98 @@ export async function ensureSchema() {
       CONSTRAINT fk_notification_rule_throttle_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
     console.log('[schema] created notification_rule_throttle');
+  }
+
+  // --- Notification rules engine v2: schedule-based triggers, condition
+  // groups (AND/OR), extra actions, escalation, digest mode, quiet hours,
+  // priority, dry-run, and an execution log for observability. All
+  // additive/backwards compatible — existing event-based rules keep
+  // working unchanged (trigger_type defaults to 'event').
+  await ensureColumnNullable('notification_rules', 'event_key', 'VARCHAR(60) NULL');
+  await addColumn('notification_rules', 'trigger_type', "VARCHAR(20) NOT NULL DEFAULT 'event'");
+  await addColumn('notification_rules', 'schedule_entity', 'VARCHAR(30) NULL');
+  await addColumn('notification_rules', 'schedule_date_field', 'VARCHAR(60) NULL');
+  await addColumn('notification_rules', 'schedule_offset_minutes', 'INT NULL');
+  await addColumn('notification_rules', 'schedule_recurrence', "VARCHAR(20) NOT NULL DEFAULT 'once'");
+  await addColumn('notification_rules', 'condition_logic', "VARCHAR(10) NOT NULL DEFAULT 'and'");
+  await addColumn('notification_rules', 'extra_actions', 'JSON NULL');
+  await addColumn('notification_rules', 'escalation', 'JSON NULL');
+  await addColumn('notification_rules', 'digest_mode', "VARCHAR(20) NOT NULL DEFAULT 'none'");
+  await addColumn('notification_rules', 'respect_quiet_hours', 'TINYINT(1) NOT NULL DEFAULT 0');
+  await addColumn('notification_rules', 'priority', "VARCHAR(20) NOT NULL DEFAULT 'normal'");
+  await addColumn('notification_rules', 'dry_run', 'TINYINT(1) NOT NULL DEFAULT 0');
+
+  // Optional per-user quiet-hours window (server local time) — respected
+  // only by rules with respect_quiet_hours = 1, and skipped entirely for
+  // priority = 'urgent' rules.
+  await addColumn('users', 'quiet_hours_start', 'TIME NULL');
+  await addColumn('users', 'quiet_hours_end', 'TIME NULL');
+
+  // Execution log: one row per (rule, recipient, channel) attempt, so the
+  // admin UI can show exactly what happened and why (sent/failed/throttled/
+  // opted_out/quiet_hours/dry_run).
+  if (!(await tableExists('notification_rule_runs'))) {
+    await query(`CREATE TABLE notification_rule_runs (
+      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      tenant_id BIGINT NOT NULL, rule_id BIGINT NOT NULL,
+      recipient_user_id BIGINT NULL, channel VARCHAR(20) NULL,
+      status VARCHAR(20) NOT NULL, reason VARCHAR(200) NULL,
+      entity_id VARCHAR(60) NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      KEY idx_notification_rule_runs_rule (rule_id, created_at),
+      KEY idx_notification_rule_runs_tenant (tenant_id, created_at),
+      CONSTRAINT fk_notification_rule_runs_rule FOREIGN KEY (rule_id) REFERENCES notification_rules(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    console.log('[schema] created notification_rule_runs');
+  }
+
+  // Digest mode buffer: rule matches accumulate here instead of sending
+  // immediately, and a periodic sweep flushes one aggregated message per
+  // (rule, user, channel) group.
+  if (!(await tableExists('notification_digest_queue'))) {
+    await query(`CREATE TABLE notification_digest_queue (
+      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      tenant_id BIGINT NOT NULL, rule_id BIGINT NOT NULL, user_id BIGINT NOT NULL,
+      channel VARCHAR(20) NOT NULL,
+      title VARCHAR(300) NOT NULL, body VARCHAR(1500) NULL, url VARCHAR(500) NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      sent_at DATETIME NULL,
+      KEY idx_notification_digest_queue_pending (rule_id, user_id, sent_at),
+      CONSTRAINT fk_notification_digest_queue_rule FOREIGN KEY (rule_id) REFERENCES notification_rules(id) ON DELETE CASCADE,
+      CONSTRAINT fk_notification_digest_queue_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    console.log('[schema] created notification_digest_queue');
+  }
+
+  // Escalation bookkeeping: when a rule has an `escalation` config, firing
+  // it inserts a pending row here; a sweep later checks whether enough time
+  // has passed and, if so, notifies the escalation recipients/channels.
+  if (!(await tableExists('notification_rule_escalations'))) {
+    await query(`CREATE TABLE notification_rule_escalations (
+      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      tenant_id BIGINT NOT NULL, rule_id BIGINT NOT NULL,
+      entity_id VARCHAR(60) NULL, recipient_user_id BIGINT NOT NULL,
+      fired_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      escalated_at DATETIME NULL,
+      title VARCHAR(300) NULL, body VARCHAR(1500) NULL, url VARCHAR(500) NULL,
+      KEY idx_notification_rule_escalations_pending (rule_id, escalated_at),
+      CONSTRAINT fk_notification_rule_escalations_rule FOREIGN KEY (rule_id) REFERENCES notification_rules(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    console.log('[schema] created notification_rule_escalations');
+  }
+
+  // Dedupe bookkeeping for schedule-based triggers (e.g. "3 days before a
+  // quote expires") — `fired_key` is 'once' for schedule_recurrence='once'
+  // (fires exactly once per entity, ever) or a YYYY-MM-DD day stamp for
+  // 'recurring' (fires at most once per calendar day per entity).
+  if (!(await tableExists('notification_schedule_fired'))) {
+    await query(`CREATE TABLE notification_schedule_fired (
+      rule_id BIGINT NOT NULL, entity_id VARCHAR(60) NOT NULL, fired_key VARCHAR(40) NOT NULL,
+      fired_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (rule_id, entity_id, fired_key),
+      CONSTRAINT fk_notification_schedule_fired_rule FOREIGN KEY (rule_id) REFERENCES notification_rules(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    console.log('[schema] created notification_schedule_fired');
   }
 
   if (!(await tableExists('audit_events'))) {
