@@ -28,6 +28,9 @@ export const SCHEDULE_ENTITIES = {
       { key: 'customerName', label: 'Όνομα πελάτη', type: 'text' },
       { key: 'total', label: 'Συνολική αξία', type: 'number' },
       { key: 'status', label: 'Κατάσταση', type: 'text' },
+      { key: 'customerPhone', label: 'Τηλέφωνο πελάτη', type: 'text' },
+      { key: 'customerMobile', label: 'Κινητό πελάτη', type: 'text' },
+      { key: 'customerEmail', label: 'Email πελάτη', type: 'text' },
     ],
     dynamicRecipients: ['created_by', 'seller'],
     buildContext(row) {
@@ -51,6 +54,9 @@ export const SCHEDULE_ENTITIES = {
       { key: 'customerName', label: 'Όνομα πελάτη', type: 'text' },
       { key: 'branchName', label: 'Υποκατάστημα', type: 'text' },
       { key: 'spaceName', label: 'Χώρος', type: 'text' },
+      { key: 'customerPhone', label: 'Τηλέφωνο πελάτη', type: 'text' },
+      { key: 'customerMobile', label: 'Κινητό πελάτη', type: 'text' },
+      { key: 'customerEmail', label: 'Email πελάτη', type: 'text' },
     ],
     dynamicRecipients: ['assigned_user'],
     buildContext(row) {
@@ -72,6 +78,9 @@ export const SCHEDULE_ENTITIES = {
     fields: [
       { key: 'title', label: 'Τίτλος υπενθύμισης', type: 'text' },
       { key: 'customerName', label: 'Όνομα πελάτη', type: 'text' },
+      { key: 'customerPhone', label: 'Τηλέφωνο πελάτη', type: 'text' },
+      { key: 'customerMobile', label: 'Κινητό πελάτη', type: 'text' },
+      { key: 'customerEmail', label: 'Email πελάτη', type: 'text' },
     ],
     dynamicRecipients: ['assigned_user'],
     buildContext(row) {
@@ -96,6 +105,9 @@ export const SCHEDULE_ENTITIES = {
     },
     fields: [
       { key: 'customerName', label: 'Όνομα πελάτη', type: 'text' },
+      { key: 'customerPhone', label: 'Τηλέφωνο πελάτη', type: 'text' },
+      { key: 'customerMobile', label: 'Κινητό πελάτη', type: 'text' },
+      { key: 'customerEmail', label: 'Email πελάτη', type: 'text' },
     ],
     dynamicRecipients: ['assigned_user'],
     buildContext(row) {

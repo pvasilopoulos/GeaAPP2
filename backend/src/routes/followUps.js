@@ -92,6 +92,7 @@ followUpsRouter.post('/', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, re
         await evaluateNotificationRules('follow_up_assigned', {
           tenantId: req.user.tenantId,
           entityId: r.rows.insertId,
+          customerId,
           title: parsed.title,
           customerName: customer.rows[0].full_name,
           assignedEmployeeId: parsed.assignedEmployeeId,
@@ -151,6 +152,7 @@ followUpsRouter.patch('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req
         await evaluateNotificationRules('follow_up_assigned', {
           tenantId: req.user.tenantId,
           entityId: id,
+          customerId: current.customer_id,
           title: parsed.title || current.title,
           customerName: customer?.full_name,
           assignedEmployeeId: parsed.assignedEmployeeId,

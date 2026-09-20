@@ -557,6 +557,7 @@ async function sweepFollowUpReminders(queryFn) {
     const result = await evaluateNotificationRules(type, {
       tenantId: row.tenant_id,
       entityId: row.id,
+      customerId: row.customer_id,
       title: row.title,
       customerName: row.customer_name,
       assignedUserId,
@@ -601,6 +602,7 @@ async function sweepExpiredQuotes(queryFn) {
     const result = await evaluateNotificationRules('quote_expired', {
       tenantId: row.tenant_id,
       entityId: row.id,
+      customerId: row.customer_id,
       customerName: row.customer_name,
       total: row.total,
       createdByUserId: createdBy,

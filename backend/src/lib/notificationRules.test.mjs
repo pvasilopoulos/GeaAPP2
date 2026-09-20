@@ -235,6 +235,89 @@ const v2Rule = {
   assert.equal(state.escalations.length, 1);
 }
 
+// --- v2: per-channel overrides (customer/custom recipient + per-channel body/title) ---
+function makeDbV2Customer(overrides = {}) {
+  const base = makeDbV2(overrides);
+  const customer = overrides.customer !== undefined ? overrides.customer
+    : { phone: '2101234567', mobile: '6912345678', email: 'client@example.com' };
+  const rawDb = base.db;
+  const db = async (sql, params = []) => {
+    const s = String(sql);
+    if (s.includes('SELECT phone, mobile, email FROM customers')) {
+      return { rows: customer ? [customer] : [] };
+    }
+    return rawDb(sql, params);
+  };
+  return { ...base, db };
+}
+
+// channel with recipientType 'customer' bypasses the internal-user pipeline
+// entirely and is routed straight to the customer's own phone; 'app' has no
+// override so it still fires normally for the internal user.
+{
+  const { db, state } = makeDbV2Customer();
+  const rule = {
+    ...v2Rule, channels: JSON.stringify(['app', 'sms']),
+    channel_overrides: JSON.stringify({ sms: { recipientType: 'customer', bodyTemplate: 'Γεια σου {{customerName}}' } }),
+  };
+  const result = await dispatchRule(rule, { tenantId: 1, entityId: 1, customerId: 42, customerName: 'Νίκος' }, db);
+  assert.equal(state.notifications.length, 1); // app still went to the internal user
+  const smsRun = state.runs.find((r) => r[3] === 'sms');
+  assert.ok(smsRun, 'expected an sms run to be recorded');
+  assert.equal(smsRun[2], null); // recipient_user_id stays null for an external recipient
+  assert.equal(smsRun[7], '2101234567'); // recipient_label carries the actual phone used
+  assert.equal(result.fired, 1); // app fired; sms is unconfigured in this test double so it logs (not counted)
+}
+
+// 'app' channel cannot target an external customer (no in-app inbox) -> not_applicable, no crash
+{
+  const { db, state } = makeDbV2Customer();
+  const rule = {
+    ...v2Rule, channels: JSON.stringify(['app']),
+    channel_overrides: JSON.stringify({ app: { recipientType: 'customer' } }),
+  };
+  const result = await dispatchRule(rule, { tenantId: 1, entityId: 1, customerId: 42 }, db);
+  assert.equal(result.fired, 0);
+  assert.equal(state.notifications.length, 0);
+  assert.equal(state.runs.some((r) => r[3] === 'app' && r[4] === 'not_applicable'), true);
+}
+
+// customer has no contact info for the targeted channel -> no_contact, never throws
+{
+  const { db, state } = makeDbV2Customer({ customer: { phone: null, mobile: null, email: null } });
+  const rule = {
+    ...v2Rule, channels: JSON.stringify(['sms']),
+    channel_overrides: JSON.stringify({ sms: { recipientType: 'customer' } }),
+  };
+  const result = await dispatchRule(rule, { tenantId: 1, entityId: 1, customerId: 42 }, db);
+  assert.equal(result.fired, 0);
+  assert.equal(state.runs.some((r) => r[3] === 'sms' && r[4] === 'no_contact'), true);
+}
+
+// custom recipientType renders a templated address instead of a fixed userId/customer
+{
+  const { db, state } = makeDbV2Customer();
+  const rule = {
+    ...v2Rule, channels: JSON.stringify(['sms']),
+    channel_overrides: JSON.stringify({ sms: { recipientType: 'custom', customValue: '+30{{extPhone}}' } }),
+  };
+  await dispatchRule(rule, { tenantId: 1, entityId: 1, customerId: 42, extPhone: '6999999999' }, db);
+  const smsRun = state.runs.find((r) => r[3] === 'sms');
+  assert.equal(smsRun[7], '+306999999999');
+}
+
+// dry_run on an external-recipient channel is logged (and still counted as fired) without any delivery attempt
+{
+  const { db, state } = makeDbV2Customer();
+  const rule = {
+    ...v2Rule, dry_run: 1, channels: JSON.stringify(['sms']),
+    channel_overrides: JSON.stringify({ sms: { recipientType: 'customer' } }),
+  };
+  const result = await dispatchRule(rule, { tenantId: 1, entityId: 1, customerId: 42 }, db);
+  assert.equal(result.fired, 1);
+  assert.equal(state.runs.some((r) => r[3] === 'sms' && r[4] === 'dry_run'), true);
+}
+
 // --- v2: sweepScheduleTriggers — fires once, then dedupes on re-sweep ------
 {
   const quoteRow = {

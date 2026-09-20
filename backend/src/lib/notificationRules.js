@@ -199,11 +199,17 @@ async function loadMessagingCfg(tenantId, queryFn) {
   return mergeMessaging(mergeTenantSettings(parseJson(rows[0]?.settings, {})).messaging);
 }
 
-async function recordRun(queryFn, { tenantId, ruleId, recipientUserId, channel, status, reason, entityId }) {
+/** The record's own customer contact details, merged into the template context (as customerPhone/customerMobile/customerEmail) and usable as a per-channel recipient. */
+async function loadCustomerContact(tenantId, customerId, queryFn) {
+  const { rows } = await queryFn('SELECT phone, mobile, email FROM customers WHERE id = ? AND tenant_id = ?', [customerId, tenantId]);
+  return rows[0] || null;
+}
+
+async function recordRun(queryFn, { tenantId, ruleId, recipientUserId, recipientLabel, channel, status, reason, entityId }) {
   await queryFn(
-    `INSERT INTO notification_rule_runs (tenant_id, rule_id, recipient_user_id, channel, status, reason, entity_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [tenantId, ruleId, recipientUserId ?? null, channel ?? null, status, reason ?? null, entityId != null ? String(entityId) : null],
+    `INSERT INTO notification_rule_runs (tenant_id, rule_id, recipient_user_id, channel, status, reason, entity_id, recipient_label)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [tenantId, ruleId, recipientUserId ?? null, channel ?? null, status, reason ?? null, entityId != null ? String(entityId) : null, recipientLabel ?? null],
   ).catch(() => {});
 }
 
@@ -284,26 +290,67 @@ async function runExtraActions(rule, context, queryFn) {
 export async function dispatchRule(rule, context, queryFn = dbQuery) {
   const tenantId = context.tenantId;
   try {
-    const userIds = [...new Set((
-      rule.recipient_type === 'dynamic'
-        ? await resolveDynamicRecipient(rule, { ...context, tenantId })
-        : await resolveStaticRecipients(rule, tenantId, queryFn)
-    ).filter(Boolean))];
-    if (!userIds.length) return { fired: 0 };
+    // Merge the linked record's own customer contact details into the
+    // template context (once) so {{customerPhone}}/{{customerMobile}}/
+    // {{customerEmail}} are available in every title/body/URL template and
+    // custom-recipient value, and so a channel can be routed straight to
+    // the customer instead of an internal user (see channel_overrides
+    // below). `customerId` is present in the context of virtually every
+    // event/schedule trigger (see notificationEvents.js/scheduleEntities.js).
+    let ctx = { ...context, tenantId };
+    if (ctx.customerId != null) {
+      const contact = await loadCustomerContact(tenantId, ctx.customerId, queryFn);
+      if (contact) {
+        ctx = {
+          ...ctx,
+          customerPhone: contact.phone || contact.mobile || '',
+          customerMobile: contact.mobile || '',
+          customerEmail: contact.email || '',
+        };
+      }
+    }
 
     const channels = (parseJson(rule.channels, []) || []).filter((c) => ALL_CHANNELS.includes(c));
     if (!channels.length) return { fired: 0 };
+
+    // `channel_overrides` lets each channel independently redirect its
+    // recipient (to the record's customer, or a custom static/templated
+    // value) and/or override the title/body template — e.g. SMS/Viber can
+    // go straight to the customer's own phone with customer-facing wording
+    // while email/app still notify the rule's regular (internal)
+    // recipients with the rule's default template. A channel with no
+    // override (or recipientType 'inherit') behaves exactly as before.
+    const channelOverrides = parseJson(rule.channel_overrides, {}) || {};
+    const userChannels = channels.filter((c) => (channelOverrides[c]?.recipientType || 'inherit') === 'inherit');
+    const externalChannels = channels.filter((c) => ['customer', 'custom'].includes(channelOverrides[c]?.recipientType));
+
+    const userIds = userChannels.length ? [...new Set((
+      rule.recipient_type === 'dynamic'
+        ? await resolveDynamicRecipient(rule, ctx)
+        : await resolveStaticRecipients(rule, tenantId, queryFn)
+    ).filter(Boolean))] : [];
+    if (!userIds.length && !externalChannels.length) return { fired: 0 };
 
     const messagingCfg = channels.some((c) => c !== 'app') ? await loadMessagingCfg(tenantId, queryFn) : null;
     const rich = {
       ...sanitizeRichPush({ ...rule, actions: parseJson(rule.actions, []) }),
       ruleId: rule.id,
-      sourceId: context.entityId ?? rule.id,
+      sourceId: ctx.entityId ?? rule.id,
     };
-    const title = renderTemplate(rule.title_template, context).slice(0, 200) || 'Ειδοποίηση';
-    const body = renderTemplate(rule.body_template, context).slice(0, 1000);
-    const url = renderTemplate(rule.url_template, context).slice(0, 500);
+    const title = renderTemplate(rule.title_template, ctx).slice(0, 200) || 'Ειδοποίηση';
+    const body = renderTemplate(rule.body_template, ctx).slice(0, 1000);
+    const url = renderTemplate(rule.url_template, ctx).slice(0, 500);
     const prefsEventKey = rule.event_key || `schedule_${rule.id}`;
+    // Per-channel title/body: an explicit override template for the channel,
+    // rendered against the same context, otherwise the rule-level default.
+    const titleFor = (channel) => {
+      const t = channelOverrides[channel]?.titleTemplate;
+      return t ? (renderTemplate(t, ctx).slice(0, 200) || title) : title;
+    };
+    const bodyFor = (channel) => {
+      const t = channelOverrides[channel]?.bodyTemplate;
+      return t ? renderTemplate(t, ctx).slice(0, 1000) : body;
+    };
 
     let fired = 0;
     for (const userId of userIds) {
@@ -314,7 +361,9 @@ export async function dispatchRule(rule, context, queryFn = dbQuery) {
       const isChannelEnabled = await loadPreferenceOverrides(tenantId, userId, prefsEventKey, queryFn);
       const quiet = rule.respect_quiet_hours ? await loadQuietHours(tenantId, userId, queryFn) : null;
       let anySent = false;
-      for (const channel of channels) {
+      for (const channel of userChannels) {
+        const chTitle = titleFor(channel);
+        const chBody = bodyFor(channel);
         if (!isChannelEnabled(channel)) {
           await recordRun(queryFn, { tenantId, ruleId: rule.id, recipientUserId: userId, channel, status: 'opted_out', entityId: context.entityId });
           continue;
@@ -326,7 +375,7 @@ export async function dispatchRule(rule, context, queryFn = dbQuery) {
         if (rule.digest_mode && rule.digest_mode !== 'none') {
           await queryFn(
             `INSERT INTO notification_digest_queue (tenant_id, rule_id, user_id, channel, title, body, url) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [tenantId, rule.id, userId, channel, title, body || null, url || null],
+            [tenantId, rule.id, userId, channel, chTitle, chBody || null, url || null],
           );
           await recordRun(queryFn, { tenantId, ruleId: rule.id, recipientUserId: userId, channel, status: 'queued_digest', entityId: context.entityId });
           anySent = true;
@@ -337,7 +386,7 @@ export async function dispatchRule(rule, context, queryFn = dbQuery) {
           anySent = true;
           continue;
         }
-        const ok = await deliverToChannel(channel, { tenantId, userId, title, body, url, rich, messagingCfg }, queryFn).catch((err) => {
+        const ok = await deliverToChannel(channel, { tenantId, userId, title: chTitle, body: chBody, url, rich, messagingCfg }, queryFn).catch((err) => {
           console.error(`[notificationRules] delivery failed rule=${rule.id} channel=${channel}:`, err.message);
           return false;
         });
@@ -357,7 +406,50 @@ export async function dispatchRule(rule, context, queryFn = dbQuery) {
         }
       }
     }
-    if (fired > 0) await runExtraActions(rule, { ...context, tenantId }, queryFn);
+
+    // External recipients (record's own customer, or a custom static/
+    // templated address) — independent of the per-user pipeline above,
+    // since throttle/opt-out preferences/quiet-hours/digest are all
+    // concepts tied to an internal user's own account, which an external
+    // contact doesn't have.
+    for (const channel of externalChannels) {
+      const override = channelOverrides[channel] || {};
+      if (channel === 'app') {
+        // No in-app inbox exists for an external contact — nothing to do.
+        await recordRun(queryFn, { tenantId, ruleId: rule.id, channel, status: 'not_applicable', reason: 'Δεν υπάρχουν εισερχόμενα εφαρμογής για εξωτερικό παραλήπτη', entityId: context.entityId });
+        continue;
+      }
+      let to = '';
+      if (override.recipientType === 'customer') {
+        if (channel === 'email') to = ctx.customerEmail || '';
+        else if (channel !== 'telegram') to = ctx.customerPhone || ctx.customerMobile || '';
+        // Telegram has no equivalent customer contact field (customers
+        // never message the bot themselves), so `to` stays empty and the
+        // run is logged as 'no_contact' below.
+      } else if (override.recipientType === 'custom') {
+        to = renderTemplate(override.customValue || '', ctx).trim();
+      }
+      if (!to) {
+        await recordRun(queryFn, { tenantId, ruleId: rule.id, channel, status: 'no_contact', entityId: context.entityId });
+        continue;
+      }
+      if (rule.dry_run) {
+        await recordRun(queryFn, { tenantId, ruleId: rule.id, channel, status: 'dry_run', entityId: context.entityId, recipientLabel: to });
+        fired += 1;
+        continue;
+      }
+      const chTitle = titleFor(channel);
+      const chBody = bodyFor(channel);
+      const result = await deliverMessage(channel, messagingCfg[channel], { to, subject: chTitle, body: [chTitle, chBody].filter(Boolean).join('\n\n') }).catch((err) => {
+        console.error(`[notificationRules] external delivery failed rule=${rule.id} channel=${channel}:`, err.message);
+        return { status: 'failed' };
+      });
+      const ok = result.status === 'sent';
+      await recordRun(queryFn, { tenantId, ruleId: rule.id, channel, status: ok ? 'sent' : 'failed', entityId: context.entityId, recipientLabel: to });
+      if (ok) fired += 1;
+    }
+
+    if (fired > 0) await runExtraActions(rule, ctx, queryFn);
     await queryFn(
       'UPDATE notification_rules SET last_fired_at = NOW(), fired_count = fired_count + 1 WHERE id = ?',
       [rule.id],

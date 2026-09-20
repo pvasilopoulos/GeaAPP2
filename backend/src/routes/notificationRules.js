@@ -30,6 +30,7 @@ function publicRule(row) {
     recipientIds: parseJson(row.recipient_ids, []),
     recipientDynamic: row.recipient_dynamic,
     channels: parseJson(row.channels, []),
+    channelOverrides: parseJson(row.channel_overrides, {}),
     titleTemplate: row.title_template,
     bodyTemplate: row.body_template,
     urlTemplate: row.url_template,
@@ -125,6 +126,29 @@ function sanitizeEscalation(value) {
   };
 }
 
+const CHANNEL_RECIPIENT_TYPES = ['inherit', 'customer', 'custom'];
+
+// Per-channel overrides — { [channel]: { recipientType, customValue, titleTemplate, bodyTemplate } }.
+// Anything unrecognized (unknown channel key, unknown recipientType, or an
+// entry with only default/blank values) is dropped so the stored JSON stays
+// minimal and 'inherit'-with-no-overrides never gets stored at all.
+function sanitizeChannelOverrides(value) {
+  const src = value && typeof value === 'object' ? value : {};
+  const out = {};
+  for (const channel of ALL_CHANNELS) {
+    const entry = src[channel];
+    if (!entry || typeof entry !== 'object') continue;
+    const recipientType = CHANNEL_RECIPIENT_TYPES.includes(entry.recipientType) ? entry.recipientType : 'inherit';
+    const customValue = recipientType === 'custom' ? String(entry.customValue || '').trim().slice(0, 300) : '';
+    const titleTemplate = String(entry.titleTemplate || '').trim().slice(0, 300);
+    const bodyTemplate = String(entry.bodyTemplate || '').trim().slice(0, 1500);
+    if (recipientType === 'inherit' && !titleTemplate && !bodyTemplate) continue;
+    out[channel] = { recipientType, customValue, titleTemplate, bodyTemplate };
+  }
+  return out;
+}
+
+
 // ---- Event catalog (used by the rule builder UI) --------------------------
 notificationRulesRouter.get('/events', manageGuard, async (_req, res) => {
   res.json({ events: eventCatalogList(), channels: ALL_CHANNELS });
@@ -164,13 +188,13 @@ notificationRulesRouter.post('/', manageGuard, async (req, res, next) => {
     const result = await query(
       `INSERT INTO notification_rules
         (tenant_id, created_by, name, event_key, enabled, conditions,
-         recipient_type, recipient_role_id, recipient_ids, recipient_dynamic, channels,
+         recipient_type, recipient_role_id, recipient_ids, recipient_dynamic, channels, channel_overrides,
          title_template, body_template, url_template,
          image_url, icon_url, badge_url, actions, require_interaction, silent, vibrate, tag, renotify,
          urgency, ttl_seconds, throttle_seconds,
          trigger_type, schedule_entity, schedule_date_field, schedule_offset_minutes, schedule_recurrence,
          condition_logic, extra_actions, escalation, digest_mode, respect_quiet_hours, priority, dry_run)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         req.user.tenantId, req.user.id,
         String(body.name).trim().slice(0, 150), triggerType === 'event' ? String(body.eventKey) : null,
@@ -180,6 +204,7 @@ notificationRulesRouter.post('/', manageGuard, async (req, res, next) => {
         JSON.stringify(Array.isArray(body.recipientIds) ? body.recipientIds : []),
         body.recipientType === 'dynamic' ? String(body.recipientDynamic || '') : null,
         JSON.stringify(body.channels.filter((c) => ALL_CHANNELS.includes(c))),
+        JSON.stringify(sanitizeChannelOverrides(body.channelOverrides)),
         String(body.titleTemplate).trim().slice(0, 300),
         body.bodyTemplate ? String(body.bodyTemplate).trim().slice(0, 1500) : null,
         body.urlTemplate ? String(body.urlTemplate).trim().slice(0, 500) : null,
@@ -227,7 +252,7 @@ notificationRulesRouter.patch('/:id', manageGuard, async (req, res, next) => {
     await query(
       `UPDATE notification_rules SET
         name = ?, event_key = ?, enabled = ?, conditions = ?,
-        recipient_type = ?, recipient_role_id = ?, recipient_ids = ?, recipient_dynamic = ?, channels = ?,
+        recipient_type = ?, recipient_role_id = ?, recipient_ids = ?, recipient_dynamic = ?, channels = ?, channel_overrides = ?,
         title_template = ?, body_template = ?, url_template = ?,
         image_url = ?, icon_url = ?, badge_url = ?, actions = ?, require_interaction = ?, silent = ?,
         vibrate = ?, tag = ?, renotify = ?, urgency = ?, ttl_seconds = ?, throttle_seconds = ?,
@@ -242,6 +267,7 @@ notificationRulesRouter.patch('/:id', manageGuard, async (req, res, next) => {
         JSON.stringify(Array.isArray(body.recipientIds) ? body.recipientIds : []),
         body.recipientType === 'dynamic' ? String(body.recipientDynamic || '') : null,
         JSON.stringify(body.channels.filter((c) => ALL_CHANNELS.includes(c))),
+        JSON.stringify(sanitizeChannelOverrides(body.channelOverrides)),
         String(body.titleTemplate).trim().slice(0, 300),
         body.bodyTemplate ? String(body.bodyTemplate).trim().slice(0, 1500) : null,
         body.urlTemplate ? String(body.urlTemplate).trim().slice(0, 500) : null,
@@ -303,13 +329,19 @@ notificationRulesRouter.get('/:id/runs', manageGuard, async (req, res, next) => 
     const existing = await loadOwnedRule(req);
     if (!existing) return res.status(404).json({ error: 'Ο κανόνας δεν βρέθηκε' });
     const { rows } = await query(
-      'SELECT id, entity_id, status, recipient_count, channels, dry_run, error_message, created_at FROM notification_rule_runs WHERE rule_id = ? ORDER BY created_at DESC LIMIT 50',
+      `SELECT r.id, r.entity_id, r.status, r.reason, r.channel, r.recipient_user_id, r.recipient_label, r.created_at,
+              u.first_name, u.last_name
+       FROM notification_rule_runs r
+       LEFT JOIN users u ON u.id = r.recipient_user_id
+       WHERE r.rule_id = ? ORDER BY r.created_at DESC LIMIT 50`,
       [existing.id],
     );
     res.json({
       runs: rows.map((r) => ({
-        id: r.id, entityId: r.entity_id, status: r.status, recipientCount: r.recipient_count,
-        channels: parseJson(r.channels, []), dryRun: !!r.dry_run, errorMessage: r.error_message, createdAt: r.created_at,
+        id: r.id, entityId: r.entity_id, status: r.status, reason: r.reason, channel: r.channel,
+        recipientUserId: r.recipient_user_id,
+        recipientLabel: r.recipient_label || (r.first_name ? `${r.first_name} ${r.last_name || ''}`.trim() : null),
+        createdAt: r.created_at,
       })),
     });
   } catch (e) { next(e); }

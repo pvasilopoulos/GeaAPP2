@@ -482,6 +482,16 @@ export async function ensureSchema() {
   await addColumn('notification_rules', 'priority', "VARCHAR(20) NOT NULL DEFAULT 'normal'");
   await addColumn('notification_rules', 'dry_run', 'TINYINT(1) NOT NULL DEFAULT 0');
 
+  // Per-channel overrides: JSON object keyed by channel id, each value
+  // optionally carrying { recipientType: 'inherit'|'customer'|'custom',
+  // customValue, titleTemplate, bodyTemplate } — lets e.g. SMS/Viber go
+  // straight to the record's own customer (phone from the customers table)
+  // with its own wording, while the app/email channels still notify the
+  // rule's regular (internal) recipients with the rule's default template.
+  // Missing/absent per-channel keys fall back to the rule-level recipient
+  // and title/body templates — fully backwards compatible.
+  await addColumn('notification_rules', 'channel_overrides', 'JSON NULL');
+
   // Optional per-user quiet-hours window (server local time) — respected
   // only by rules with respect_quiet_hours = 1, and skipped entirely for
   // priority = 'urgent' rules.
@@ -505,6 +515,12 @@ export async function ensureSchema() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
     console.log('[schema] created notification_rule_runs');
   }
+  // Which literal address/number a run actually went to (e.g. the
+  // customer's own phone/email when a channel override targets them, or a
+  // custom static/templated value) — recipient_user_id stays NULL for
+  // those, so this is the only way to see *who* got the message.
+  await addColumn('notification_rule_runs', 'recipient_label', 'VARCHAR(180) NULL');
+
 
   // Digest mode buffer: rule matches accumulate here instead of sending
   // immediately, and a periodic sweep flushes one aggregated message per

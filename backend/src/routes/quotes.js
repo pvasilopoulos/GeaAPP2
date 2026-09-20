@@ -177,6 +177,7 @@ quotesRouter.post('/', authorize(PERMISSIONS.QUOTES_CREATE), async (req, res, ne
     await evaluateNotificationRules('quote_created', {
       tenantId: req.user.tenantId,
       entityId: r.rows.insertId,
+      customerId: b.customerId,
       customerName: customerRow?.full_name,
       total: calculated.total,
       createdByUserId: req.user.id,
@@ -233,6 +234,7 @@ quotesRouter.post('/:id/status', authorize(PERMISSIONS.QUOTES_EDIT), async (req,
     await evaluateNotificationRules('quote_status_changed', {
       tenantId: req.user.tenantId,
       entityId: id,
+      customerId,
       fromStatus: quote.status,
       toStatus: nextStatus,
       customerName: quoteRow?.customer_name,
