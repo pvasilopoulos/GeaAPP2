@@ -62,7 +62,7 @@ assert(CHANNEL_CAPS.viber.attachmentsMax === 1, 'viber allows a single attachmen
 // the file message (which carries the button, if any).
 const fileMsgs = buildViberRouteeMessages({
   text: 'Hello',
-  attachment: { name: 'doc.pdf', mime: 'application/pdf', url: 'https://x/doc.pdf' },
+  attachment: { name: 'doc.pdf', mime: 'application/pdf', url: 'https://x/doc.pdf', size: 1024 },
   action: { caption: 'Open', targetUrl: 'https://x' },
 });
 assert(fileMsgs.length === 2, 'file attachment + text splits into two messages');
@@ -100,5 +100,30 @@ assert(imageOnlyMsgs.length === 1 && imageOnlyMsgs[0].imageURL === 'https://x/pi
 
 const noAttachMsgs = buildViberRouteeMessages({ text: 'Hello' });
 assert(noAttachMsgs.length === 1 && noAttachMsgs[0].text === 'Hello' && !noAttachMsgs[0].imageURL && !noAttachMsgs[0].viberFile, 'plain text message unaffected');
+
+// Routee documents (docs.routee.net/docs/other-viber-messaging-concept) a
+// hard 600KB size limit and 25-character name limit for viberFile — both
+// are silently rejected as the opaque errorCode 019 "not valid" with no
+// size/length detail, so these are checked up front with an actionable
+// message instead.
+function assertThrows(fn, pattern, msg) {
+  try {
+    fn();
+  } catch (err) {
+    assert(pattern.test(err.message), `${msg} (unexpected message: ${err.message})`);
+    return;
+  }
+  throw new Error(`${msg} (did not throw)`);
+}
+
+assertThrows(() => buildViberRouteeMessages({
+  text: '',
+  attachment: { name: 'big.pdf', mime: 'application/pdf', url: 'https://x/big.pdf', size: 700 * 1024 },
+}), /600KB/, 'oversized viberFile attachment is rejected before calling Routee');
+
+assertThrows(() => buildViberRouteeMessages({
+  text: '',
+  attachment: { name: 'a-very-long-file-name-indeed.pdf', mime: 'application/pdf', url: 'https://x/a.pdf', size: 1024 },
+}), /25 χαρακτ/, 'overly long viberFile file name is rejected before calling Routee');
 
 console.log('messaging: ok');

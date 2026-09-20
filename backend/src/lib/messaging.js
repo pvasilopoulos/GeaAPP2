@@ -281,10 +281,24 @@ function viberFileType(attachment) {
   return MIME_TO_FILE_EXT[String(attachment?.mime || '').toLowerCase()] || 'pdf';
 }
 
+// Routee's own Viber restrictions (docs.routee.net/docs/other-viber-messaging-concept):
+// file size up to 600KB and file name up to 25 characters. Both are silently
+// rejected by Routee as the generic "Provided viber file is not valid"
+// (errorCode 019) with no size/length detail in the response, so check them
+// up front and fail with an actionable message instead of that opaque error.
+const VIBER_ROUTEE_MAX_FILE_BYTES = 600 * 1024;
+const VIBER_ROUTEE_MAX_FILE_NAME_LEN = 25;
+
 export function buildViberRouteeMessages({ text, attachment, action }) {
   const isImage = attachment && String(attachment.mime || '').startsWith('image/');
   const messages = [];
   if (attachment && !isImage) {
+    if (attachment.size && attachment.size > VIBER_ROUTEE_MAX_FILE_BYTES) {
+      throw new Error(`Το αρχείο "${attachment.name || 'file'}" (${(attachment.size / 1024).toFixed(0)}KB) ξεπερνά το όριο των 600KB που θέτει το Viber (Routee) για αρχεία.`);
+    }
+    if (String(attachment.name || '').length > VIBER_ROUTEE_MAX_FILE_NAME_LEN) {
+      throw new Error(`Το όνομα αρχείου "${attachment.name}" ξεπερνά τους 25 χαρακτήρες που επιτρέπει το Viber (Routee) για αρχεία.`);
+    }
     if (text) messages.push({ text });
     messages.push({
       viberFile: { fileName: attachment.name || 'file', fileType: viberFileType(attachment), fileURL: attachment.url },
