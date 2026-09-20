@@ -7,6 +7,8 @@ import { sanitizeRichPush } from '../lib/notifications.js';
 import { ALL_CHANNELS, dispatchRule } from '../lib/notificationRules.js';
 import { eventCatalogList, EVENT_CATALOG } from '../lib/notificationEvents.js';
 import { SCHEDULE_ENTITIES, scheduleEntityCatalogList } from '../lib/scheduleEntities.js';
+import { mergeMessaging, deliverMessage } from '../lib/messaging.js';
+import { mergeTenantSettings } from '../lib/tenantSettings.js';
 
 export const notificationRulesRouter = Router();
 
@@ -369,6 +371,29 @@ notificationRulesRouter.post('/:id/test', manageGuard, async (req, res, next) =>
     const testRule = { ...existing, dry_run: 1 };
     const result = await dispatchRule(testRule, context, query);
     res.json({ ok: true, result });
+  } catch (e) { next(e); }
+});
+
+// Sends one real message on a single channel to an address the admin types
+// in the UI (not tied to any recipient/throttle/quiet-hours logic) — lets
+// them verify a channel/title/body actually renders and arrives before
+// relying on the rule for real traffic. The UI renders title/body from the
+// rule's own template + sample data client-side and posts the final text.
+notificationRulesRouter.post('/:id/test-send', manageGuard, async (req, res, next) => {
+  try {
+    const existing = await loadOwnedRule(req);
+    if (!existing) return res.status(404).json({ error: 'Ο κανόνας δεν βρέθηκε' });
+    const channel = String(req.body?.channel || '');
+    if (!ALL_CHANNELS.includes(channel)) return badRequest(res, 'Άγνωστο κανάλι');
+    if (channel === 'app') return badRequest(res, 'Η δοκιμαστική αποστολή δεν ισχύει για το κανάλι εφαρμογής');
+    const to = String(req.body?.to || '').trim();
+    if (!to) return badRequest(res, 'Συμπλήρωσε τηλέφωνο/email/αναγνωριστικό παραλήπτη');
+    const title = String(req.body?.title || '').trim().slice(0, 200) || 'Δοκιμαστική ειδοποίηση';
+    const body = String(req.body?.body || '').trim().slice(0, 1000);
+    const { rows } = await query('SELECT settings FROM tenants WHERE id = ?', [req.user.tenantId]);
+    const messagingCfg = mergeMessaging(mergeTenantSettings(parseJson(rows[0]?.settings, {})).messaging);
+    const result = await deliverMessage(channel, messagingCfg[channel], { to, subject: title, body: [title, body].filter(Boolean).join('\n\n') });
+    res.json({ ok: result.status === 'sent', status: result.status, detail: result.detail || null });
   } catch (e) { next(e); }
 });
 
