@@ -15,6 +15,7 @@ import CustomersPanel from './settings/CustomersPanel.jsx';
 import QuotesPanel from './settings/QuotesPanel.jsx';
 import MenuPanel from './settings/MenuPanel.jsx';
 import NotificationsPanel from './settings/NotificationsPanel.jsx';
+import NotificationRulesPanel from './settings/NotificationRulesPanel.jsx';
 import PushBroadcastPanel from './settings/PushBroadcastPanel.jsx';
 import AuditLog from './AuditLog.jsx';
 
@@ -32,6 +33,7 @@ const CATS = [
   { id: 'audit', label: 'Ιστορικό αλλαγών', hint: 'Ποιος άλλαξε τι στον οργανισμό', icon: 'clock', perms: [PERMS.SETTINGS_MANAGE] },
   { id: 'connectors', label: 'ERP Sync', hint: 'Συνδέσεις, αντιστοιχίσεις και συγχρονισμοί', icon: 'refresh', perms: [PERMS.SETTINGS_MANAGE] },
   { id: 'push-broadcast', label: 'Αποστολή ειδοποιήσεων', hint: 'Στείλε ειδοποίηση (push + in-app) σε όλους ή σε επιλεγμένους χρήστες', icon: 'bell', perms: [PERMS.SETTINGS_MANAGE] },
+  { id: 'notification-rules', label: 'Κανόνες ειδοποιήσεων', hint: 'Αυτόματοι κανόνες: γεγονός → συνθήκες → παραλήπτες → κανάλια', icon: 'bell', perms: [PERMS.SETTINGS_MANAGE] },
   // No perms gate: every authenticated user can personalize their own menu;
   // the panel itself gates the tenant-wide default section by SETTINGS_MANAGE.
   { id: 'menu', label: 'Μενού', hint: 'Πλαϊνό μενού & κάτω μπάρα (mobile) — γενικά και προσωπικά', icon: 'grid', perms: [] },
@@ -40,7 +42,7 @@ const CATS = [
 
 const GROUPS = [
   { id: 'workspace', label: 'Χώρος εργασίας', items: ['org', 'app', 'customers', 'fields'] },
-  { id: 'operations', label: 'Λειτουργίες', items: ['messaging', 'reminders', 'connectors', 'push-broadcast', 'quotes'] },
+  { id: 'operations', label: 'Λειτουργίες', items: ['messaging', 'reminders', 'connectors', 'push-broadcast', 'notification-rules', 'quotes'] },
   { id: 'access', label: 'Πρόσβαση & ασφάλεια', items: ['users', 'security', 'audit'] },
   { id: 'platform', label: 'Πλατφόρμα', items: ['tenants'] },
   { id: 'personal', label: 'Προσωπικά', items: ['menu', 'notifications'] },
@@ -111,6 +113,7 @@ export default function Settings({ initialCat } = {}) {
               {active.id === 'security' && <SecurityPanel />}
               {active.id === 'connectors' && <ConnectorsPanel />}
               {active.id === 'push-broadcast' && <PushBroadcastPanel />}
+              {active.id === 'notification-rules' && <NotificationRulesPanel />}
               {active.id === 'menu' && <MenuPanel />}
               {active.id === 'notifications' && <NotificationsPanel />}
               {active.id === 'audit' && <AuditLog embedded />}

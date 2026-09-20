@@ -9,6 +9,7 @@ import { computeReminderState } from '../lib/reminderSettings.js';
 import { loadTenant } from '../lib/tenants.js';
 import { withIdempotency } from '../lib/idempotency.js';
 import { notifyFollowUpAssigned } from '../lib/notifications.js';
+import { evaluateNotificationRules } from '../lib/notificationRules.js';
 import { logAuditFromReq } from '../lib/audit.js';
 
 
@@ -97,6 +98,13 @@ followUpsRouter.post('/', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, re
           title: parsed.title,
           assignedEmployeeId: parsed.assignedEmployeeId,
         }).catch((e) => console.error('[notifications]', e.message));
+        await evaluateNotificationRules('follow_up_assigned', {
+          tenantId: req.user.tenantId,
+          entityId: r.rows.insertId,
+          title: parsed.title,
+          customerName: customer.rows[0].full_name,
+          assignedEmployeeId: parsed.assignedEmployeeId,
+        }).catch((e) => console.error('[notificationRules]', e.message));
       }
       return { status: 201, body: { id: r.rows.insertId } };
     });
@@ -157,6 +165,13 @@ followUpsRouter.patch('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req
           title: parsed.title || current.title,
           assignedEmployeeId: parsed.assignedEmployeeId,
         }).catch((e) => console.error('[notifications]', e.message));
+        await evaluateNotificationRules('follow_up_assigned', {
+          tenantId: req.user.tenantId,
+          entityId: id,
+          title: parsed.title || current.title,
+          customerName: customer?.full_name,
+          assignedEmployeeId: parsed.assignedEmployeeId,
+        }).catch((e) => console.error('[notificationRules]', e.message));
       }
       return { status: 200, body: { ok: true } };
     });

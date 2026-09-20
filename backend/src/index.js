@@ -33,6 +33,7 @@ import { calendarRouter } from './routes/calendar.js';
 import { notificationsRouter } from './routes/notifications.js';
 import { auditRouter } from './routes/audit.js';
 import { pushRouter, pushPublicRouter } from './routes/push.js';
+import { notificationRulesRouter } from './routes/notificationRules.js';
 import { brandingPublicRouter } from './routes/branding.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -88,6 +89,7 @@ app.use('/api/tenants', tenantsRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/connectors', connectorsRouter);
 app.use('/api/notifications', notificationsRouter);
+app.use('/api/notification-rules', notificationRulesRouter);
 app.use('/api/push', pushRouter);
 app.use('/api/audit', auditRouter);
 app.use('/api', usersRouter);

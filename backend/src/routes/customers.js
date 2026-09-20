@@ -17,6 +17,7 @@ import { parseNotePayload, noteReminderState } from '../lib/notes.js';
 import { extractClientRequestId, isDuplicateKeyError, withIdempotency } from '../lib/idempotency.js';
 import { logAuditFromReq } from '../lib/audit.js';
 import { enqueuePush } from '../lib/pushSync.js';
+import { evaluateNotificationRules } from '../lib/notificationRules.js';
 
 const CUSTOMER_FIELDS = ['first_name', 'last_name', 'email', 'phone', 'mobile', 'company',
   'tax_id', 'customer_type', 'status', 'is_vip', 'date_of_birth', 'address_line', 'city',
@@ -218,6 +219,14 @@ customersRouter.post('/', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, re
     });
     enqueuePush({ tenantId: req.user.tenantId, entityType: 'customers', entityId: id })
       .catch((e) => console.error('[pushSync] enqueue failed:', e.message));
+    if (vals.assigned_employee_id) {
+      evaluateNotificationRules('customer_assigned', {
+        tenantId: req.user.tenantId,
+        entityId: id,
+        customerName: `${b.first_name} ${b.last_name}`,
+        assignedEmployeeId: vals.assigned_employee_id,
+      }).catch((e) => console.error('[notificationRules]', e.message));
+    }
     res.status(201).json({ id, code });
   } catch (err) { next(err); }
 });
@@ -260,6 +269,14 @@ customersRouter.patch('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req
         });
         enqueuePush({ tenantId: req.user.tenantId, entityType: 'customers', entityId: id })
           .catch((e) => console.error('[pushSync] enqueue failed:', e.message));
+      }
+      if (b.assigned_employee_id !== undefined && b.assigned_employee_id && b.assigned_employee_id !== cur.assigned_employee_id) {
+        evaluateNotificationRules('customer_assigned', {
+          tenantId: req.user.tenantId,
+          entityId: id,
+          customerName: [merged.first_name, merged.last_name].filter(Boolean).join(' ') || merged.company,
+          assignedEmployeeId: b.assigned_employee_id,
+        }).catch((e) => console.error('[notificationRules]', e.message));
       }
       return { status: 200, body: { ok: true } };
     });

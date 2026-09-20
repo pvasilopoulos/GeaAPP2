@@ -3,6 +3,7 @@ import { isDuplicateKeyError } from './idempotency.js';
 import { computeReminderState, mergeReminderSettings } from './reminderSettings.js';
 import { PERMISSIONS, expandPermissions } from './permissions.js';
 import { pushToUser } from './push.js';
+import { evaluateNotificationRules } from './notificationRules.js';
 
 export const NOTIFICATION_TYPES = {
   FOLLOW_UP_OVERDUE: 'follow_up_overdue',
@@ -543,7 +544,7 @@ async function employeeUserMap(tenantId, queryFn) {
   return new Map(rows.map((row) => [Number(row.employee_id), Number(row.user_id)]));
 }
 
-async function userIdForEmployee(tenantId, employeeId, queryFn) {
+export async function userIdForEmployee(tenantId, employeeId, queryFn) {
   if (!employeeId) return null;
   const { rows } = await queryFn(
     `SELECT u.id FROM employees e
@@ -583,7 +584,7 @@ export async function notifyConnectorFailure({
     connectorName,
     errorMessage: errorMessage ? String(errorMessage).slice(0, 400) : '',
   });
-  return createNotificationsForUsers(userIds, {
+  const result = await createNotificationsForUsers(userIds, {
     tenantId,
     type: NOTIFICATION_TYPES.CONNECTOR_RUN_FAILED,
     ...copy,
@@ -591,6 +592,10 @@ export async function notifyConnectorFailure({
     sourceId: runId,
     payload: { connector_id: Number(connectorId), connector_name: connectorName },
   }, queryFn);
+  await evaluateNotificationRules('connector_run_failed', {
+    tenantId, entityId: runId, connectorName, errorMessage: errorMessage ? String(errorMessage).slice(0, 400) : '',
+  }, queryFn).catch((e) => console.error('[notificationRules]', e.message));
+  return result;
 }
 
 function inAppRemindersEnabled(settings) {
@@ -653,13 +658,20 @@ async function sweepFollowUpReminders(queryFn) {
       payload: { customer_name: row.customer_name, due_at: row.due_at },
     }, queryFn);
     inserted += result.inserted;
+    await evaluateNotificationRules(type, {
+      tenantId: row.tenant_id,
+      entityId: row.id,
+      title: row.title,
+      customerName: row.customer_name,
+      assignedUserId,
+    }, queryFn).catch((e) => console.error('[notificationRules]', e.message));
   }
   return { inserted, scanned: rows.length };
 }
 
 async function sweepExpiredQuotes(queryFn) {
   const { rows } = await queryFn(
-    `SELECT q.id, q.tenant_id, q.series, q.quote_number, q.customer_id, q.created_by, q.seller_id, q.valid_until,
+    `SELECT q.id, q.tenant_id, q.series, q.quote_number, q.customer_id, q.created_by, q.seller_id, q.valid_until, q.total,
             c.full_name AS customer_name
      FROM quotes q
      JOIN customers c ON c.id = q.customer_id
@@ -704,6 +716,14 @@ async function sweepExpiredQuotes(queryFn) {
       payload: { customer_name: row.customer_name, valid_until: row.valid_until },
     }, queryFn);
     inserted += result.inserted;
+    await evaluateNotificationRules('quote_expired', {
+      tenantId: row.tenant_id,
+      entityId: row.id,
+      customerName: row.customer_name,
+      total: row.total,
+      createdByUserId: createdBy,
+      sellerEmployeeId: row.seller_id || null,
+    }, queryFn).catch((e) => console.error('[notificationRules]', e.message));
   }
   return { inserted, scanned: rows.length };
 }

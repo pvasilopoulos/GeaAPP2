@@ -12,6 +12,7 @@ import { QUOTE_STATUSES, QUOTE_STATUS_TRANSITIONS } from '../lib/quoteWorkflow.j
 import { mapErpLinesToQuoteLines } from '../lib/quoteLineMapping.js';
 import { parseEncodedJson } from '../lib/responseEncoding.js';
 import { logAuditFromReq } from '../lib/audit.js';
+import { evaluateNotificationRules } from '../lib/notificationRules.js';
 import { renderPushTemplate } from '../lib/pushSync.js';
 import { getPath } from '../lib/mapping.js';
 import { callConfiguredErp, responseSnapshot } from '../lib/erpClient.js';
@@ -172,6 +173,15 @@ quotesRouter.post('/', authorize(PERMISSIONS.QUOTES_CREATE), async (req, res, ne
       action: 'create', entityType: 'quote', entityId: r.rows.insertId, customerId: b.customerId,
       summary: `Δημιουργία προσφοράς ${b.series || 'ΠΡΟΣ'}-${number}`,
     });
+    const customerRow = (await query('SELECT full_name FROM customers WHERE id = ? AND tenant_id = ?', [b.customerId, req.user.tenantId])).rows[0];
+    await evaluateNotificationRules('quote_created', {
+      tenantId: req.user.tenantId,
+      entityId: r.rows.insertId,
+      customerName: customerRow?.full_name,
+      total: calculated.total,
+      createdByUserId: req.user.id,
+      sellerEmployeeId: b.sellerId || null,
+    }).catch((e) => console.error('[notificationRules]', e.message));
     res.status(201).json({ id: r.rows.insertId, ...calculated });
   } catch (err) { next(err); }
 });
@@ -216,6 +226,20 @@ quotesRouter.post('/:id/status', authorize(PERMISSIONS.QUOTES_EDIT), async (req,
       summary: `Κατάσταση προσφοράς ${id}: ${quote.status} → ${nextStatus}`,
       details: { from: quote.status, to: nextStatus },
     });
+    const quoteRow = (await query(
+      'SELECT q.total, q.created_by, q.seller_id, c.full_name AS customer_name FROM quotes q JOIN customers c ON c.id = q.customer_id WHERE q.id = ?',
+      [id],
+    )).rows[0];
+    await evaluateNotificationRules('quote_status_changed', {
+      tenantId: req.user.tenantId,
+      entityId: id,
+      fromStatus: quote.status,
+      toStatus: nextStatus,
+      customerName: quoteRow?.customer_name,
+      total: quoteRow?.total,
+      createdByUserId: quoteRow?.created_by || null,
+      sellerEmployeeId: quoteRow?.seller_id || null,
+    }).catch((e) => console.error('[notificationRules]', e.message));
     res.json({ id, status: nextStatus });
   } catch (err) { next(err); }
 });

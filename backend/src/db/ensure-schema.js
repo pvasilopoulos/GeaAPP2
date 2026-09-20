@@ -380,6 +380,75 @@ export async function ensureSchema() {
     console.log('[schema] created push_templates');
   }
 
+  // Contact fields used to deliver rule-driven notifications to a user via
+  // SMS/Viber/Telegram (in addition to email, which already exists on
+  // `users.email`). Optional — channels without a value simply skip that
+  // user rather than failing the whole rule.
+  await addColumn('users', 'phone', 'VARCHAR(40) NULL');
+  await addColumn('users', 'telegram_chat_id', 'VARCHAR(64) NULL');
+
+  // Admin-defined automatic notification rules: "when <event> happens and
+  // <conditions> match, notify <recipients> via <channels> with <template>".
+  // This is the advanced companion to push_broadcasts (which is a one-off
+  // manual send) — rules fire continuously whenever their event occurs.
+  if (!(await tableExists('notification_rules'))) {
+    await query(`CREATE TABLE notification_rules (
+      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      tenant_id BIGINT NOT NULL, created_by BIGINT NULL,
+      name VARCHAR(150) NOT NULL, event_key VARCHAR(60) NOT NULL,
+      enabled TINYINT(1) NOT NULL DEFAULT 1,
+      conditions JSON NULL,
+      recipient_type VARCHAR(20) NOT NULL DEFAULT 'all',
+      recipient_role_id BIGINT NULL, recipient_ids JSON NULL, recipient_dynamic VARCHAR(40) NULL,
+      channels JSON NOT NULL,
+      title_template VARCHAR(300) NOT NULL, body_template VARCHAR(1500) NULL, url_template VARCHAR(500) NULL,
+      image_url VARCHAR(500) NULL, icon_url VARCHAR(500) NULL, badge_url VARCHAR(500) NULL,
+      actions JSON NULL,
+      require_interaction TINYINT(1) NOT NULL DEFAULT 0, silent TINYINT(1) NOT NULL DEFAULT 0,
+      vibrate VARCHAR(100) NULL, tag VARCHAR(100) NULL, renotify TINYINT(1) NOT NULL DEFAULT 0,
+      urgency VARCHAR(20) NOT NULL DEFAULT 'normal', ttl_seconds INT NOT NULL DEFAULT 259200,
+      throttle_seconds INT NOT NULL DEFAULT 0,
+      last_fired_at DATETIME NULL, fired_count INT NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      KEY idx_notification_rules_event (tenant_id, event_key, enabled),
+      CONSTRAINT fk_notification_rules_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      CONSTRAINT fk_notification_rules_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    console.log('[schema] created notification_rules');
+  }
+
+  // Per-user opt-in/opt-out on top of a rule's allowed channels — missing
+  // row means "enabled" (rules are opt-out, not opt-in, so a newly created
+  // rule reaches everyone it targets until a user turns it off).
+  if (!(await tableExists('notification_preferences'))) {
+    await query(`CREATE TABLE notification_preferences (
+      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      tenant_id BIGINT NOT NULL, user_id BIGINT NOT NULL,
+      event_key VARCHAR(60) NOT NULL, channel VARCHAR(20) NOT NULL,
+      enabled TINYINT(1) NOT NULL DEFAULT 1,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_notification_preferences (tenant_id, user_id, event_key, channel),
+      CONSTRAINT fk_notification_preferences_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      CONSTRAINT fk_notification_preferences_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    console.log('[schema] created notification_preferences');
+  }
+
+  // Per-(rule, recipient) throttle bookkeeping so a rule with
+  // `throttle_seconds` set doesn't spam the same user repeatedly for a
+  // rapidly repeating event (e.g. many quote status changes in a row).
+  if (!(await tableExists('notification_rule_throttle'))) {
+    await query(`CREATE TABLE notification_rule_throttle (
+      rule_id BIGINT NOT NULL, user_id BIGINT NOT NULL,
+      last_fired_at DATETIME NOT NULL,
+      PRIMARY KEY (rule_id, user_id),
+      CONSTRAINT fk_notification_rule_throttle_rule FOREIGN KEY (rule_id) REFERENCES notification_rules(id) ON DELETE CASCADE,
+      CONSTRAINT fk_notification_rule_throttle_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    console.log('[schema] created notification_rule_throttle');
+  }
+
   if (!(await tableExists('audit_events'))) {
     await query(`CREATE TABLE audit_events (
       id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,

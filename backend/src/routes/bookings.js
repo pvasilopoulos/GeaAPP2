@@ -5,6 +5,7 @@ import { PERMISSIONS } from '../lib/permissions.js';
 import { logActivity } from '../lib/activity.js';
 import { packDetails, snapshotFields, diffRecords, changeSummary } from '../lib/activityDiff.js';
 import { parseBookingPayload, validateBranch, validateSpace, validateEmployee } from '../lib/bookings.js';
+import { evaluateNotificationRules } from '../lib/notificationRules.js';
 
 export const bookingsRouter = Router();
 bookingsRouter.use(authorize(PERMISSIONS.BOOKINGS_VIEW));
@@ -67,6 +68,20 @@ bookingsRouter.post('/', authorize(PERMISSIONS.BOOKINGS_CREATE), async (req, res
       branchId: parsed.branchId ?? null, spaceId: parsed.spaceId ?? null,
       details: packDetails(req, { bookingId: id, fields: snapshotFields({ starts_at: parsed.startsAt, ends_at: parsed.endsAt, status: parsed.status || 'confirmed' }, ['starts_at', 'ends_at', 'status']) }),
     });
+    const names = (await query(
+      `SELECT c.full_name AS customer_name, br.name AS branch_name, s.name AS space_name
+       FROM customers c LEFT JOIN branches br ON br.id = ? LEFT JOIN spaces s ON s.id = ?
+       WHERE c.id = ?`,
+      [parsed.branchId ?? null, parsed.spaceId ?? null, customerId],
+    )).rows[0];
+    evaluateNotificationRules('booking_created', {
+      tenantId: req.user.tenantId,
+      entityId: id,
+      customerName: names?.customer_name,
+      branchName: names?.branch_name,
+      spaceName: names?.space_name,
+      assignedEmployeeId: parsed.employeeId ?? null,
+    }).catch((e) => console.error('[notificationRules]', e.message));
     res.status(201).json({ id });
   } catch (err) { next(err); }
 });
