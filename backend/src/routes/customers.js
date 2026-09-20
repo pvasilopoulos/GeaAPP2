@@ -10,6 +10,7 @@ import { logActivity } from '../lib/activity.js';
 import { parseJson } from '../lib/masterData.js';
 import { CHANNELS, CHANNEL_CAPS, CHANNEL_META, deliverMessage, mergeMessaging } from '../lib/messaging.js';
 import { renderBody } from '../lib/richText.js';
+import { config } from '../config.js';
 import { mergeTenantSettings } from '../lib/tenantSettings.js';
 import { loadTenant } from '../lib/tenants.js';
 import { computeReminderState } from '../lib/reminderSettings.js';
@@ -475,8 +476,9 @@ customersRouter.get('/:id/payments', subResource(
    WHERE customer_id = ? ORDER BY paid_at DESC LIMIT ? OFFSET ?`));
 
 customersRouter.get('/:id/communications', subResource(
-  `SELECT id, channel, direction, subject, body, recipient, delivery_status, created_at FROM communications
-   WHERE customer_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`));
+  `SELECT id, channel, direction, subject, body, recipient, delivery_status, meta, created_at FROM communications
+   WHERE customer_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+  (r) => ({ ...r, meta: parseJson(r.meta) || null })));
 
 customersRouter.post('/:id/messages', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
   try {
@@ -498,19 +500,47 @@ customersRouter.post('/:id/messages', authorize(PERMISSIONS.CUSTOMERS_WRITE), as
       return res.status(400).json({ error: `Το μήνυμα υπερβαίνει το όριο των ${caps.maxLength} χαρακτήρων για ${CHANNEL_META[channel].label}` });
     }
 
+    // Attachments/buttons only ever point at our own /uploads/... files or an
+    // https:// URL — never trusted verbatim, so nothing sends a javascript:
+    // or file:// link out through a provider.
+    const isSafeUrl = (u) => /^https:\/\//i.test(u) || u.startsWith('/uploads/');
+    let attachments = [];
+    if (caps.attachments && Array.isArray(req.body?.attachments)) {
+      attachments = req.body.attachments
+        .filter((a) => a && typeof a.url === 'string' && isSafeUrl(a.url))
+        .slice(0, caps.attachmentsMax)
+        .map((a) => ({
+          url: a.url,
+          name: String(a.name || '').trim().slice(0, 180) || 'attachment',
+          mime: String(a.mime || '').trim().slice(0, 100),
+          size: Number.isFinite(Number(a.size)) ? Number(a.size) : 0,
+        }));
+    }
+    let button = null;
+    if (caps.button && req.body?.button?.label && req.body?.button?.url) {
+      const url = String(req.body.button.url).trim();
+      if (!isSafeUrl(url)) return res.status(400).json({ error: 'Ο σύνδεσμος του κουμπιού πρέπει να ξεκινά με https://' });
+      button = { label: String(req.body.button.label).trim().slice(0, 60), url };
+    }
+
     const { rows: tenantRows } = await query('SELECT settings FROM tenants WHERE id = ?', [req.user.tenantId]);
     const messaging = mergeMessaging(mergeTenantSettings(tenantRows[0]?.settings).messaging);
     const cfg = messaging[channel];
     if (!cfg?.enabled) return res.status(400).json({ error: `Το κανάλι ${CHANNEL_META[channel].label} είναι απενεργοποιημένο στις ρυθμίσεις` });
 
-    const delivery = await deliverMessage(channel, cfg, { to, subject, body, bodyFormat });
+    // Chat providers must fetch attachments/buttons over a public HTTPS URL —
+    // PUBLIC_URL should be set in production; otherwise fall back to this
+    // request's own origin (fine for a single-domain deployment).
+    const publicBaseUrl = config.publicUrl || `${req.protocol}://${req.get('host')}`;
+    const delivery = await deliverMessage(channel, cfg, { to, subject, body, bodyFormat, attachments, button, publicBaseUrl });
     const channelLabel = CHANNEL_META[channel].label;
     const subjectLine = subject || `${channelLabel} προς ${to}`;
+    const meta = (attachments.length || button) ? { attachments, button } : null;
 
     const ins = await query(
-      `INSERT INTO communications (customer_id, channel, direction, subject, body, recipient, delivery_status, employee_id)
-       VALUES (?,?,?,?,?,?,?,?)`,
-      [customerId, channel, 'outbound', subjectLine, plainBody, to, delivery.status, req.user.id]);
+      `INSERT INTO communications (customer_id, channel, direction, subject, body, recipient, delivery_status, employee_id, meta)
+       VALUES (?,?,?,?,?,?,?,?,?)`,
+      [customerId, channel, 'outbound', subjectLine, plainBody, to, delivery.status, req.user.id, meta ? JSON.stringify(meta) : null]);
 
     await logActivity({
       tenantId: req.user.tenantId,
@@ -526,6 +556,8 @@ customersRouter.post('/:id/messages', authorize(PERMISSIONS.CUSTOMERS_WRITE), as
           body: plainBody,
           delivery_status: delivery.status,
           delivery_detail: delivery.detail || null,
+          attachments: attachments.length ? attachments.map((a) => a.name) : undefined,
+          button: button || undefined,
         },
       }),
     });
@@ -536,6 +568,8 @@ customersRouter.post('/:id/messages', authorize(PERMISSIONS.CUSTOMERS_WRITE), as
       to,
       subject: subjectLine,
       body: plainBody,
+      attachments,
+      button,
       delivery,
     });
   } catch (err) { next(err); }

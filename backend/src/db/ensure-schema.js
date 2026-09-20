@@ -76,6 +76,10 @@ export async function ensureSchema() {
   await addColumn('users', 'menu_preferences', 'JSON NULL');
   await addColumn('communications', 'recipient', 'VARCHAR(255) NULL');
   await addColumn('communications', 'delivery_status', "VARCHAR(20) NOT NULL DEFAULT 'logged'");
+  // Structured attachments/button sent alongside the message body, kept
+  // separately from `body` (which stays plain, human-readable text) so the
+  // composer can re-offer them and richer history views can render them.
+  await addColumn('communications', 'meta', 'JSON NULL');
   await addColumn('activities', 'details', 'JSON NULL');
   await addColumn('customers', 'next_action_at', 'DATETIME NULL');
   await addColumn('customers', 'next_action_note', 'VARCHAR(200) NULL');

@@ -60,10 +60,15 @@ export default function MessageComposer({ customer, contacts = [], channelId, ch
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [isHtml, setIsHtml] = useState(!!caps.richText);
+  const [attachments, setAttachments] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [buttonLabel, setButtonLabel] = useState('');
+  const [buttonUrl, setButtonUrl] = useState('');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const [msg, setMsg] = useState('');
   const [preview, setPreview] = useState(false);
+  const fileRef = useRef(null);
 
   useEffect(() => {
     setTo(suggestions[0]?.value || '');
@@ -72,7 +77,8 @@ export default function MessageComposer({ customer, contacts = [], channelId, ch
   }, [channelId, suggestions]);
 
   // Switching channel must not silently drop what the user typed: markup is
-  // flattened to plain text when the newly-selected channel can't carry it.
+  // flattened to plain text when the newly-selected channel can't carry it,
+  // and attachments/button are trimmed to whatever the new channel allows.
   const state = useRef({ body, isHtml });
   state.current = { body, isHtml };
   useEffect(() => {
@@ -82,6 +88,8 @@ export default function MessageComposer({ customer, contacts = [], channelId, ch
       setBody(plainText(cur.body, true));
       setIsHtml(false);
     }
+    setAttachments((list) => (caps.attachments ? list.slice(0, caps.attachmentsMax || 1) : []));
+    if (!caps.button) { setButtonLabel(''); setButtonUrl(''); }
   }, [channelId, caps]);
 
   const setFormat = (next) => {
@@ -95,12 +103,29 @@ export default function MessageComposer({ customer, contacts = [], channelId, ch
   const length = plainLength(body, isHtml);
   const overLimit = !!caps.maxLength && length > caps.maxLength;
   const segments = caps.encoding === 'gsm' ? smsSegments(plainText(body, isHtml)) : null;
+  const attachmentsMax = caps.attachmentsMax || 1;
+
+  const addFiles = async (fileList) => {
+    const files = Array.from(fileList || []).slice(0, Math.max(0, attachmentsMax - attachments.length));
+    if (!files.length) return;
+    setErr(''); setUploading(true);
+    try {
+      for (const file of files) {
+        const res = await api.uploadFile(file, customer.id);
+        setAttachments((list) => [...list, { url: res.url, name: file.name, mime: file.type, size: file.size }]);
+      }
+    } catch (ex) { setErr(ex.message || 'Η μεταφόρτωση απέτυχε'); } finally { setUploading(false); }
+  };
 
   const send = async (e) => {
     e.preventDefault();
     setErr(''); setMsg('');
     if (!enabled) {
       setErr('Το κανάλι είναι απενεργοποιημένο. Ενεργοποιήστε το στις Ρυθμίσεις → Μηνύματα.');
+      return;
+    }
+    if (buttonUrl && !/^https?:\/\//i.test(buttonUrl) && !buttonUrl.startsWith('/uploads/')) {
+      setErr('Ο σύνδεσμος του κουμπιού πρέπει να ξεκινά με https://');
       return;
     }
     setSaving(true);
@@ -111,6 +136,8 @@ export default function MessageComposer({ customer, contacts = [], channelId, ch
         subject: caps.subject ? subject : undefined,
         body,
         bodyFormat: isHtml ? 'html' : 'text',
+        attachments: caps.attachments ? attachments : undefined,
+        button: caps.button && buttonLabel.trim() && buttonUrl.trim() ? { label: buttonLabel.trim(), url: buttonUrl.trim() } : undefined,
       });
       qc.invalidateQueries({ queryKey: ['history', 'communications', customer.id] });
       qc.invalidateQueries({ queryKey: ['history', 'activity', customer.id] });
@@ -135,7 +162,9 @@ export default function MessageComposer({ customer, contacts = [], channelId, ch
           <div className="msg-caps">
             {caps.richText && <span className="cap-chip">Μορφοποίηση</span>}
             {caps.subject && <span className="cap-chip">Θέμα</span>}
-            {!caps.richText && !caps.subject && <span className="cap-chip dim">Απλό κείμενο</span>}
+            {caps.attachments && <span className="cap-chip">Συνημμένα{attachmentsMax > 1 ? ` ×${attachmentsMax}` : ''}</span>}
+            {caps.button && <span className="cap-chip">Κουμπί</span>}
+            {!caps.richText && !caps.subject && !caps.attachments && !caps.button && <span className="cap-chip dim">Απλό κείμενο</span>}
           </div>
         </div>
 
@@ -205,9 +234,46 @@ export default function MessageComposer({ customer, contacts = [], channelId, ch
           </div>
         </div>
 
+        {caps.attachments && (
+          <div className="field-group">
+            <label>Συνημμένα{attachmentsMax > 1 ? ` (έως ${attachmentsMax})` : ' (1 αρχείο ή εικόνα)'}</label>
+            <div className="msg-attach-list">
+              {attachments.map((a, i) => (
+                <div key={i} className="msg-attach-chip">
+                  <Icon name={a.mime?.startsWith('image/') ? 'file' : 'paperclip'} size={13} />
+                  <span>{a.name}</span>
+                  <button type="button" onClick={() => setAttachments((list) => list.filter((_, x) => x !== i))}>
+                    <Icon name="x" size={12} />
+                  </button>
+                </div>
+              ))}
+              {attachments.length < attachmentsMax && (
+                <button type="button" className="btn btn-sm btn-ghost" disabled={uploading} onClick={() => fileRef.current?.click()}>
+                  {uploading ? <span className="spinner" /> : <Icon name="paperclip" size={14} />} Προσθήκη αρχείου
+                </button>
+              )}
+            </div>
+            <input ref={fileRef} type="file" hidden multiple={attachmentsMax > 1}
+              accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.mp3,.mp4,.zip"
+              onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
+          </div>
+        )}
+
+        {caps.button && (
+          <div className="field-group">
+            <label>Κουμπί (προαιρετικό)</label>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <input style={{ flex: '1 1 160px' }} value={buttonLabel} onChange={(e) => setButtonLabel(e.target.value)}
+                placeholder="Κείμενο κουμπιού (π.χ. Δείτε την προσφορά)" maxLength={60} />
+              <input style={{ flex: '2 1 220px' }} value={buttonUrl} onChange={(e) => setButtonUrl(e.target.value)}
+                placeholder="https://…" />
+            </div>
+          </div>
+        )}
+
         <div className="msg-editor-foot">
           <button type="button" className="btn" onClick={onClose}>Άκυρο</button>
-          <button className="btn btn-accent" disabled={saving || !enabled || overLimit || !to.trim() || !length}>
+          <button className="btn btn-accent" disabled={saving || uploading || !enabled || overLimit || !to.trim() || !length}>
             {saving ? <span className="spinner" /> : <Icon name="send" size={16} />} Αποστολή
           </button>
         </div>

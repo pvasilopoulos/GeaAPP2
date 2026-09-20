@@ -178,6 +178,16 @@ auto-generated από το όνομα μέσω `slugify()` με αφαίρεση
 `has_<secret>: true/false` (`publicMessaging()`), και ένα input που ξεκινά με `•` αγνοείται κατά
 την αποθήκευση (ώστε να μη «σβήνεται» κατά λάθος ένα ήδη αποθηκευμένο μυστικό).
 
+Ο επεξεργαστής μηνύματος (`MessageComposer.jsx`) είναι **παραμετρικός ανά κανάλι** μέσω
+`CHANNEL_CAPS` (`messaging.js`): κάθε κανάλι δηλώνει `richText`, `subject`, `maxLength`,
+`encoding`, `attachments`/`attachmentsMax` και `button`. Email/Telegram/Viber/Viber Routee
+υποστηρίζουν όλα συνημμένα αρχεία (upload μέσω `/api/uploads`) και ένα κουμπί CTA (label+URL) —
+το SMS μένει σκέτο κείμενο. Ο διακομιστής χτίζει το σωστό αίτημα ανά πάροχο κατά την αποστολή:
+Telegram `sendPhoto/sendDocument` + `reply_markup`, Viber `type: picture/file` + `keyboard`,
+Routee Viber `body.imageURL/viberFile/action`, Email πραγματικά `attachments`/HTML button.
+Ρυθμίστε `PUBLIC_URL` στο production `.env` ώστε τα συνημμένα να λήξουν σε δημόσιο https:// link
+(αλλιώς χρησιμοποιείται το origin του ίδιου του request).
+
 ### 3.4 Προχωρημένες υπενθυμίσεις (`RemindersPanel.jsx`) — **Λειτουργεί εξ ορισμού**
 `GET/PATCH /api/settings/reminders` (δικαίωμα `settings.manage`, ανάγνωση σε `customers.read`)·
 δείτε [§7.3](#73-προχωρημένες-υπενθυμίσεις-reminderssettingsjs).
