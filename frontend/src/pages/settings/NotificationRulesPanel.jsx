@@ -14,6 +14,7 @@ const CHANNEL_LABELS = {
   email: { label: 'Email', icon: 'mail' },
   sms: { label: 'SMS', icon: 'message' },
   viber: { label: 'Viber', icon: 'message' },
+  viber_routee: { label: 'Viber Routee', icon: 'message' },
   telegram: { label: 'Telegram', icon: 'message' },
 };
 

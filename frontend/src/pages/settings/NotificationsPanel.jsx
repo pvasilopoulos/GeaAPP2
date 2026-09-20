@@ -8,7 +8,7 @@ import { isIosDevice, isStandalone } from '../../lib/pwa.js';
 
 const card = { border: '1px solid var(--border)', borderRadius: 12, padding: 16, background: '#fff', maxWidth: 560 };
 
-const CHANNEL_LABELS = { app: 'Εφαρμογή', email: 'Email', sms: 'SMS', viber: 'Viber', telegram: 'Telegram' };
+const CHANNEL_LABELS = { app: 'Εφαρμογή', email: 'Email', sms: 'SMS', viber: 'Viber', viber_routee: 'Viber Routee', telegram: 'Telegram' };
 
 /** Per-event × per-channel opt-out matrix on top of whatever an admin rule already allows, plus the user's own contact channels for SMS/Viber/Telegram. */
 function MyNotificationPreferences() {
