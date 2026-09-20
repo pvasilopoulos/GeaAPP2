@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { access, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -40,6 +40,24 @@ function safePathSegment(value, fallback) {
   return segment || fallback;
 }
 
+// Generates a short, random stored file name — kept well under 15 characters
+// (including the extension) so it never bumps into providers' own file-name
+// length limits (e.g. Viber/Routee's 25-character viberFile name limit).
+// The user's original file name is never embedded here; it's preserved
+// separately as the attachment's display name, so nothing is lost.
+async function uniqueFileName(targetDir, ext) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const name = `${randomBytes(4).toString('hex')}.${ext}`;
+    try {
+      await access(path.join(targetDir, name));
+    } catch {
+      return name; // doesn't exist yet — safe to use
+    }
+  }
+  // Extremely unlikely fallback after repeated collisions: widen the random part.
+  return `${randomBytes(6).toString('hex')}.${ext}`;
+}
+
 // POST /api/uploads — { mime, data } where data is base64 (no data-URL prefix required).
 uploadsRouter.post('/', async (req, res, next) => {
   try {
@@ -66,14 +84,10 @@ uploadsRouter.post('/', async (req, res, next) => {
     }
     const targetDir = path.join(UPLOADS_DIR, relativeDir);
     await mkdir(targetDir, { recursive: true });
-    // Strip the user's own extension (if any) before appending ours — a raw
-    // "photo.pdf" upload would otherwise become "photo.pdf-<ts>-<hash>.pdf",
-    // a file name with an embedded ".pdf-" mid-string that some providers'
-    // file-type/extension sniffing (e.g. Viber's "invalid file" check) can
-    // choke on even though it technically still ends in ".pdf".
-    const rawName = String(req.body?.fileName || '').replace(/\.[a-z0-9]{1,8}$/i, '');
-    const originalName = safePathSegment(rawName, 'document');
-    const name = `${originalName}-${Date.now()}-${randomBytes(6).toString('hex')}.${ext}`;
+    // Stored file name is short and random on purpose — the user's own file
+    // name is preserved separately as the attachment's display name, so it
+    // doesn't need to (and shouldn't, per the 15-char limit) live on disk.
+    const name = await uniqueFileName(targetDir, ext);
     await writeFile(path.join(targetDir, name), buf);
     const urlPath = relativeDir ? `${relativeDir.replace(/\\/g, '/')}/${name}` : name;
     res.status(201).json({ url: `/uploads/${urlPath}`, path: urlPath });
