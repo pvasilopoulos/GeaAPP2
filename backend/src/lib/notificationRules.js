@@ -2,11 +2,11 @@
 // <event happens> OR <a scheduled moment relative to a date field arrives>,
 // and <conditions> match, notify <recipients> via <channels>, optionally run
 // <extra actions>, escalate if unacknowledged, and respect quiet hours /
-// digest batching." This sits ADDITIVELY next to the hardcoded notification
-// helpers in notifications.js (notifyFollowUpAssigned, notifyConnectorFailure,
-// the sweep* functions) — callers invoke both; this module never replaces the
-// existing pipeline, it only adds custom rules + per-user opt-out + extra
-// channels/actions/escalation/digest on top.
+// digest batching." This is now the SOLE source of automated notifications:
+// every event site (route handlers, sweep* functions in notifications.js,
+// sync.js/pushSync.js failure paths) calls evaluateNotificationRules(eventKey,
+// ctx) exclusively — there is no parallel hardcoded notification pipeline
+// anymore. If zero rules match/are enabled for an event, nothing is sent.
 //
 // Two trigger types (`notification_rules.trigger_type`):
 //  - 'event'    → fired synchronously from route handlers / the existing

@@ -1,7 +1,6 @@
 import { query as dbQuery } from '../db.js';
 import { isDuplicateKeyError } from './idempotency.js';
 import { computeReminderState, mergeReminderSettings } from './reminderSettings.js';
-import { PERMISSIONS, expandPermissions } from './permissions.js';
 import { pushToUser } from './push.js';
 import { evaluateNotificationRules, sweepScheduleTriggers, sweepEscalations, sweepDigests } from './notificationRules.js';
 
@@ -86,55 +85,6 @@ export function notificationTarget(row) {
       }
       return null;
   }
-}
-
-export function buildNotificationCopy(type, ctx = {}) {
-  switch (type) {
-    case NOTIFICATION_TYPES.FOLLOW_UP_OVERDUE:
-      return { title: 'Εκπρόθεσμη υπενθύμιση', body: [ctx.title, ctx.customerName].filter(Boolean).join(' · ') };
-    case NOTIFICATION_TYPES.FOLLOW_UP_DUE_SOON:
-      return { title: 'Υπενθύμιση προσεχώς', body: [ctx.title, ctx.customerName].filter(Boolean).join(' · ') };
-    case NOTIFICATION_TYPES.FOLLOW_UP_ASSIGNED:
-      return { title: 'Νέα ανάθεση υπενθύμισης', body: [ctx.title, ctx.customerName].filter(Boolean).join(' · ') };
-    case NOTIFICATION_TYPES.CONNECTOR_RUN_FAILED:
-      return {
-        title: 'Αποτυχία συγχρονισμού ERP',
-        body: [ctx.connectorName, ctx.errorMessage].filter(Boolean).join(' · ').slice(0, 1000),
-      };
-    case NOTIFICATION_TYPES.QUOTE_EXPIRED: {
-      const label = ctx.series && ctx.quoteNumber != null ? `${ctx.series}-${ctx.quoteNumber}` : (ctx.title || '');
-      return { title: 'Η προσφορά έληξε', body: [label, ctx.customerName].filter(Boolean).join(' · ') };
-    }
-    case NOTIFICATION_TYPES.ADMIN_MESSAGE:
-      return { title: ctx.title || 'Ειδοποίηση', body: ctx.body || '' };
-    default:
-      return { title: ctx.title || 'Ειδοποίηση', body: ctx.body || '' };
-  }
-}
-
-export function followUpRecipientIds({ assignedUserId, viewerUserIds = [], notifyAssigneeOnly = true }) {
-  if (assignedUserId) {
-    if (notifyAssigneeOnly) return [assignedUserId];
-    return [...new Set([assignedUserId, ...viewerUserIds])];
-  }
-  return [...new Set(viewerUserIds)];
-}
-
-export function userIdsWithPermission(users, permission) {
-  const ids = [];
-  for (const user of users || []) {
-    const perms = expandPermissions(parsePerms(user.permissions));
-    if (user.roleKey === 'owner' || user.role_key === 'owner' || perms.includes(permission)) {
-      ids.push(Number(user.id));
-    }
-  }
-  return [...new Set(ids.filter(Boolean))];
-}
-
-export function quoteExpiredRecipientIds({ createdBy, sellerUserId, quoteViewerIds = [] }) {
-  const ids = [createdBy, sellerUserId].filter(Boolean).map(Number);
-  if (ids.length) return [...new Set(ids)];
-  return [...new Set((quoteViewerIds || []).map(Number).filter(Boolean))];
 }
 
 export function publicPushBroadcast(row) {
@@ -376,15 +326,6 @@ export async function createNotification({
   }
 }
 
-export async function createNotificationsForUsers(userIds, base, queryFn = dbQuery) {
-  let inserted = 0;
-  for (const userId of [...new Set((userIds || []).filter(Boolean))]) {
-    const result = await createNotification({ ...base, userId }, queryFn);
-    if (result.inserted) inserted += 1;
-  }
-  return { inserted };
-}
-
 function badRequest(message) {
   const err = new Error(message);
   err.status = 400;
@@ -556,46 +497,18 @@ export async function userIdForEmployee(tenantId, employeeId, queryFn) {
   return rows[0]?.id ?? null;
 }
 
-export async function notifyFollowUpAssigned({
-  tenantId, followUpId, customerId, customerName, title, assignedEmployeeId,
-}, queryFn = dbQuery) {
-  const userId = await userIdForEmployee(tenantId, assignedEmployeeId, queryFn);
-  if (!userId) return { inserted: 0 };
-  const copy = buildNotificationCopy(NOTIFICATION_TYPES.FOLLOW_UP_ASSIGNED, { title, customerName });
-  const result = await createNotification({
-    tenantId,
-    userId,
-    type: NOTIFICATION_TYPES.FOLLOW_UP_ASSIGNED,
-    ...copy,
-    sourceType: SOURCE_TYPES.FOLLOW_UP,
-    sourceId: followUpId,
-    customerId,
-    payload: { customer_name: customerName, assigned_employee_id: assignedEmployeeId },
-  }, queryFn);
-  return { inserted: result.inserted ? 1 : 0 };
-}
-
+/**
+ * Every automated notification is fired exclusively through the admin-configured
+ * rules engine (evaluateNotificationRules/dispatchRule) — nothing here ever
+ * creates a notification directly, so an event with zero matching/enabled
+ * rules produces zero notifications.
+ */
 export async function notifyConnectorFailure({
   tenantId, connectorId, runId, connectorName, errorMessage,
 }, queryFn = dbQuery) {
-  const users = await loadTenantUsers(tenantId, queryFn);
-  const userIds = userIdsWithPermission(users, PERMISSIONS.SETTINGS_MANAGE);
-  const copy = buildNotificationCopy(NOTIFICATION_TYPES.CONNECTOR_RUN_FAILED, {
-    connectorName,
-    errorMessage: errorMessage ? String(errorMessage).slice(0, 400) : '',
-  });
-  const result = await createNotificationsForUsers(userIds, {
-    tenantId,
-    type: NOTIFICATION_TYPES.CONNECTOR_RUN_FAILED,
-    ...copy,
-    sourceType: SOURCE_TYPES.SYNC_RUN,
-    sourceId: runId,
-    payload: { connector_id: Number(connectorId), connector_name: connectorName },
-  }, queryFn);
-  await evaluateNotificationRules('connector_run_failed', {
+  return evaluateNotificationRules('connector_run_failed', {
     tenantId, entityId: runId, connectorName, errorMessage: errorMessage ? String(errorMessage).slice(0, 400) : '',
-  }, queryFn).catch((e) => console.error('[notificationRules]', e.message));
-  return result;
+  }, queryFn).catch((e) => { console.error('[notificationRules]', e.message); return { inserted: 0 }; });
 }
 
 function inAppRemindersEnabled(settings) {
@@ -634,7 +547,6 @@ async function sweepFollowUpReminders(queryFn) {
       const users = await loadTenantUsers(row.tenant_id, queryFn);
       cache.set(row.tenant_id, {
         users,
-        viewers: userIdsWithPermission(users, PERMISSIONS.CUSTOMERS_READ),
         employees: await employeeUserMap(row.tenant_id, queryFn),
         reminders,
       });
@@ -642,29 +554,14 @@ async function sweepFollowUpReminders(queryFn) {
     const ctx = cache.get(row.tenant_id);
     const assignedUserId = row.assigned_employee_id ? ctx.employees.get(Number(row.assigned_employee_id)) || null : null;
     if (row.assigned_employee_id && !assignedUserId && ctx.reminders.notifyAssigneeOnly) continue;
-    const userIds = followUpRecipientIds({
-      assignedUserId,
-      viewerUserIds: ctx.viewers,
-      notifyAssigneeOnly: ctx.reminders.notifyAssigneeOnly,
-    });
-    const copy = buildNotificationCopy(type, { title: row.title, customerName: row.customer_name });
-    const result = await createNotificationsForUsers(userIds, {
-      tenantId: row.tenant_id,
-      type,
-      ...copy,
-      sourceType: SOURCE_TYPES.FOLLOW_UP,
-      sourceId: row.id,
-      customerId: row.customer_id,
-      payload: { customer_name: row.customer_name, due_at: row.due_at },
-    }, queryFn);
-    inserted += result.inserted;
-    await evaluateNotificationRules(type, {
+    const result = await evaluateNotificationRules(type, {
       tenantId: row.tenant_id,
       entityId: row.id,
       title: row.title,
       customerName: row.customer_name,
       assignedUserId,
-    }, queryFn).catch((e) => console.error('[notificationRules]', e.message));
+    }, queryFn).catch((e) => { console.error('[notificationRules]', e.message); return { inserted: 0 }; });
+    inserted += result.inserted || 0;
   }
   return { inserted, scanned: rows.length };
 }
@@ -677,7 +574,7 @@ async function sweepExpiredQuotes(queryFn) {
      JOIN customers c ON c.id = q.customer_id
      WHERE q.valid_until IS NOT NULL
        AND q.valid_until < CURDATE()
-       AND q.status NOT IN ('expired', 'cancelled', 'accepted', 'rejected')
+       AND q.status = 'sent'
        AND q.valid_until >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)
      ORDER BY q.valid_until ASC
      LIMIT 500`,
@@ -685,68 +582,31 @@ async function sweepExpiredQuotes(queryFn) {
   const cache = new Map();
   let inserted = 0;
   for (const row of rows) {
+    // Flip the quote to 'expired' first: this is what actually stops the
+    // sweep from re-matching (and re-notifying for) the same quote on every
+    // tick, independent of whether any notification rule is configured.
+    await queryFn(
+      `UPDATE quotes SET status = 'expired', status_updated_at = NOW() WHERE id = ? AND tenant_id = ? AND status = 'sent'`,
+      [row.id, row.tenant_id],
+    );
     if (!cache.has(row.tenant_id)) {
       const users = await loadTenantUsers(row.tenant_id, queryFn);
       cache.set(row.tenant_id, {
         userIds: new Set(users.map((u) => Number(u.id))),
-        viewers: userIdsWithPermission(users, PERMISSIONS.QUOTES_VIEW),
         employees: await employeeUserMap(row.tenant_id, queryFn),
       });
     }
     const ctx = cache.get(row.tenant_id);
     const createdBy = ctx.userIds.has(Number(row.created_by)) ? Number(row.created_by) : null;
-    const sellerUserId = row.seller_id ? ctx.employees.get(Number(row.seller_id)) : null;
-    const userIds = quoteExpiredRecipientIds({
-      createdBy,
-      sellerUserId,
-      quoteViewerIds: ctx.viewers,
-    });
-    const copy = buildNotificationCopy(NOTIFICATION_TYPES.QUOTE_EXPIRED, {
-      series: row.series,
-      quoteNumber: row.quote_number,
-      customerName: row.customer_name,
-    });
-    const result = await createNotificationsForUsers(userIds, {
-      tenantId: row.tenant_id,
-      type: NOTIFICATION_TYPES.QUOTE_EXPIRED,
-      ...copy,
-      sourceType: SOURCE_TYPES.QUOTE,
-      sourceId: row.id,
-      customerId: row.customer_id,
-      payload: { customer_name: row.customer_name, valid_until: row.valid_until },
-    }, queryFn);
-    inserted += result.inserted;
-    await evaluateNotificationRules('quote_expired', {
+    const result = await evaluateNotificationRules('quote_expired', {
       tenantId: row.tenant_id,
       entityId: row.id,
       customerName: row.customer_name,
       total: row.total,
       createdByUserId: createdBy,
       sellerEmployeeId: row.seller_id || null,
-    }, queryFn).catch((e) => console.error('[notificationRules]', e.message));
-  }
-  return { inserted, scanned: rows.length };
-}
-
-async function sweepFailedSyncRuns(queryFn) {
-  const { rows } = await queryFn(
-    `SELECT r.id, r.tenant_id, r.connector_id, r.error_message, c.name AS connector_name
-     FROM sync_runs r
-     JOIN connectors c ON c.id = r.connector_id
-     WHERE r.status = 'failed' AND r.finished_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-     ORDER BY r.finished_at DESC
-     LIMIT 200`,
-  );
-  let inserted = 0;
-  for (const row of rows) {
-    const result = await notifyConnectorFailure({
-      tenantId: row.tenant_id,
-      connectorId: row.connector_id,
-      runId: row.id,
-      connectorName: row.connector_name,
-      errorMessage: row.error_message,
-    }, queryFn);
-    inserted += result.inserted;
+    }, queryFn).catch((e) => { console.error('[notificationRules]', e.message); return { inserted: 0 }; });
+    inserted += result.inserted || 0;
   }
   return { inserted, scanned: rows.length };
 }
@@ -759,14 +619,16 @@ export async function sweepNotifications(queryFn = dbQuery) {
   try {
     const followUps = await sweepFollowUpReminders(queryFn);
     const quotes = await sweepExpiredQuotes(queryFn);
-    const syncs = await sweepFailedSyncRuns(queryFn);
+    // Failed sync runs are notified in real time from lib/sync.js the moment
+    // a run fails; no periodic re-scan is needed (and would just re-fire the
+    // same rule repeatedly for old failures).
     // Notification rules engine v2: schedule-based triggers ("N days
     // before/after a date field"), pending escalations, and digest
     // batching — all additive, all self-guarded against throwing.
     const scheduleRules = await sweepScheduleTriggers(queryFn).catch(() => ({ fired: 0 }));
     const escalations = await sweepEscalations(queryFn).catch(() => ({ escalated: 0 }));
     const digests = await sweepDigests(queryFn).catch(() => ({ sent: 0 }));
-    return { followUps, quotes, syncs, scheduleRules, escalations, digests };
+    return { followUps, quotes, scheduleRules, escalations, digests };
   } finally {
     sweeping = false;
   }

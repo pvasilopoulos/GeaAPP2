@@ -6,10 +6,7 @@ import { query as dbQuery } from '../db.js';
 import { decryptCredentials } from './connectorCrypto.js';
 import { applyCredentials } from './sync.js';
 import { getPath } from './mapping.js';
-import { PERMISSIONS } from './permissions.js';
-import {
-  NOTIFICATION_TYPES, SOURCE_TYPES, buildNotificationCopy, createNotificationsForUsers, userIdsWithPermission,
-} from './notifications.js';
+import { evaluateNotificationRules } from './notificationRules.js';
 
 const ENTITY_TABLES = {
   customers: 'customers',
@@ -90,26 +87,15 @@ export async function enqueuePush({ tenantId, entityType, entityId }, queryFn = 
   return { queued: connectors.length };
 }
 
+/** Fires the connector_run_failed rule (same event sync.js uses for pull failures) for a push-outbox job that exhausted its retries. */
 async function notifyPushFailure({
-  tenantId, connectorName, entityType, errorMessage,
+  tenantId, connectorName, errorMessage,
 }, queryFn) {
-  const { rows: users } = await queryFn(
-    `SELECT u.id, r.key AS role_key, r.permissions FROM users u JOIN roles r ON r.id = u.role_id
-     WHERE u.tenant_id = ? AND u.is_active = 1`,
-    [tenantId],
-  );
-  const userIds = userIdsWithPermission(users, PERMISSIONS.SETTINGS_MANAGE);
-  const copy = buildNotificationCopy(NOTIFICATION_TYPES.CONNECTOR_RUN_FAILED, {
+  return evaluateNotificationRules('connector_run_failed', {
+    tenantId,
+    entityId: Date.now(), // outbox failures have no single sync_run id; timestamp keeps dedupe from colliding
     connectorName: `${connectorName} (αποστολή προς ERP)`,
     errorMessage: errorMessage ? String(errorMessage).slice(0, 400) : '',
-  });
-  return createNotificationsForUsers(userIds, {
-    tenantId,
-    type: NOTIFICATION_TYPES.CONNECTOR_RUN_FAILED,
-    ...copy,
-    sourceType: SOURCE_TYPES.SYNC_RUN,
-    sourceId: Date.now(), // outbox failures have no single sync_run id; timestamp keeps dedupe from colliding
-    payload: { entity_type: entityType },
   }, queryFn);
 }
 

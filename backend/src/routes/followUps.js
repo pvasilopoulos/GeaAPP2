@@ -8,7 +8,6 @@ import { parseFollowUpPayload, parseSnoozeMinutes, syncCustomerNextAction } from
 import { computeReminderState } from '../lib/reminderSettings.js';
 import { loadTenant } from '../lib/tenants.js';
 import { withIdempotency } from '../lib/idempotency.js';
-import { notifyFollowUpAssigned } from '../lib/notifications.js';
 import { evaluateNotificationRules } from '../lib/notificationRules.js';
 import { logAuditFromReq } from '../lib/audit.js';
 
@@ -90,14 +89,6 @@ followUpsRouter.post('/', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, re
         summary: `Νέα υπενθύμιση: ${parsed.title}`,
       });
       if (parsed.assignedEmployeeId) {
-        await notifyFollowUpAssigned({
-          tenantId: req.user.tenantId,
-          followUpId: r.rows.insertId,
-          customerId,
-          customerName: customer.rows[0].full_name,
-          title: parsed.title,
-          assignedEmployeeId: parsed.assignedEmployeeId,
-        }).catch((e) => console.error('[notifications]', e.message));
         await evaluateNotificationRules('follow_up_assigned', {
           tenantId: req.user.tenantId,
           entityId: r.rows.insertId,
@@ -157,14 +148,6 @@ followUpsRouter.patch('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req
       if (parsed.assignedEmployeeId !== undefined && parsed.assignedEmployeeId
           && parsed.assignedEmployeeId !== current.assigned_employee_id) {
         const customer = (await query('SELECT full_name FROM customers WHERE id = ? AND tenant_id = ?', [current.customer_id, req.user.tenantId])).rows[0];
-        await notifyFollowUpAssigned({
-          tenantId: req.user.tenantId,
-          followUpId: id,
-          customerId: current.customer_id,
-          customerName: customer?.full_name,
-          title: parsed.title || current.title,
-          assignedEmployeeId: parsed.assignedEmployeeId,
-        }).catch((e) => console.error('[notifications]', e.message));
         await evaluateNotificationRules('follow_up_assigned', {
           tenantId: req.user.tenantId,
           entityId: id,

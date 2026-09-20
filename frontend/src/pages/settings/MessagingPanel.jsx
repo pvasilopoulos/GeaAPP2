@@ -108,11 +108,31 @@ export default function MessagingPanel() {
                 )}
                 {ch.id === 'viber' && (
                   <>
+                    <p className="muted" style={{ fontSize: 12.5, margin: '0 0 10px' }}>
+                      Bot του Viber (Public Account). Ο παραλήπτης πρέπει να έχει κάνει Subscribe στο bot.
+                    </p>
                     <div className="field-group"><label>Όνομα αποστολέα</label>
                       <input style={inp} value={row.sender_name || ''} onChange={setCh('viber', 'sender_name')} /></div>
                     <div className="field-group"><label>Auth token</label>
                       <input style={inp} type="password" value={row.auth_token || ''} onChange={setCh('viber', 'auth_token')}
                         placeholder={stored.has_auth_token ? '••••••••' : ''} autoComplete="new-password" /></div>
+                  </>
+                )}
+                {ch.id === 'viber_routee' && (
+                  <>
+                    <p className="muted" style={{ fontSize: 12.5, margin: '0 0 10px' }}>
+                      Αποστολή Viber Business Message σε αριθμό κινητού. Τα κλειδιά βγαίνουν από το Routee
+                      (go.routee.net → Applications). Το Sender tracking ID είναι το μοναδικό id του Viber sender, όχι το όνομα εμφάνισης.
+                    </p>
+                    <div className="field-group"><label>Application ID</label>
+                      <input style={inp} value={row.application_id || ''} onChange={setCh('viber_routee', 'application_id')}
+                        autoComplete="off" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" /></div>
+                    <div className="field-group"><label>Application Secret</label>
+                      <input style={inp} type="password" value={row.application_secret || ''} onChange={setCh('viber_routee', 'application_secret')}
+                        placeholder={stored.has_application_secret ? '••••••••' : ''} autoComplete="new-password" /></div>
+                    <div className="field-group"><label>Sender tracking ID</label>
+                      <input style={inp} value={row.sender_info_tracking_id || ''} onChange={setCh('viber_routee', 'sender_info_tracking_id')}
+                        autoComplete="off" placeholder="από Applications στο Routee" /></div>
                   </>
                 )}
                 {ch.id === 'sms' && (
