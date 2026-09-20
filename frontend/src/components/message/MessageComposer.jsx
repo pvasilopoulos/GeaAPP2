@@ -113,6 +113,13 @@ export default function MessageComposer({ customer, contacts = [], channelId, ch
       for (const file of files) {
         const res = await api.uploadFile(file, customer.id);
         setAttachments((list) => [...list, { url: res.url, name: file.name, mime: file.type, size: file.size }]);
+        // Convenience default: prefill the button with the just-uploaded
+        // file's own link (e.g. so recipients can tap through to it), but
+        // never override something the user already typed themselves.
+        if (caps.button) {
+          setButtonUrl((cur) => (cur.trim() ? cur : res.url));
+          setButtonLabel((cur) => (cur.trim() ? cur : 'Click Me'));
+        }
       }
     } catch (ex) { setErr(ex.message || 'Η μεταφόρτωση απέτυχε'); } finally { setUploading(false); }
   };
