@@ -154,6 +154,7 @@ export const api = {
   notificationRuleTags: (opts) => get('/notification-rules/tags', opts),
   notificationRuleRuns: (id, opts) => get(`/notification-rules/${id}/runs`, opts),
   testNotificationRule: (id) => send('POST', `/notification-rules/${id}/test`),
+  testSendNotificationChannel: (id, payload) => send('POST', `/notification-rules/${id}/test-send`, payload),
   myNotificationPreferences: (opts) => get('/notification-rules/my-preferences', opts),
   saveMyNotificationPreferences: (overrides) => send('PUT', '/notification-rules/my-preferences', { overrides }),
   saveMyNotificationContact: (payload) => send('PUT', '/notification-rules/my-contact', payload),

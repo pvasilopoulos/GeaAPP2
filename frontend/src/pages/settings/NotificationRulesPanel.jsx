@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
@@ -32,6 +32,48 @@ const STATUS_LABELS = {
   quiet_hours: 'Ώρες ησυχίας', queued_digest: 'Σε αναμονή (συγκεντρωτικό)', dry_run: 'Δοκιμή (dry-run)',
   not_applicable: 'Μη εφαρμόσιμο', no_contact: 'Χωρίς στοιχεία επικοινωνίας',
 };
+const STATUS_COLORS = {
+  sent: { bg: '#dcfce7', fg: '#166534' }, failed: { bg: '#fee2e2', fg: '#991b1b' },
+  throttled: { bg: '#f1f5f9', fg: '#475569' }, opted_out: { bg: '#f1f5f9', fg: '#475569' },
+  quiet_hours: { bg: '#f1f5f9', fg: '#475569' }, queued_digest: { bg: '#dbeafe', fg: '#1e40af' },
+  dry_run: { bg: '#ede9fe', fg: '#5b21b6' }, not_applicable: { bg: '#f1f5f9', fg: '#475569' },
+  no_contact: { bg: '#ffedd5', fg: '#9a3412' },
+};
+
+const TABS = [
+  { key: 'trigger', label: 'Ενεργοποίηση' },
+  { key: 'conditions', label: 'Συνθήκες' },
+  { key: 'recipients', label: 'Παραλήπτες & Κανάλια' },
+  { key: 'content', label: 'Περιεχόμενο' },
+  { key: 'timing', label: 'Χρονισμός & Escalation' },
+  { key: 'runs', label: 'Εκτελέσεις' },
+];
+
+// Simple client-side mirror of the backend's {{a.b}} template renderer, used
+// for the live preview and to pre-render the exact text a "test send" posts.
+function renderPreviewTemplate(tpl, ctx) {
+  if (!tpl) return '';
+  return String(tpl).replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_, path) => {
+    const val = path.split('.').reduce((acc, k) => (acc == null ? undefined : acc[k]), ctx);
+    return val == null ? '' : String(val);
+  });
+}
+function sampleValueFor(field) {
+  if (field.type === 'number') return 100;
+  return `Παράδειγμα ${field.label}`;
+}
+function buildSample(fieldOptions) {
+  const out = {};
+  for (const f of fieldOptions) out[f.key] = sampleValueFor(f);
+  return out;
+}
+function smsSegmentInfo(text) {
+  const len = (text || '').length;
+  const gsm = /^[\x00-\x7F\u0391-\u03A9\u03B1-\u03C9€]*$/.test(text || '');
+  const perSegment = gsm ? 160 : 70;
+  const segments = len === 0 ? 0 : Math.ceil(len / (len > perSegment ? perSegment - 7 : perSegment));
+  return { len, segments, unicode: !gsm };
+}
 
 const RECURRENCE_LABELS = { once: 'Μία φορά (ανά εγγραφή)', recurring: 'Επανάληψη κάθε μέρα όσο ισχύει' };
 const DIGEST_LABELS = { none: 'Άμεση αποστολή', hourly: 'Συγκεντρωτικά ανά ώρα', daily: 'Συγκεντρωτικά 1 φορά/ημέρα (08:00)' };
@@ -110,6 +152,17 @@ export default function NotificationRulesPanel() {
   const [form, setForm] = useState(null); // null = list view, object = editor
   const [error, setError] = useState('');
   const [testResult, setTestResult] = useState(null);
+  const [activeTab, setActiveTab] = useState('trigger');
+  const [sample, setSample] = useState({});
+  const [lastFocused, setLastFocused] = useState('body');
+  const [testSendTo, setTestSendTo] = useState({}); // { [channel]: address }
+  const [testSendResult, setTestSendResult] = useState({}); // { [channel]: { ok, status } }
+  const [search, setSearch] = useState('');
+  const [filterChannel, setFilterChannel] = useState('');
+  const [filterEnabled, setFilterEnabled] = useState('');
+  const [runStatusFilter, setRunStatusFilter] = useState('');
+  const titleRef = useRef(null);
+  const bodyRef = useRef(null);
 
   const events = eventsQ.data?.events || [];
   const channels = eventsQ.data?.channels || [];
@@ -122,6 +175,10 @@ export default function NotificationRulesPanel() {
   const dynamicRecipientOptions = form?.triggerType === 'schedule'
     ? (entityMeta?.dynamicRecipients || []).map((key) => ({ id: key, label: key }))
     : (eventMeta?.dynamicRecipients || []);
+
+  useEffect(() => {
+    setSample(buildSample(fieldOptions));
+  }, [fieldOptions]);
 
   const runsQ = useQuery({
     queryKey: ['notification-rule-runs', form?.id],
@@ -147,9 +204,14 @@ export default function NotificationRulesPanel() {
     onSuccess: (data) => setTestResult(data.result),
     onError: (e) => setError(e.message),
   });
+  const testSendMut = useMutation({
+    mutationFn: ({ id, channel, to, title, body }) => api.testSendNotificationChannel(id, { channel, to, title, body }),
+    onSuccess: (data, vars) => setTestSendResult((r) => ({ ...r, [vars.channel]: data })),
+    onError: (e, vars) => setTestSendResult((r) => ({ ...r, [vars.channel]: { ok: false, status: 'error', detail: e.message } })),
+  });
 
   function openEdit(rule) {
-    setError(''); setTestResult(null);
+    setError(''); setTestResult(null); setActiveTab('trigger'); setTestSendTo({}); setTestSendResult({});
     if (!rule) { setForm(emptyForm()); return; }
     const offset = minutesToOffset(rule.scheduleOffsetMinutes);
     setForm({
@@ -172,6 +234,30 @@ export default function NotificationRulesPanel() {
       extraActions: rule.extraActions || [], escalation: rule.escalation || null,
     });
   }
+
+  function duplicateRule(rule) {
+    openEdit(rule);
+    setForm((f) => ({ ...f, id: null, name: `${rule.name} (αντίγραφο)`, enabled: false }));
+  }
+
+  // Inserts {{key}} at the cursor of whichever of title/body was last
+  // focused (falls back to appending at the end when nothing is focused).
+  function insertVariable(key) {
+    const token = `{{${key}}}`;
+    const targetKey = lastFocused === 'title' ? 'titleTemplate' : 'bodyTemplate';
+    const el = lastFocused === 'title' ? titleRef.current : bodyRef.current;
+    setForm((f) => {
+      const cur = f[targetKey] || '';
+      if (el && document.activeElement === el && typeof el.selectionStart === 'number') {
+        const start = el.selectionStart, end = el.selectionEnd;
+        const next = cur.slice(0, start) + token + cur.slice(end);
+        requestAnimationFrame(() => { el.focus(); el.selectionStart = el.selectionEnd = start + token.length; });
+        return { ...f, [targetKey]: next };
+      }
+      return { ...f, [targetKey]: cur ? `${cur} ${token}` : token };
+    });
+  }
+
 
   function updateCondition(gi, ci, patch) {
     setForm((f) => ({
@@ -240,12 +326,28 @@ export default function NotificationRulesPanel() {
   if (form) {
     return (
       <div style={{ display: 'grid', gap: 14 }}>
-        <div style={row}>
+        <div style={{ ...row, justifyContent: 'space-between', alignItems: 'center' }}>
           <button type="button" className="btn ghost" onClick={() => setForm(null)}><Icon name="arrowLeft" size={14} /> Πίσω στη λίστα</button>
+          <span style={{ fontWeight: 700 }}>{form.id ? 'Επεξεργασία κανόνα' : 'Νέος κανόνας'}{form.name ? `: ${form.name}` : ''}</span>
+        </div>
+        <div style={{
+          ...row, position: 'sticky', top: 0, zIndex: 5, background: '#fff', padding: '8px 0',
+          borderBottom: '1px solid var(--border)',
+        }}>
+          {TABS.filter((t) => t.key !== 'runs' || form.id).map((t) => (
+            <button
+              key={t.key} type="button"
+              className={activeTab === t.key ? 'btn primary' : 'btn ghost'}
+              style={{ fontSize: 12.5, padding: '6px 12px' }}
+              onClick={() => { setActiveTab(t.key); document.getElementById(`nrp-${t.key}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
         {error && <div className="alert error">{error}</div>}
 
-        <div style={card}>
+        <div id="nrp-trigger" style={card}>
           <div style={{ fontWeight: 700, marginBottom: 10 }}>Βασικά</div>
           <div style={row}>
             <label style={{ ...label, flex: '1 1 260px' }}>
@@ -322,7 +424,7 @@ export default function NotificationRulesPanel() {
           )}
         </div>
 
-        <div style={card}>
+        <div id="nrp-conditions" style={card}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <div style={{ fontWeight: 700 }}>Συνθήκες (προαιρετικό — αν αφεθούν κενές, ισχύει πάντα)</div>
             {form.conditionGroups.length > 1 && (
@@ -365,7 +467,7 @@ export default function NotificationRulesPanel() {
           </div>
         </div>
 
-        <div style={card}>
+        <div id="nrp-recipients" style={card}>
           <div style={{ fontWeight: 700, marginBottom: 10 }}>Παραλήπτες</div>
           <div style={row}>
             <label style={{ ...label, flex: '1 1 260px' }}>
@@ -463,6 +565,38 @@ export default function NotificationRulesPanel() {
                         <textarea rows={2} value={ov.bodyTemplate || ''} onChange={(e) => updateChannelOverride(ch, { bodyTemplate: e.target.value })} placeholder={form.bodyTemplate || '—'} />
                       </label>
                     </div>
+                    {(() => {
+                      const effTitle = ov.titleTemplate || form.titleTemplate || '';
+                      const effBody = ov.bodyTemplate || form.bodyTemplate || '';
+                      const rendered = { title: renderPreviewTemplate(effTitle, sample), body: renderPreviewTemplate(effBody, sample) };
+                      const isSmsLike = ['sms', 'viber', 'viber_routee', 'telegram'].includes(ch);
+                      const seg = isSmsLike ? smsSegmentInfo(rendered.body) : null;
+                      const res = testSendResult[ch];
+                      return (
+                        <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed var(--border)' }}>
+                          <div className="muted" style={{ fontSize: 11.5, marginBottom: 6 }}>
+                            Προεπισκόπηση: {rendered.body || '—'}
+                            {seg && ` · ${seg.len} χαρακτήρες, ${seg.segments || 0} SMS τμήμα(τα) (${seg.unicode ? 'Unicode' : 'GSM'})`}
+                          </div>
+                          {ch !== 'app' && (
+                            <div style={{ ...row, alignItems: 'center' }}>
+                              <input style={{ flex: '1 1 200px' }} placeholder={ch === 'email' ? 'test@example.com' : '+306912345678'}
+                                value={testSendTo[ch] || ''} onChange={(e) => setTestSendTo((t) => ({ ...t, [ch]: e.target.value }))} />
+                              <button type="button" className="btn ghost" disabled={!form.id || !testSendTo[ch] || testSendMut.isPending}
+                                title={!form.id ? 'Αποθήκευσε πρώτα τον κανόνα για να κάνεις δοκιμαστική αποστολή' : ''}
+                                onClick={() => testSendMut.mutate({ id: form.id, channel: ch, to: testSendTo[ch], title: rendered.title, body: rendered.body })}>
+                                {testSendMut.isPending ? 'Αποστολή…' : 'Δοκιμαστική αποστολή'}
+                              </button>
+                              {res && (
+                                <span style={{ fontSize: 12, color: res.ok ? '#166534' : '#991b1b' }}>
+                                  {res.ok ? 'Στάλθηκε ✓' : `Απέτυχε: ${res.detail || res.status || ''}`}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })}
@@ -470,28 +604,52 @@ export default function NotificationRulesPanel() {
           </div>
         )}
 
-        <div style={card}>
+        <div id="nrp-content" style={card}>
           <div style={{ fontWeight: 700, marginBottom: 6 }}>Περιεχόμενο</div>
-          <div className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
-            Διαθέσιμες μεταβλητές: {fieldOptions.map((f) => `{{${f.key}}}`).join(', ') || '—'}
+          <div className="muted" style={{ fontSize: 12.5, marginBottom: 6 }}>
+            Κάνε κλικ σε μια μεταβλητή για να την εισάγεις στο πεδίο που επεξεργάζεσαι (τίτλος ή κείμενο):
+          </div>
+          <div style={{ ...row, marginBottom: 10 }}>
+            {fieldOptions.length ? fieldOptions.map((f) => (
+              <button key={f.key} type="button" className="btn ghost" style={{ fontSize: 12, padding: '3px 8px' }} onClick={() => insertVariable(f.key)}>
+                {`{{${f.key}}}`}
+              </button>
+            )) : <span className="muted" style={{ fontSize: 12.5 }}>Επίλεξε πρώτα γεγονός/οντότητα στο βήμα "Ενεργοποίηση".</span>}
           </div>
           <div style={{ display: 'grid', gap: 10 }}>
             <label style={label}>
               <span style={labelText}>Τίτλος</span>
-              <input value={form.titleTemplate} onChange={(e) => setForm({ ...form, titleTemplate: e.target.value })} placeholder="π.χ. Νέα προσφορά {{total}}€" />
+              <input ref={titleRef} value={form.titleTemplate} onFocus={() => setLastFocused('title')}
+                onChange={(e) => setForm({ ...form, titleTemplate: e.target.value })} placeholder="π.χ. Νέα προσφορά {{total}}€" />
+              <span className="muted" style={{ fontSize: 11.5 }}>Προεπισκόπηση: {renderPreviewTemplate(form.titleTemplate, sample) || '—'}</span>
             </label>
             <label style={label}>
               <span style={labelText}>Κείμενο</span>
-              <textarea rows={3} value={form.bodyTemplate} onChange={(e) => setForm({ ...form, bodyTemplate: e.target.value })} placeholder="π.χ. Πελάτης: {{customerName}}" />
+              <textarea ref={bodyRef} rows={3} value={form.bodyTemplate} onFocus={() => setLastFocused('body')}
+                onChange={(e) => setForm({ ...form, bodyTemplate: e.target.value })} placeholder="π.χ. Πελάτης: {{customerName}}" />
+              <span className="muted" style={{ fontSize: 11.5 }}>Προεπισκόπηση: {renderPreviewTemplate(form.bodyTemplate, sample) || '—'}</span>
             </label>
             <label style={label}>
               <span style={labelText}>URL (προαιρετικό — άνοιγμα κατά το κλικ)</span>
               <input value={form.urlTemplate} onChange={(e) => setForm({ ...form, urlTemplate: e.target.value })} placeholder="/quotes/{{entityId}}" />
             </label>
           </div>
+          {!!fieldOptions.length && (
+            <details style={{ marginTop: 10 }}>
+              <summary style={{ fontSize: 12.5, cursor: 'pointer' }}>Δοκιμαστικές τιμές (για την προεπισκόπηση παραπάνω)</summary>
+              <div style={{ ...row, marginTop: 8 }}>
+                {fieldOptions.map((f) => (
+                  <label key={f.key} style={{ ...label, flex: '1 1 180px' }}>
+                    <span style={labelText}>{f.label}</span>
+                    <input value={sample[f.key] ?? ''} onChange={(e) => setSample((s) => ({ ...s, [f.key]: e.target.value }))} />
+                  </label>
+                ))}
+              </div>
+            </details>
+          )}
         </div>
 
-        <div style={card}>
+        <div id="nrp-timing" style={card}>
           <div style={{ fontWeight: 700, marginBottom: 10 }}>Χρονισμός &amp; προτεραιότητα</div>
           <div style={row}>
             <label style={{ ...label, maxWidth: 220 }}>
@@ -611,7 +769,7 @@ export default function NotificationRulesPanel() {
         </div>
 
         {form.id && (
-          <div style={card}>
+          <div id="nrp-runs" style={card}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <div style={{ fontWeight: 700 }}>Πρόσφατες εκτελέσεις</div>
               <button type="button" className="btn ghost" disabled={testMut.isPending} onClick={() => testMut.mutate(form.id)}>
@@ -623,19 +781,36 @@ export default function NotificationRulesPanel() {
                 Αποτέλεσμα δοκιμής: {testResult.fired ? `Θα ενεργοποιούνταν, ${testResult.recipientCount ?? ''} παραλήπτες.` : (testResult.reason || 'Δεν πληρούνται οι συνθήκες.')}
               </div>
             )}
+            {!!runsQ.data?.runs?.length && (
+              <div style={{ ...row, marginBottom: 8, alignItems: 'center' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
+                  <span className="muted">Κατάσταση:</span>
+                  <select value={runStatusFilter} onChange={(e) => setRunStatusFilter(e.target.value)}>
+                    <option value="">Όλες</option>
+                    {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                </label>
+              </div>
+            )}
             {!runsQ.data?.runs?.length && <div className="muted" style={{ fontSize: 12.5 }}>Δεν υπάρχουν εκτελέσεις ακόμα.</div>}
             <div style={{ display: 'grid', gap: 6, maxHeight: 220, overflow: 'auto' }}>
-              {(runsQ.data?.runs || []).map((r) => (
-                <div key={r.id} style={{ fontSize: 12.5, display: 'flex', justifyContent: 'space-between', gap: 8, borderBottom: '1px solid var(--border)', paddingBottom: 4 }}>
-                  <span>{new Date(r.createdAt).toLocaleString('el-GR')}</span>
-                  <span>
-                    {STATUS_LABELS[r.status] || r.status}
-                    {r.channel ? ` · ${CHANNEL_LABELS[r.channel]?.label || r.channel}` : ''}
-                    {r.recipientLabel ? ` · ${r.recipientLabel}` : ''}
-                    {r.reason ? ` (${r.reason})` : ''}
-                  </span>
-                </div>
-              ))}
+              {(runsQ.data?.runs || []).filter((r) => !runStatusFilter || r.status === runStatusFilter).map((r) => {
+                const sc = STATUS_COLORS[r.status] || { bg: '#f1f5f9', fg: '#475569' };
+                return (
+                  <div key={r.id} style={{ fontSize: 12.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, borderBottom: '1px solid var(--border)', paddingBottom: 4 }}>
+                    <span>{new Date(r.createdAt).toLocaleString('el-GR')}</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ background: sc.bg, color: sc.fg, borderRadius: 999, padding: '2px 8px', fontWeight: 600, fontSize: 11.5 }}>
+                        {STATUS_LABELS[r.status] || r.status}
+                      </span>
+                      {r.channel && <Icon name={CHANNEL_LABELS[r.channel]?.icon || 'message'} size={13} />}
+                      {r.channel ? (CHANNEL_LABELS[r.channel]?.label || r.channel) : ''}
+                      {r.recipientLabel ? ` · ${r.recipientLabel}` : ''}
+                      {r.reason ? ` (${r.reason})` : ''}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -652,14 +827,36 @@ export default function NotificationRulesPanel() {
 
   if (rulesQ.isLoading || eventsQ.isLoading) return <Skeleton rows={4} />;
 
+  const allRules = rulesQ.data?.rules || [];
+  const filteredRules = allRules.filter((rule) => {
+    if (search && !rule.name.toLowerCase().includes(search.toLowerCase())) return false;
+    if (filterChannel && !(rule.channels || []).includes(filterChannel)) return false;
+    if (filterEnabled === 'on' && !rule.enabled) return false;
+    if (filterEnabled === 'off' && rule.enabled) return false;
+    return true;
+  });
+
   return (
     <div style={{ display: 'grid', gap: 14 }}>
-      <div style={row}>
+      <div style={{ ...row, justifyContent: 'space-between', alignItems: 'center' }}>
         <button type="button" className="btn primary" onClick={() => openEdit(null)}><Icon name="plus" size={14} /> Νέος κανόνας</button>
+        <div style={{ ...row, alignItems: 'center' }}>
+          <input placeholder="Αναζήτηση με όνομα…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ minWidth: 200 }} />
+          <select value={filterChannel} onChange={(e) => setFilterChannel(e.target.value)}>
+            <option value="">Όλα τα κανάλια</option>
+            {Object.entries(CHANNEL_LABELS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
+          <select value={filterEnabled} onChange={(e) => setFilterEnabled(e.target.value)}>
+            <option value="">Όλες οι καταστάσεις</option>
+            <option value="on">Μόνο ενεργοί</option>
+            <option value="off">Μόνο ανενεργοί</option>
+          </select>
+        </div>
       </div>
-      {!rulesQ.data?.rules?.length && <div className="muted">Δεν υπάρχουν κανόνες ειδοποιήσεων ακόμα.</div>}
+      {!allRules.length && <div className="muted">Δεν υπάρχουν κανόνες ειδοποιήσεων ακόμα.</div>}
+      {!!allRules.length && !filteredRules.length && <div className="muted">Κανένας κανόνας δεν ταιριάζει με τα φίλτρα.</div>}
       <div style={{ display: 'grid', gap: 10 }}>
-        {(rulesQ.data?.rules || []).map((rule) => {
+        {filteredRules.map((rule) => {
           const ev = events.find((e) => e.key === rule.eventKey);
           const en = scheduleEntities.find((e) => e.key === rule.scheduleEntity);
           const triggerLabel = rule.triggerType === 'schedule'
@@ -685,6 +882,7 @@ export default function NotificationRulesPanel() {
                   Ενεργός
                 </label>
                 <button type="button" className="btn ghost icon" onClick={() => openEdit(rule)}><Icon name="edit" size={14} /></button>
+                <button type="button" className="btn ghost icon" title="Αντιγραφή" onClick={() => duplicateRule(rule)}><Icon name="copy" size={14} /></button>
                 <button type="button" className="btn ghost icon" onClick={() => { if (confirm(`Διαγραφή του κανόνα "${rule.name}";`)) deleteMut.mutate(rule.id); }}><Icon name="x" size={14} /></button>
               </div>
             </div>
