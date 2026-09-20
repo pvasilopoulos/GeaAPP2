@@ -15,6 +15,42 @@ export function channelMeta(id) {
   return MESSAGE_CHANNELS.find((c) => c.id === id) || MESSAGE_CHANNELS[0];
 }
 
+// Mirrors the strictest channel. The real capabilities come from
+// GET /settings/messaging/channels so a new channel needs no UI change; this is
+// only what the composer assumes until that response lands.
+export const FALLBACK_CAPS = {
+  richText: false,
+  subject: false,
+  maxLength: 1530,
+  encoding: 'gsm',
+};
+
+// GSM-7 default alphabet. Anything outside it — Greek lowercase included —
+// forces the whole SMS into UCS-2, which halves the characters per segment.
+const GSM7 = '@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !"#¤%&\'()*+,-./0123456789:;<=>?'
+  + '¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà';
+const GSM7_EXT = '^{}\\[~]|€';
+
+export function smsSegments(text) {
+  const s = String(text || '');
+  let unicode = false;
+  let units = 0;
+  for (const ch of s) {
+    if (GSM7_EXT.includes(ch)) { units += 2; continue; }
+    if (GSM7.includes(ch)) { units += 1; continue; }
+    unicode = true;
+    break;
+  }
+  if (unicode) {
+    // UCS-2 counts code units, so emoji outside the BMP cost two.
+    units = s.length;
+    const per = units <= 70 ? 70 : 67;
+    return { unicode: true, units, perSegment: per, segments: Math.max(1, Math.ceil(units / per)) };
+  }
+  const per = units <= 160 ? 160 : 153;
+  return { unicode: false, units, perSegment: per, segments: Math.max(1, Math.ceil(units / per)) };
+}
+
 export function recipientSuggestions(channelId, customer = {}, contacts = []) {
   const kind = channelMeta(channelId).recipientKind;
   const items = [];
