@@ -311,22 +311,26 @@ async function sendViberRoutee(cfg, payload) {
   let auth = await routeeAccessToken(cfg.application_id, cfg.application_secret);
   // Routee's HTTP response only confirms the request was queued, not that
   // Viber actually delivered it — collect the accepted body + raw response
-  // for every message so a "sent but nothing arrived" case (e.g. an
-  // unreachable media URL, or a sender not approved for rich media) can be
-  // diagnosed directly from the app (Δραστηριότητα) instead of server logs.
+  // for every message (attempting all of them even if one fails, so a
+  // preceding text message still reaches the customer) so a "sent but
+  // nothing arrived" case, or the exact reason a specific message (e.g. the
+  // file) was rejected, can be diagnosed directly from the app
+  // (Δραστηριότητα) instead of server logs.
   const diagnostics = [];
+  let failure = null;
   for (const msgBody of messages) {
+    const kind = msgBody.viberFile ? 'file' : (msgBody.imageURL ? 'image' : 'text');
     let { res, text: respText } = await sendOnce(auth.token, msgBody);
     if (res.status === 401 || res.status === 403) {
       routeeTokenCache.delete(auth.key);
       auth = await routeeAccessToken(cfg.application_id, cfg.application_secret, { force: true });
       ({ res, text: respText } = await sendOnce(auth.token, msgBody));
     }
-    const kind = msgBody.viberFile ? 'file' : (msgBody.imageURL ? 'image' : 'text');
-    diagnostics.push(`${kind}: HTTP ${res.status} ${respText.slice(0, 200)}`);
+    diagnostics.push(`${kind}: HTTP ${res.status} ${respText.slice(0, 250)}`);
     console.log(`[messaging][viber_routee] ${res.status}`, JSON.stringify(msgBody), '->', respText.slice(0, 300));
-    if (!res.ok) throw new Error(routeeErrorMessage(respText, res.status));
+    if (!res.ok && !failure) failure = `${kind}: ${routeeErrorMessage(respText, res.status)}`;
   }
+  if (failure) throw new Error(`${failure} (${diagnostics.join(' | ')})`);
   return diagnostics;
 }
 
