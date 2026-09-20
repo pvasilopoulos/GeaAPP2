@@ -106,11 +106,8 @@ async function fakeQuery(sql, params) {
     if (job) { job.status = status; job.last_error = lastError; }
     return { rows: {} };
   }
-  if (s.startsWith('SELECT u.id, r.key AS role_key')) {
-    return { rows: [{ id: 9, role_key: 'owner', permissions: [] }] };
-  }
-  if (s.startsWith('INSERT INTO notifications')) {
-    return { rows: { insertId: 1 } };
+  if (s.startsWith('SELECT * FROM notification_rules')) {
+    return { rows: [] };
   }
   throw new Error(`unexpected query: ${s}`);
 }

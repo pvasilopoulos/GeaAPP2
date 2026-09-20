@@ -1,52 +1,11 @@
 import assert from 'node:assert/strict';
 import {
   NOTIFICATION_TYPES, SOURCE_TYPES,
-  buildNotificationCopy, followUpRecipientIds, quoteExpiredRecipientIds,
-  userIdsWithPermission, notificationTarget, publicNotification,
-  createNotification, createNotificationsForUsers, sendBroadcast,
+  notificationTarget, publicNotification,
+  createNotification, sendBroadcast,
   sanitizeRichPush, cancelBroadcast, recordNotificationClick, sendScheduledBroadcasts,
   publicPushBroadcast, publicPushTemplate,
 } from './notifications.js';
-import { PERMISSIONS } from './permissions.js';
-
-const overdue = buildNotificationCopy(NOTIFICATION_TYPES.FOLLOW_UP_OVERDUE, { title: 'Κλήση', customerName: 'Άννα' });
-assert.equal(overdue.title, 'Εκπρόθεσμη υπενθύμιση');
-assert.equal(overdue.body, 'Κλήση · Άννα');
-
-const assigned = buildNotificationCopy(NOTIFICATION_TYPES.FOLLOW_UP_ASSIGNED, { title: 'Follow-up' });
-assert.equal(assigned.title, 'Νέα ανάθεση υπενθύμισης');
-assert.equal(assigned.body, 'Follow-up');
-
-const failed = buildNotificationCopy(NOTIFICATION_TYPES.CONNECTOR_RUN_FAILED, {
-  connectorName: 'Customers', errorMessage: 'ERP returned 500',
-});
-assert.equal(failed.title, 'Αποτυχία συγχρονισμού ERP');
-assert.match(failed.body, /Customers/);
-assert.match(failed.body, /500/);
-
-const expired = buildNotificationCopy(NOTIFICATION_TYPES.QUOTE_EXPIRED, {
-  series: '7001', quoteNumber: 12, customerName: 'GEA',
-});
-assert.equal(expired.title, 'Η προσφορά έληξε');
-assert.equal(expired.body, '7001-12 · GEA');
-
-assert.deepEqual(followUpRecipientIds({ assignedUserId: 7, viewerUserIds: [1, 2, 7], notifyAssigneeOnly: true }), [7]);
-assert.deepEqual(
-  followUpRecipientIds({ assignedUserId: 7, viewerUserIds: [1, 2, 7], notifyAssigneeOnly: false }).sort((a, b) => a - b),
-  [1, 2, 7],
-);
-assert.deepEqual(followUpRecipientIds({ assignedUserId: null, viewerUserIds: [3, 3, 4] }), [3, 4]);
-
-assert.deepEqual(quoteExpiredRecipientIds({ createdBy: 9, sellerUserId: 11, quoteViewerIds: [1, 2] }), [9, 11]);
-assert.deepEqual(quoteExpiredRecipientIds({ createdBy: null, sellerUserId: null, quoteViewerIds: [4, 5] }), [4, 5]);
-
-const users = [
-  { id: 1, roleKey: 'owner', permissions: [] },
-  { id: 2, roleKey: 'admin', permissions: [PERMISSIONS.SETTINGS_MANAGE] },
-  { id: 3, roleKey: 'agent', permissions: [PERMISSIONS.CUSTOMERS_READ] },
-];
-assert.deepEqual(userIdsWithPermission(users, PERMISSIONS.SETTINGS_MANAGE).sort((a, b) => a - b), [1, 2]);
-assert.ok(userIdsWithPermission(users, PERMISSIONS.CUSTOMERS_READ).includes(3));
 
 const mapped = notificationTarget({
   source_type: SOURCE_TYPES.FOLLOW_UP, source_id: 44, customer_id: 8,
@@ -94,12 +53,6 @@ assert.equal(dup.reason, 'duplicate');
 
 const invalid = await createNotification({ tenantId: 1, userId: 2, type: 'x' }, fakeQuery);
 assert.equal(invalid.inserted, false);
-
-const batch = await createNotificationsForUsers([2, 2, 3], {
-  tenantId: 1, type: NOTIFICATION_TYPES.FOLLOW_UP_DUE_SOON, title: 'soon',
-  sourceType: SOURCE_TYPES.FOLLOW_UP, sourceId: 11,
-}, fakeQuery);
-assert.equal(batch.inserted, 2);
 
 // --- sendBroadcast ---------------------------------------------------------
 const broadcastUsers = [

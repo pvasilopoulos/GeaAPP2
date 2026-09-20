@@ -634,7 +634,15 @@ branchId, spaceId, details })`: τύπος συμβάντος (π.χ. `follow_up
 `customer_id`, εμφανίζεται μόνο μέσα από routes που ήδη επιβάλλουν τον έλεγχο tenant/permission —
 δεν υπάρχει ξεχωριστό «global audit log» endpoint πέρα από τη δραστηριότητα ανά πελάτη/dashboard.
 
-### 11.4 Push notifications — πλήρης παραμετρικός composer (`PushBroadcastPanel.jsx`, `lib/notifications.js`, `lib/push.js`) — δικαίωμα `settings.manage`
+### 11.4 Ενοποιημένο Ρυθμίσεις → Ειδοποιήσεις tab (`NotificationsCenterPanel.jsx`)
+Οι τρεις παλιότερες ξεχωριστές καταχωρήσεις μενού («Αποστολή ειδοποιήσεων», «Κανόνες
+ειδοποιήσεων», «Ειδοποιήσεις») έχουν ενοποιηθεί σε **ένα** tab, **Ρυθμίσεις → Ειδοποιήσεις**, με
+εσωτερικό tab strip: «Κανόνες ειδοποιήσεων» και «Αποστολή ειδοποίησης» (μόνο για `settings.manage`)
+plus «Οι ειδοποιήσεις μου» (ορατό σε όλους — δεν έχει permission gate, ώστε κάθε χρήστης να μπορεί
+να ρυθμίσει τις δικές του push συσκευές/προτιμήσεις ακόμα κι αν δεν διαχειρίζεται ρυθμίσεις). Το
+wrapper δεν ξαναγράφει τα 3 υπάρχοντα panels — απλά τα εναλλάσσει.
+
+### 11.5 Push notifications — πλήρης παραμετρικός composer (`PushBroadcastPanel.jsx`, `lib/notifications.js`, `lib/push.js`) — δικαίωμα `settings.manage`
 Ο composer στο **Ρυθμίσεις → Ειδοποιήσεις (push)** στέλνει σε κάθε αποστολή ταυτόχρονα (α) μια
 in-app ειδοποίηση (κουδουνάκι) και (β) πραγματικό Web Push σε κάθε εγγεγραμμένη συσκευή κάθε
 παραλήπτη, με πλήρη έλεγχο πάνω σε ό,τι υποστηρίζει το Notifications API + Web Push protocol:
@@ -676,15 +684,15 @@ payload (image/actions/requireInteraction/silent/vibrate/tag/renotify) και σ
 urgency σε συγκεκριμένες τιμές, TTL 60–2 419 200 δευτ.) ώστε ο composer να μην αποτυγχάνει ποτέ
 σκληρά σε ένα λανθασμένο πεδίο.
 
-### 11.5 Κανόνες ειδοποιήσεων — event-driven rule engine (`NotificationRulesPanel.jsx`, `lib/notificationRules.js`, `lib/notificationEvents.js`) — δικαίωμα `settings.manage` + προσωπικές προτιμήσεις για κάθε χρήστη
-Ενώ το §11.4 είναι ένα **χειροκίνητο** εργαλείο (ο διαχειριστής πατά «στείλε»), αυτό το module
+### 11.6 Κανόνες ειδοποιήσεων — event-driven rule engine (`NotificationRulesPanel.jsx`, `lib/notificationRules.js`, `lib/notificationEvents.js`) — δικαίωμα `settings.manage` + προσωπικές προτιμήσεις για κάθε χρήστη
+Ενώ το §11.5 είναι ένα **χειροκίνητο** εργαλείο (ο διαχειριστής πατά «στείλε»), αυτό το module
 είναι ο **αυτόματος, μόνιμα ενεργός μηχανισμός**: «όταν συμβεί το γεγονός Χ και ισχύουν οι
-συνθήκες Υ, ειδοποίησε τους Ζ μέσω των καναλιών Α». Λειτουργεί **προσθετικά** πάνω από το ήδη
-υπάρχον pipeline ειδοποιήσεων (εκπρόθεσμα follow-ups, λήξεις προσφορών, αποτυχίες ERP sync) — δεν
-το αντικαθιστά, απλά προσθέτει προσαρμοσμένους κανόνες, νέα γεγονότα και επιπλέον κανάλια από
-πάνω.
+συνθήκες Υ, ειδοποίησε τους Ζ μέσω των καναλιών Α». Είναι η **μοναδική** πηγή αυτόματων
+ειδοποιήσεων της εφαρμογής — δεν υπάρχει πλέον κανένα παράλληλο, hardcoded κανάλι· αν δεν υπάρχει
+κανένας ενεργός κανόνας για ένα γεγονός, δεν στέλνεται τίποτα (βλ. §11.6.2 «Single source of
+truth»).
 
-**Ρυθμίσεις → Κανόνες ειδοποιήσεων** (admin, `settings.manage`):
+**Ρυθμίσεις → Ειδοποιήσεις → «Κανόνες ειδοποιήσεων»** (admin, `settings.manage`):
 - **Γεγονός (event)**: `follow_up_overdue`, `follow_up_due_soon`, `follow_up_assigned`,
   `connector_run_failed`, `quote_expired`, `quote_status_changed`, `quote_created`,
   `customer_assigned`, `booking_created` — ο πλήρης κατάλογος (με τα διαθέσιμα πεδία συνθηκών/
@@ -696,12 +704,12 @@ urgency σε συγκεκριμένες τιμές, TTL 60–2 419 200 δευτ.
   παραλήπτης** που προκύπτει από το ίδιο το γεγονός (`assigned_user`/`created_by`/`seller`) —
   π.χ. «ειδοποίησε τον ανατεθειμένο υπάλληλο», χωρίς να χρειάζεται να προεπιλεγεί συγκεκριμένος
   χρήστης στον κανόνα.
-- **Κανάλια**: `app` (in-app inbox + Web Push μαζί, όπως το §11.4), `email`, `sms`, `viber`,
+- **Κανάλια**: `app` (in-app inbox + Web Push μαζί, όπως το §11.5), `email`, `sms`, `viber`,
   `telegram` — τα τελευταία 4 μέσω του ήδη υπάρχοντος `lib/messaging.js` (§8), χρησιμοποιώντας τα
   στοιχεία επικοινωνίας του κάθε χρήστη (`users.email`/`users.phone`/`users.telegram_chat_id`).
 - **Περιεχόμενο**: τίτλος/κείμενο/URL με πλήρη υποστήριξη `{{μεταβλητών}}` (π.χ. `{{customerName}}`,
   `{{total}}`) που αντλούνται από το context του γεγονότος· επιπλέον όλα τα πλούσια πεδία media/
-  behavior/priority του §11.4 (εικόνα, εικονίδιο, κουμπιά, vibrate, urgency, TTL) μέσω του ίδιου
+  behavior/priority του §11.5 (εικόνα, εικονίδιο, κουμπιά, vibrate, urgency, TTL) μέσω του ίδιου
   `sanitizeRichPush()`.
 - **Throttle**: προαιρετικό ελάχιστο διάστημα (σε δευτ.) μεταξύ δύο διαδοχικών πυροδοτήσεων του
   ίδιου κανόνα **για τον ίδιο παραλήπτη** (`notification_rule_throttle` table) — χρήσιμο για
@@ -714,19 +722,26 @@ urgency σε συγκεκριμένες τιμές, TTL 60–2 419 200 δευτ.
 ίδιο σημείο ο χρήστης ορίζει το δικό του κινητό/Telegram chat id για SMS/Viber/Telegram
 (`PUT /api/notification-rules/my-contact`).
 
-**Σημεία σύνδεσης (hooks) στο backend** — προσθετικά, τυλιγμένα σε `.catch()` ώστε ένα σφάλμα στη
+**Σημεία σύνδεσης (hooks) στο backend** — το **μοναδικό** μονοπάτι ειδοποίησης (δεν υπάρχει καμία
+παράλληλη hardcoded δημιουργία ειδοποίησης πουθενά), τυλιγμένα σε `.catch()` ώστε ένα σφάλμα στη
 μηχανή κανόνων να μην μπλοκάρει ποτέ την κύρια ροή:
 - Route handlers (συγχρονισμένα, τη στιγμή της ενέργειας): `follow_up_assigned`
   (`routes/followUps.js`), `quote_created`/`quote_status_changed` (`routes/quotes.js`),
   `customer_assigned` (`routes/customers.js`), `booking_created` (`routes/bookings.js`).
 - Sweeps του scheduler (κάθε 60″, μέσα στο `sweepNotifications()`): `follow_up_overdue`/
-  `follow_up_due_soon`, `quote_expired`, `connector_run_failed`.
+  `follow_up_due_soon`, `quote_expired` (η ίδια σάρωση μεταβαίνει πλέον η ίδια την προσφορά σε
+  `status = 'expired'` τη στιγμή που την εντοπίζει, ώστε να μην ξανά-πυροδοτεί το ίδιο γεγονός σε
+  κάθε tick).
+- Πραγματικός χρόνος αποτυχίας συγχρονισμού ERP: `connector_run_failed` από `lib/sync.js` (pull
+  ERP→app) **και** από `lib/pushSync.js` (push app→ERP, όταν μια εγγραφή στο outbox εξαντλήσει τις
+  επαναλήψεις της) — καμία περιοδική επανα-σάρωση αποτυχημένων runs δεν υπάρχει πλέον, μόνο η
+  στιγμιαία ειδοποίηση όταν συμβαίνει η αποτυχία.
 
 `evaluateNotificationRules(eventKey, context, queryFn)` (στο `lib/notificationRules.js`) είναι το
 ενιαίο σημείο εισόδου: φορτώνει τους ενεργούς κανόνες του γεγονότος, ελέγχει συνθήκες, επιλύει
 παραλήπτες, εφαρμόζει throttle + προσωπικές προτιμήσεις, και παραδίδει σε κάθε επιλεγμένο κανάλι.
 
-#### 11.5.1 v2: Προγραμματισμένες υπενθυμίσεις, ομάδες συνθηκών, επιπλέον ενέργειες, κλιμάκωση, digest
+#### 11.6.1 v2: Προγραμματισμένες υπενθυμίσεις, ομάδες συνθηκών, επιπλέον ενέργειες, κλιμάκωση, digest
 
 Πάνω στο event-driven μηχανισμό παραπάνω προστέθηκε ένας δεύτερος τύπος κανόνα — **σε
 προγραμματισμένη στιγμή** — και μια σειρά προηγμένων επιλογών, όλα **προσθετικά**: οι
