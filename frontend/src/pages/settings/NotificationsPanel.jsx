@@ -21,6 +21,8 @@ function MyNotificationPreferences() {
     if (!prefsQ.data) return;
     setContact((c) => ({
       ...c,
+      phone: prefsQ.data.phone || '',
+      telegramChatId: prefsQ.data.telegramChatId || '',
       quietHoursStart: prefsQ.data.quietHoursStart ? String(prefsQ.data.quietHoursStart).slice(0, 5) : '',
       quietHoursEnd: prefsQ.data.quietHoursEnd ? String(prefsQ.data.quietHoursEnd).slice(0, 5) : '',
     }));
@@ -34,7 +36,11 @@ function MyNotificationPreferences() {
   });
   const contactMut = useMutation({
     mutationFn: (payload) => api.saveMyNotificationContact(payload),
-    onSuccess: () => { setSavedMsg('Αποθηκεύτηκε'); setTimeout(() => setSavedMsg(''), 2000); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['my-notification-preferences'] });
+      setSavedMsg('Αποθηκεύτηκε'); setTimeout(() => setSavedMsg(''), 2000);
+    },
+    onError: (e) => { setSavedMsg(''); window.alert(e.message || 'Η αποθήκευση απέτυχε'); },
   });
 
   function toggle(eventKey, channel, current) {

@@ -371,11 +371,13 @@ notificationRulesRouter.get('/my-preferences', async (req, res, next) => {
       'SELECT event_key, channel, enabled FROM notification_preferences WHERE tenant_id = ? AND user_id = ?',
       [req.user.tenantId, req.user.id],
     );
-    const { rows: userRows } = await query('SELECT quiet_hours_start, quiet_hours_end FROM users WHERE id = ? AND tenant_id = ?', [req.user.id, req.user.tenantId]);
+    const { rows: userRows } = await query('SELECT phone, telegram_chat_id, quiet_hours_start, quiet_hours_end FROM users WHERE id = ? AND tenant_id = ?', [req.user.id, req.user.tenantId]);
     res.json({
       events: eventCatalogList().map(({ key, label, description }) => ({ key, label, description })),
       channels: ALL_CHANNELS,
       overrides: rows.map((r) => ({ eventKey: r.event_key, channel: r.channel, enabled: !!r.enabled })),
+      phone: userRows[0]?.phone || '',
+      telegramChatId: userRows[0]?.telegram_chat_id || '',
       quietHoursStart: userRows[0]?.quiet_hours_start || null,
       quietHoursEnd: userRows[0]?.quiet_hours_end || null,
     });
