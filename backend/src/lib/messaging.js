@@ -171,6 +171,18 @@ async function postJson(url, body, headers = {}, timeoutMs = 8000) {
   }
 }
 
+// The Viber PA REST API answers with HTTP 200 even when the message itself
+// was rejected — the real outcome is the body's { status, status_message },
+// where status 0 means delivered. Without this check a bad media URL or
+// missing field would look like a success.
+async function postViber(body, token) {
+  const text = await postJson('https://chatapi.viber.com/pa/send_message', body, { 'X-Viber-Auth-Token': token });
+  let json = null;
+  try { json = JSON.parse(text); } catch { /* non-JSON response, fall through */ }
+  if (json && json.status) throw new Error(json.status_message ? `Viber: ${json.status_message}` : `Viber error ${json.status}`);
+  return json;
+}
+
 function toE164(raw, defaultCc = '30') {
   let s = String(raw || '').trim().replace(/[\s().-]/g, '');
   if (!s) return s;
@@ -383,7 +395,7 @@ export async function deliverMessage(channel, cfg, payload) {
         }],
       } : undefined;
       const att = firstAttachment(payload.attachments);
-      const send = (body) => postJson('https://chatapi.viber.com/pa/send_message', body, { 'X-Viber-Auth-Token': c.auth_token });
+      const send = (body) => postViber(body, c.auth_token);
       if (att) {
         const mediaUrl = absoluteUrl(att.url, payload.publicBaseUrl);
         const isImage = String(att.mime || '').startsWith('image/');
