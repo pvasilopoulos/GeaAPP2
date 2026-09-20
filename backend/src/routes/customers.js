@@ -8,7 +8,7 @@ import { normalizeFields } from '../lib/normalize.js';
 import { loadEntityCustomFields, saveEntityCustomFields } from '../lib/customFields.js';
 import { logActivity } from '../lib/activity.js';
 import { parseJson } from '../lib/masterData.js';
-import { CHANNELS, CHANNEL_CAPS, CHANNEL_META, deliverMessage, mergeMessaging } from '../lib/messaging.js';
+import { CHANNELS, CHANNEL_CAPS, CHANNEL_META, absoluteUrl, deliverMessage, mergeMessaging } from '../lib/messaging.js';
 import { renderBody } from '../lib/richText.js';
 import { config } from '../config.js';
 import { mergeTenantSettings } from '../lib/tenantSettings.js';
@@ -532,6 +532,20 @@ customersRouter.post('/:id/messages', authorize(PERMISSIONS.CUSTOMERS_WRITE), as
     // PUBLIC_URL should be set in production; otherwise fall back to this
     // request's own origin (fine for a single-domain deployment).
     const publicBaseUrl = config.publicUrl || `${req.protocol}://${req.get('host')}`;
+    // Telegram/Viber/Viber Routee fetch the media themselves — if the link
+    // isn't https:// they silently drop the attachment (Telegram/Routee
+    // never report it, Viber may only surface it later via webhook), which
+    // looks like "it sent but nothing arrived". Fail loudly instead so the
+    // real cause (missing PUBLIC_URL / no https reverse proxy) is obvious.
+    if (['telegram', 'viber', 'viber_routee'].includes(channel) && (attachments.length || button)) {
+      const links = [...attachments.map((a) => a.url), ...(button ? [button.url] : [])];
+      const bad = links.some((u) => !/^https:\/\//i.test(absoluteUrl(u, publicBaseUrl)));
+      if (bad) {
+        return res.status(400).json({
+          error: `Ο σύνδεσμος του συνημμένου/κουμπιού πρέπει να είναι https:// για να τον «δει» το ${CHANNEL_META[channel].label}. Ορίστε PUBLIC_URL=https://... στο backend .env.`,
+        });
+      }
+    }
     const delivery = await deliverMessage(channel, cfg, { to, subject, body, bodyFormat, attachments, button, publicBaseUrl });
     const channelLabel = CHANNEL_META[channel].label;
     const subjectLine = subject || `${channelLabel} προς ${to}`;

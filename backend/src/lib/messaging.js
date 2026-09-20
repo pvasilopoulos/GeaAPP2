@@ -197,7 +197,7 @@ function toE164(raw, defaultCc = '30') {
 // composer only ever knows the app's own relative /uploads/... path, so this
 // turns it absolute using the configured public origin (falling back to
 // whatever origin the request itself came in on).
-function absoluteUrl(url, publicBaseUrl) {
+export function absoluteUrl(url, publicBaseUrl) {
   const u = String(url || '').trim();
   if (!u) return '';
   if (/^https?:\/\//i.test(u)) return u;
@@ -316,6 +316,12 @@ async function sendViberRoutee(cfg, payload) {
       auth = await routeeAccessToken(cfg.application_id, cfg.application_secret, { force: true });
       ({ res, text: respText } = await sendOnce(auth.token, msgBody));
     }
+    // Routee's HTTP response only confirms the request was queued, not that
+    // Viber actually delivered it — log the accepted body + response so a
+    // "sent but nothing arrived" case (e.g. an unreachable media URL, or a
+    // sender not approved for rich media) can be diagnosed from the server
+    // logs instead of looking like a silent success.
+    console.log(`[messaging][viber_routee] ${res.status}`, JSON.stringify(msgBody), '->', respText.slice(0, 300));
     if (!res.ok) throw new Error(routeeErrorMessage(respText, res.status));
   }
 }
