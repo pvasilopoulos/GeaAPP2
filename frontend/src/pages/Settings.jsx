@@ -24,7 +24,7 @@ const CATS = [
   { id: 'app', label: 'Εφαρμογή', hint: 'Προεπιλογές πελατών και εμφάνισης', icon: 'layers', perms: [PERMS.SETTINGS_MANAGE] },
   { id: 'customers', label: 'Customers', hint: 'Tabs, εμφάνιση και προεπιλογές πελατών', icon: 'users', perms: [PERMS.SETTINGS_MANAGE] },
   { id: 'quotes', label: 'Προσφορές / ERP API', hint: 'Endpoint και JSON για τις γραμμές προσφορών', icon: 'file', perms: [PERMS.SETTINGS_MANAGE] },
-  { id: 'messaging', label: 'Μηνύματα', hint: 'Email, Viber, SMS, Telegram', icon: 'message', perms: [PERMS.SETTINGS_MANAGE] },
+  { id: 'messaging', label: 'Μηνύματα', hint: 'Email, Viber, Viber Routee, SMS, Telegram', icon: 'message', perms: [PERMS.SETTINGS_MANAGE] },
   { id: 'reminders', label: 'Υπενθυμίσεις', hint: 'Προειδοποιήσεις, εργάσιμο ωράριο, snooze', icon: 'bell', perms: [PERMS.SETTINGS_MANAGE] },
   { id: 'users', label: 'Χρήστες & Ρόλοι', hint: 'Μέλη οργανισμού και δικαιώματα', icon: 'users', perms: [PERMS.USERS_MANAGE, PERMS.ROLES_MANAGE] },
   { id: 'fields', label: 'Custom Fields', hint: 'Δυναμικά πεδία πελατών / χώρων', icon: 'tag', perms: [PERMS.SETTINGS_MANAGE] },
