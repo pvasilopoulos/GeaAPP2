@@ -105,12 +105,27 @@ function Item({ kind, r }) {
   }
   if (kind === 'communications') {
     const delivery = DELIVERY_LABELS[r.delivery_status];
+    const meta = r.meta || {};
     return (
       <div className="hist-item">
         <Line icon="message" title={r.subject || CHANNEL_LABELS[r.channel] || r.channel}
           sub={[CHANNEL_LABELS[r.channel] || r.channel, r.recipient, r.direction === 'inbound' ? 'Εισερχόμενο' : 'Εξερχόμενο', delivery, formatDateTime(r.created_at)].filter(Boolean).join(' · ')}
           right={r.delivery_status ? <span className={`badge ${deliveryClass(r.delivery_status)}`}>{delivery}</span> : null} />
         {r.body && <div className="hist-msg">{r.body}</div>}
+        {(meta.attachments?.length > 0 || meta.button) && (
+          <div className="msg-attach-list" style={{ marginTop: 6 }}>
+            {(meta.attachments || []).map((a, i) => (
+              <a key={i} className="msg-attach-chip" href={a.url} target="_blank" rel="noreferrer">
+                <Icon name="paperclip" size={12} /><span>{a.name}</span>
+              </a>
+            ))}
+            {meta.button && (
+              <a className="msg-attach-chip" href={meta.button.url} target="_blank" rel="noreferrer">
+                <Icon name="link" size={12} /><span>{meta.button.label}</span>
+              </a>
+            )}
+          </div>
+        )}
       </div>
     );
   }
@@ -174,6 +189,18 @@ function ActivityDetails({ details }) {
             {[msg.channel_label || CHANNEL_LABELS[msg.channel], msg.to, msg.subject, msg.delivery_detail].filter(Boolean).join(' · ')}
           </div>
           {msg.body}
+          {(msg.attachments?.length > 0 || msg.button) && (
+            <div className="msg-attach-list" style={{ marginTop: 6 }}>
+              {(msg.attachments || []).map((name, i) => (
+                <span key={i} className="msg-attach-chip"><Icon name="paperclip" size={12} /><span>{name}</span></span>
+              ))}
+              {msg.button && (
+                <a className="msg-attach-chip" href={msg.button.url} target="_blank" rel="noreferrer">
+                  <Icon name="link" size={12} /><span>{msg.button.label}</span>
+                </a>
+              )}
+            </div>
+          )}
         </div>
       )}
     </>

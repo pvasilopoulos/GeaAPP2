@@ -24,6 +24,9 @@ const MIME_EXT = {
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
   'application/vnd.ms-excel': 'xls',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'audio/mpeg': 'mp3',
+  'video/mp4': 'mp4',
+  'application/zip': 'zip',
 };
 const MAX_BYTES = 5 * 1024 * 1024;
 

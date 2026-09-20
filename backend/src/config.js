@@ -13,6 +13,11 @@ export const config = {
     charset: 'utf8mb4',
   },
   port: Number(process.env.PORT || 4000),
+  // Public origin used to build absolute links (e.g. message attachments a
+  // messaging provider must fetch over HTTPS). Falls back to the incoming
+  // request's own origin when unset — set this in production behind a proxy
+  // so links use the real public hostname instead of an internal one.
+  publicUrl: (process.env.PUBLIC_URL || '').replace(/\/+$/, ''),
   seedCustomers: Number(process.env.SEED_CUSTOMERS || 350000),
   nodeEnv: process.env.NODE_ENV || 'development',
   jwtSecret: process.env.JWT_SECRET || 'dev-insecure-secret-change-me',

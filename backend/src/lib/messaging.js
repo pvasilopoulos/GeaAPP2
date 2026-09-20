@@ -11,14 +11,18 @@ export const CHANNEL_META = {
 };
 
 // What the composer may offer per channel, driven by what each provider's API
-// actually accepts — richText/subject/maxLength/encoding are read by the
-// frontend to show/hide fields instead of hardcoding a channel list there.
+// actually accepts — richText/subject/maxLength/encoding/attachments/button
+// are read by the frontend to show/hide fields instead of hardcoding a
+// channel list there.
+// - attachments: provider accepts a file/image alongside the text (email can
+//   carry several; the chat channels carry exactly one per message).
+// - button: provider can render a single tappable call-to-action link.
 export const CHANNEL_CAPS = {
-  email: { richText: true, subject: true, maxLength: null, encoding: 'unicode' },
-  telegram: { richText: true, subject: false, maxLength: 4096, encoding: 'unicode' },
-  viber: { richText: false, subject: false, maxLength: 7000, encoding: 'unicode' },
-  viber_routee: { richText: false, subject: false, maxLength: 1000, encoding: 'unicode' },
-  sms: { richText: false, subject: false, maxLength: 1530, encoding: 'gsm' },
+  email: { richText: true, subject: true, maxLength: null, encoding: 'unicode', attachments: true, attachmentsMax: 8, button: true },
+  telegram: { richText: true, subject: false, maxLength: 4096, encoding: 'unicode', attachments: true, attachmentsMax: 1, button: true },
+  viber: { richText: false, subject: false, maxLength: 7000, encoding: 'unicode', attachments: true, attachmentsMax: 1, button: true },
+  viber_routee: { richText: false, subject: false, maxLength: 1000, encoding: 'unicode', attachments: true, attachmentsMax: 1, button: true },
+  sms: { richText: false, subject: false, maxLength: 1530, encoding: 'gsm', attachments: false, attachmentsMax: 0, button: false },
 };
 
 const SECRET_FIELDS = {
@@ -177,6 +181,22 @@ function toE164(raw, defaultCc = '30') {
   return `+${defaultCc}${s}`;
 }
 
+// Chat-provider APIs need a fetchable HTTPS URL for attachments/buttons; the
+// composer only ever knows the app's own relative /uploads/... path, so this
+// turns it absolute using the configured public origin (falling back to
+// whatever origin the request itself came in on).
+function absoluteUrl(url, publicBaseUrl) {
+  const u = String(url || '').trim();
+  if (!u) return '';
+  if (/^https?:\/\//i.test(u)) return u;
+  if (!publicBaseUrl) return u;
+  return `${publicBaseUrl.replace(/\/+$/, '')}${u.startsWith('/') ? '' : '/'}${u}`;
+}
+
+function firstAttachment(attachments) {
+  return Array.isArray(attachments) && attachments.length ? attachments[0] : null;
+}
+
 function routeeErrorMessage(text, status) {
   try {
     const j = JSON.parse(text);
@@ -224,10 +244,20 @@ async function routeeAccessToken(applicationId, applicationSecret, { force } = {
 
 async function sendViberRoutee(cfg, payload) {
   const to = toE164(payload.to);
+  const msgBody = { text: String(payload.body || '').slice(0, 1000) };
+  const att = firstAttachment(payload.attachments);
+  if (att) {
+    const url = absoluteUrl(att.url, payload.publicBaseUrl);
+    if (String(att.mime || '').startsWith('image/')) msgBody.imageURL = url;
+    else msgBody.viberFile = { fileName: att.name || 'file', fileType: att.mime || 'application/octet-stream', fileURL: url };
+  }
+  if (payload.button?.label && payload.button?.url) {
+    msgBody.action = { caption: payload.button.label.slice(0, 30), targetUrl: absoluteUrl(payload.button.url, payload.publicBaseUrl) };
+  }
   const body = {
     senderInfoTrackingId: String(cfg.sender_info_tracking_id || '').trim(),
     to,
-    body: { text: String(payload.body || '').slice(0, 1000) },
+    body: msgBody,
   };
   const sendOnce = async (token) => {
     const ac = new AbortController();
@@ -259,7 +289,15 @@ async function sendViberRoutee(cfg, payload) {
   if (!res.ok) throw new Error(routeeErrorMessage(text, res.status));
 }
 
-async function sendEmail(cfg, { to, subject, body, bodyFormat }) {
+// A styled call-to-action the plain-text part renders as "label: url" (since
+// text has no clickable buttons) and the HTML part renders as a real button.
+function buttonHtml(button) {
+  if (!button?.label || !button?.url) return '';
+  const label = String(button.label).replace(/[<>&]/g, (m) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[m]));
+  return `<div style="margin-top:16px"><a href="${button.url}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">${label}</a></div>`;
+}
+
+async function sendEmail(cfg, { to, subject, body, bodyFormat, attachments, button, publicBaseUrl }) {
   const nodemailer = (await import('nodemailer')).default;
   const transporter = nodemailer.createTransport({
     host: cfg.smtp_host,
@@ -270,12 +308,23 @@ async function sendEmail(cfg, { to, subject, body, bodyFormat }) {
     greetingTimeout: 8000,
     socketTimeout: 8000,
   });
+  let text = renderBody(body, bodyFormat, 'text');
+  let html = renderBody(body, bodyFormat, 'html');
+  if (button?.label && button?.url) {
+    text += `\n\n${button.label}: ${button.url}`;
+    html += buttonHtml(button);
+  }
   await transporter.sendMail({
     from: cfg.from_name ? `"${cfg.from_name.replace(/"/g, '')}" <${cfg.from_email}>` : cfg.from_email,
     to,
     subject: subject || '(χωρίς θέμα)',
-    text: renderBody(body, bodyFormat, 'text'),
-    html: renderBody(body, bodyFormat, 'html'),
+    text,
+    html,
+    attachments: (attachments || []).slice(0, CHANNEL_CAPS.email.attachmentsMax).map((a) => ({
+      filename: a.name || 'attachment',
+      path: absoluteUrl(a.url, publicBaseUrl),
+      contentType: a.mime || undefined,
+    })),
   });
 }
 
@@ -291,20 +340,61 @@ export async function deliverMessage(channel, cfg, payload) {
     }
     if (channel === 'telegram') {
       const chatId = String(payload.to || '').replace(/^@/, '').trim();
-      await postJson(`https://api.telegram.org/bot${c.bot_token}/sendMessage`, {
-        chat_id: chatId,
-        text: renderBody(payload.body, payload.bodyFormat, 'telegram'),
-        parse_mode: 'HTML',
-      });
+      const text = renderBody(payload.body, payload.bodyFormat, 'telegram');
+      const replyMarkup = payload.button?.label && payload.button?.url
+        ? { inline_keyboard: [[{ text: String(payload.button.label).slice(0, 60), url: payload.button.url }]] }
+        : undefined;
+      const att = firstAttachment(payload.attachments);
+      const base = `https://api.telegram.org/bot${c.bot_token}`;
+      if (att) {
+        const isImage = String(att.mime || '').startsWith('image/');
+        const method = isImage ? 'sendPhoto' : 'sendDocument';
+        const field = isImage ? 'photo' : 'document';
+        const mediaUrl = absoluteUrl(att.url, payload.publicBaseUrl);
+        if (text && text.length > 1024) {
+          // Caption is capped at 1024 chars — send the full text first, then
+          // the media (still carrying the button) as a follow-up message.
+          await postJson(`${base}/sendMessage`, { chat_id: chatId, text, parse_mode: 'HTML' });
+          await postJson(`${base}/${method}`, { chat_id: chatId, [field]: mediaUrl, reply_markup: replyMarkup });
+        } else {
+          await postJson(`${base}/${method}`, {
+            chat_id: chatId, [field]: mediaUrl,
+            caption: text || undefined, parse_mode: text ? 'HTML' : undefined,
+            reply_markup: replyMarkup,
+          });
+        }
+      } else {
+        await postJson(`${base}/sendMessage`, { chat_id: chatId, text, parse_mode: 'HTML', reply_markup: replyMarkup });
+      }
       return { status: 'sent' };
     }
     if (channel === 'viber') {
-      await postJson('https://chatapi.viber.com/pa/send_message', {
-        receiver: String(payload.to || '').replace(/\s+/g, ''),
-        type: 'text',
-        text: renderBody(payload.body, payload.bodyFormat, 'text'),
-        sender: { name: c.sender_name || 'SpaceHub' },
-      }, { 'X-Viber-Auth-Token': c.auth_token });
+      const receiver = String(payload.to || '').replace(/\s+/g, '');
+      const sender = { name: c.sender_name || 'SpaceHub' };
+      const text = renderBody(payload.body, payload.bodyFormat, 'text');
+      // Viber's "keyboard" object rides on any message type and renders as a
+      // single tappable button under the bubble.
+      const keyboard = payload.button?.label && payload.button?.url ? {
+        Type: 'keyboard', DefaultHeight: false, BgColor: '#FFFFFF',
+        Buttons: [{
+          Columns: 6, Rows: 1, BgColor: '#2db9b9', ActionType: 'open-url',
+          ActionBody: payload.button.url, Text: String(payload.button.label).slice(0, 30),
+          TextVAlign: 'middle', TextHAlign: 'center', TextSize: 'regular',
+        }],
+      } : undefined;
+      const att = firstAttachment(payload.attachments);
+      const send = (body) => postJson('https://chatapi.viber.com/pa/send_message', body, { 'X-Viber-Auth-Token': c.auth_token });
+      if (att) {
+        const mediaUrl = absoluteUrl(att.url, payload.publicBaseUrl);
+        const isImage = String(att.mime || '').startsWith('image/');
+        // "file" messages have no caption field, so text goes out separately.
+        if (text && !isImage) await send({ receiver, type: 'text', text, sender });
+        await send(isImage
+          ? { receiver, type: 'picture', media: mediaUrl, text: text || undefined, sender, keyboard }
+          : { receiver, type: 'file', media: mediaUrl, file_name: att.name || 'file', size: att.size || 0, sender, keyboard });
+      } else {
+        await send({ receiver, type: 'text', text, sender, keyboard });
+      }
       return { status: 'sent' };
     }
     if (channel === 'viber_routee') {

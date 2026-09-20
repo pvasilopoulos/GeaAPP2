@@ -1,5 +1,5 @@
 import {
-  applyMessagingPatch, channelStatuses, isConfigured, mergeMessaging, publicMessaging,
+  applyMessagingPatch, channelStatuses, CHANNEL_CAPS, isConfigured, mergeMessaging, publicMessaging,
 } from './messaging.js';
 
 function assert(cond, msg) {
@@ -46,5 +46,15 @@ const statuses = channelStatuses(kept);
 assert(statuses.find((c) => c.id === 'email').enabled === false, 'status enabled');
 assert(statuses.find((c) => c.id === 'telegram').configured === true, 'status configured');
 assert(statuses[0].id === 'email' && statuses[1].id === 'viber' && statuses[2].id === 'viber_routee', 'channel order');
+
+for (const id of ['email', 'telegram', 'viber', 'viber_routee']) {
+  assert(CHANNEL_CAPS[id].attachments === true, `${id} accepts attachments`);
+  assert(CHANNEL_CAPS[id].button === true, `${id} accepts a button`);
+  assert(CHANNEL_CAPS[id].attachmentsMax >= 1, `${id} has a positive attachments limit`);
+}
+assert(CHANNEL_CAPS.sms.attachments === false, 'sms has no attachments');
+assert(CHANNEL_CAPS.sms.button === false, 'sms has no button');
+assert(CHANNEL_CAPS.email.attachmentsMax > 1, 'email allows several attachments');
+assert(CHANNEL_CAPS.viber.attachmentsMax === 1, 'viber allows a single attachment per message');
 
 console.log('messaging: ok');
