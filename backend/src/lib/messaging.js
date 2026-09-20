@@ -259,13 +259,35 @@ async function routeeAccessToken(applicationId, applicationSecret, { force } = {
 // no caption field — bundling `text` with `viberFile` in one request is
 // rejected by Viber as invalid data, so a non-image attachment with body
 // text is split into a text message followed by the file message.
+// Viber's file message validates `fileType` against a fixed whitelist of
+// bare extensions (pdf, doc, docx, xlsx, ...) — a full MIME string like
+// "application/pdf" is rejected as an "unsupported file type", even though
+// PDF itself is supported. Derive the extension from the file name (falling
+// back to a MIME lookup) rather than passing the MIME type through as-is.
+const MIME_TO_FILE_EXT = {
+  'application/pdf': 'pdf',
+  'application/msword': 'doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.ms-excel': 'xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'text/plain': 'txt',
+  'application/zip': 'zip',
+  'application/rtf': 'rtf',
+};
+
+function viberFileType(attachment) {
+  const nameExt = String(attachment?.name || '').split('.').pop()?.toLowerCase();
+  if (nameExt && nameExt.length <= 6 && /^[a-z0-9]+$/.test(nameExt)) return nameExt;
+  return MIME_TO_FILE_EXT[String(attachment?.mime || '').toLowerCase()] || 'pdf';
+}
+
 export function buildViberRouteeMessages({ text, attachment, action }) {
   const isImage = attachment && String(attachment.mime || '').startsWith('image/');
   const messages = [];
   if (attachment && !isImage) {
     if (text) messages.push({ text });
     messages.push({
-      viberFile: { fileName: attachment.name || 'file', fileType: attachment.mime || 'application/octet-stream', fileURL: attachment.url },
+      viberFile: { fileName: attachment.name || 'file', fileType: viberFileType(attachment), fileURL: attachment.url },
       action,
     });
   } else {

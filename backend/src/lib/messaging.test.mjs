@@ -70,6 +70,7 @@ assert(fileMsgs[0].text === 'Hello' && !fileMsgs[0].viberFile, 'first message is
 assert(fileMsgs[1].viberFile?.fileURL === 'https://x/doc.pdf', 'second message carries the file');
 assert(!fileMsgs[1].text, 'file message has no caption/text field');
 assert(fileMsgs[1].action?.targetUrl === 'https://x', 'file message carries the button');
+assert(fileMsgs[1].viberFile?.fileType === 'pdf', 'fileType is a bare extension, not a MIME string (Viber rejects "application/pdf" as unsupported)');
 
 const imageMsgs = buildViberRouteeMessages({
   text: 'Hello',
