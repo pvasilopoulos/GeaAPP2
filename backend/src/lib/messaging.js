@@ -254,24 +254,41 @@ async function routeeAccessToken(applicationId, applicationSecret, { force } = {
   }
 }
 
+// Builds the ordered list of Routee Viber message bodies to send for one
+// outbound message. Exported for unit testing since a viberFile message has
+// no caption field — bundling `text` with `viberFile` in one request is
+// rejected by Viber as invalid data, so a non-image attachment with body
+// text is split into a text message followed by the file message.
+export function buildViberRouteeMessages({ text, attachment, action }) {
+  const isImage = attachment && String(attachment.mime || '').startsWith('image/');
+  const messages = [];
+  if (attachment && !isImage) {
+    if (text) messages.push({ text });
+    messages.push({
+      viberFile: { fileName: attachment.name || 'file', fileType: attachment.mime || 'application/octet-stream', fileURL: attachment.url },
+      action,
+    });
+  } else {
+    const msgBody = { text };
+    if (attachment) msgBody.imageURL = attachment.url;
+    if (action) msgBody.action = action;
+    messages.push(msgBody);
+  }
+  return messages;
+}
+
 async function sendViberRoutee(cfg, payload) {
   const to = toE164(payload.to);
-  const msgBody = { text: String(payload.body || '').slice(0, 1000) };
+  const text = String(payload.body || '').slice(0, 1000);
   const att = firstAttachment(payload.attachments);
-  if (att) {
-    const url = absoluteUrl(att.url, payload.publicBaseUrl);
-    if (String(att.mime || '').startsWith('image/')) msgBody.imageURL = url;
-    else msgBody.viberFile = { fileName: att.name || 'file', fileType: att.mime || 'application/octet-stream', fileURL: url };
-  }
-  if (payload.button?.label && payload.button?.url) {
-    msgBody.action = { caption: payload.button.label.slice(0, 30), targetUrl: absoluteUrl(payload.button.url, payload.publicBaseUrl) };
-  }
-  const body = {
-    senderInfoTrackingId: String(cfg.sender_info_tracking_id || '').trim(),
-    to,
-    body: msgBody,
-  };
-  const sendOnce = async (token) => {
+  const action = payload.button?.label && payload.button?.url
+    ? { caption: payload.button.label.slice(0, 30), targetUrl: absoluteUrl(payload.button.url, payload.publicBaseUrl) }
+    : undefined;
+  const attachment = att ? { ...att, url: absoluteUrl(att.url, payload.publicBaseUrl) } : null;
+  const messages = buildViberRouteeMessages({ text, attachment, action });
+
+  const sendOnce = async (token, msgBody) => {
+    const body = { senderInfoTrackingId: String(cfg.sender_info_tracking_id || '').trim(), to, body: msgBody };
     const ac = new AbortController();
     const t = setTimeout(() => ac.abort(), 15000);
     try {
@@ -284,21 +301,23 @@ async function sendViberRoutee(cfg, payload) {
         body: JSON.stringify(body),
         signal: ac.signal,
       });
-      const text = await res.text();
-      return { res, text };
+      const text2 = await res.text();
+      return { res, text: text2 };
     } finally {
       clearTimeout(t);
     }
   };
 
   let auth = await routeeAccessToken(cfg.application_id, cfg.application_secret);
-  let { res, text } = await sendOnce(auth.token);
-  if (res.status === 401 || res.status === 403) {
-    routeeTokenCache.delete(auth.key);
-    auth = await routeeAccessToken(cfg.application_id, cfg.application_secret, { force: true });
-    ({ res, text } = await sendOnce(auth.token));
+  for (const msgBody of messages) {
+    let { res, text: respText } = await sendOnce(auth.token, msgBody);
+    if (res.status === 401 || res.status === 403) {
+      routeeTokenCache.delete(auth.key);
+      auth = await routeeAccessToken(cfg.application_id, cfg.application_secret, { force: true });
+      ({ res, text: respText } = await sendOnce(auth.token, msgBody));
+    }
+    if (!res.ok) throw new Error(routeeErrorMessage(respText, res.status));
   }
-  if (!res.ok) throw new Error(routeeErrorMessage(text, res.status));
 }
 
 // A styled call-to-action the plain-text part renders as "label: url" (since
