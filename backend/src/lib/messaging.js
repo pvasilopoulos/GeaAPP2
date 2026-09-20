@@ -342,13 +342,14 @@ async function sendViberRoutee(cfg, payload) {
   let failure = null;
   for (const msgBody of messages) {
     const kind = msgBody.viberFile ? 'file' : (msgBody.imageURL ? 'image' : 'text');
+    const mediaUrl = msgBody.viberFile?.fileURL || msgBody.imageURL || '';
     let { res, text: respText } = await sendOnce(auth.token, msgBody);
     if (res.status === 401 || res.status === 403) {
       routeeTokenCache.delete(auth.key);
       auth = await routeeAccessToken(cfg.application_id, cfg.application_secret, { force: true });
       ({ res, text: respText } = await sendOnce(auth.token, msgBody));
     }
-    diagnostics.push(`${kind}: HTTP ${res.status} ${respText.slice(0, 250)}`);
+    diagnostics.push(`${kind}${mediaUrl ? ` [${mediaUrl}]` : ''}: HTTP ${res.status} ${respText.slice(0, 250)}`);
     console.log(`[messaging][viber_routee] ${res.status}`, JSON.stringify(msgBody), '->', respText.slice(0, 300));
     if (!res.ok && !failure) failure = `${kind}: ${routeeErrorMessage(respText, res.status)}`;
   }
