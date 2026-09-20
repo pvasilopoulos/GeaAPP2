@@ -186,9 +186,14 @@ function ActivityDetails({ details }) {
       {msg && (
         <div className="hist-msg">
           <div className="hist-msg-h">
-            {[msg.channel_label || CHANNEL_LABELS[msg.channel], msg.to, msg.subject, msg.delivery_detail].filter(Boolean).join(' · ')}
+            {[msg.channel_label || CHANNEL_LABELS[msg.channel], msg.to, msg.subject].filter(Boolean).join(' · ')}
           </div>
           {msg.body}
+          {msg.delivery_detail && (
+            <div className="hist-msg-detail" style={{ marginTop: 4, fontSize: 12, color: 'var(--text-muted, #888)', wordBreak: 'break-word' }}>
+              {msg.delivery_detail}
+            </div>
+          )}
           {(msg.attachments?.length > 0 || msg.button) && (
             <div className="msg-attach-list" style={{ marginTop: 6 }}>
               {(msg.attachments || []).map((name, i) => (

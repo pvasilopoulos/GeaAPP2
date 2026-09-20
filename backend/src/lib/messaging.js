@@ -309,6 +309,12 @@ async function sendViberRoutee(cfg, payload) {
   };
 
   let auth = await routeeAccessToken(cfg.application_id, cfg.application_secret);
+  // Routee's HTTP response only confirms the request was queued, not that
+  // Viber actually delivered it — collect the accepted body + raw response
+  // for every message so a "sent but nothing arrived" case (e.g. an
+  // unreachable media URL, or a sender not approved for rich media) can be
+  // diagnosed directly from the app (Δραστηριότητα) instead of server logs.
+  const diagnostics = [];
   for (const msgBody of messages) {
     let { res, text: respText } = await sendOnce(auth.token, msgBody);
     if (res.status === 401 || res.status === 403) {
@@ -316,14 +322,12 @@ async function sendViberRoutee(cfg, payload) {
       auth = await routeeAccessToken(cfg.application_id, cfg.application_secret, { force: true });
       ({ res, text: respText } = await sendOnce(auth.token, msgBody));
     }
-    // Routee's HTTP response only confirms the request was queued, not that
-    // Viber actually delivered it — log the accepted body + response so a
-    // "sent but nothing arrived" case (e.g. an unreachable media URL, or a
-    // sender not approved for rich media) can be diagnosed from the server
-    // logs instead of looking like a silent success.
+    const kind = msgBody.viberFile ? 'file' : (msgBody.imageURL ? 'image' : 'text');
+    diagnostics.push(`${kind}: HTTP ${res.status} ${respText.slice(0, 200)}`);
     console.log(`[messaging][viber_routee] ${res.status}`, JSON.stringify(msgBody), '->', respText.slice(0, 300));
     if (!res.ok) throw new Error(routeeErrorMessage(respText, res.status));
   }
+  return diagnostics;
 }
 
 // A styled call-to-action the plain-text part renders as "label: url" (since
@@ -435,8 +439,8 @@ export async function deliverMessage(channel, cfg, payload) {
       return { status: 'sent' };
     }
     if (channel === 'viber_routee') {
-      await sendViberRoutee(c, { ...payload, body: renderBody(payload.body, payload.bodyFormat, 'text') });
-      return { status: 'sent' };
+      const diagnostics = await sendViberRoutee(c, { ...payload, body: renderBody(payload.body, payload.bodyFormat, 'text') });
+      return { status: 'sent', detail: diagnostics.join(' | ').slice(0, 500) };
     }
     if (channel === 'sms') {
       const headers = c.api_key ? { Authorization: `Bearer ${c.api_key}` } : {};
