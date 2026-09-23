@@ -153,7 +153,12 @@ function QuoteEditor({ quoteId, onBack, onSaved }) {
   const [erpError, setErpError] = useState('');
   const [debugInfo, setDebugInfo] = useState(null);
   const pushErp = async () => {
-    if (!quoteId) return; setActionBusy(true); setErpError('');
+    if (!quoteId) return;
+    if (current?.erp_id) {
+      setErpError(`Η προσφορά έχει ήδη σταλεί στο ERP με αριθμό #${current.erp_id}.`);
+      return;
+    }
+    setActionBusy(true); setErpError('');
     try {
       const response = await api.pushQuoteToErp(quoteId);
       await quote.refetch();

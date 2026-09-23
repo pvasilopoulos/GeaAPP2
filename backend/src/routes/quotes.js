@@ -383,6 +383,9 @@ quotesRouter.post('/:id/push-erp', authorize(PERMISSIONS.QUOTES_SEND_ERP), async
     const id = Number(req.params.id);
     const quote = await loadQuote(id, req.user.tenantId);
     if (!quote) return res.status(404).json({ error: 'Η προσφορά δεν βρέθηκε' });
+    if (Number(quote.erp_id) > 0) {
+      return res.status(409).json({ error: `Η προσφορά έχει ήδη σταλεί στο ERP με αριθμό #${quote.erp_id}` });
+    }
     const settings = (await query('SELECT settings FROM tenants WHERE id = ?', [req.user.tenantId])).rows[0]?.settings;
     const config = mergeTenantSettings(settings).quote_push_api;
     if (!config?.url) return res.status(422).json({ error: 'Δεν έχει ρυθμιστεί URL στο Ρυθμίσεις → Προσφορές / ERP API' });
