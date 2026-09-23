@@ -1,3 +1,5 @@
+import { decodeResponse } from './responseEncoding.js';
+
 // Shared HTTP client for tenant-configured ERP integrations (quotes fetch-lines
 // and push-to-ERP so far). Centralizes auth injection, timeout handling, GET
 // query-string building and the redacted request/response "debug" snapshot
@@ -119,9 +121,12 @@ export async function callConfiguredErp(config, customHeaders, rendered) {
 }
 
 export function responseSnapshot(response, rawBody, limit = 2000) {
+  const contentType = response.headers.get('content-type') || '';
+  const { text, charset } = decodeResponse(rawBody, { encoding: 'auto', contentType });
   return {
     status: response.status,
     headers: Object.fromEntries(response.headers.entries()),
-    body: rawBody.toString('utf8').slice(0, limit),
+    charset,
+    body: text.slice(0, limit),
   };
 }
