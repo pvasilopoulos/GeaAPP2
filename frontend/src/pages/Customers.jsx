@@ -5,7 +5,10 @@ import Icon from '../components/Icon.jsx';
 import { Avatar, StatusBadge, EmptyState, Skeleton } from '../components/ui.jsx';
 import { formatCurrency, formatNumber, formatDate, TYPE_LABELS, STATUS_LABELS } from '../lib/format.js';
 import { useAuth } from '../store/auth.js';
+import { useOffline } from '../store/offline.js';
 import { PERMS } from '../lib/perms.js';
+import { offlineFirst } from '../lib/offlineCache.js';
+import { pendingCustomerRows } from '../lib/outbox.js';
 import { CustomerFormDrawer } from '../components/forms.jsx';
 import FilterDrawer from '../components/FilterDrawer.jsx';
 
@@ -119,9 +122,14 @@ export default function Customers({ onOpenCustomer }) {
   const [showFilters, setShowFilters] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
 
-  const { data: meta } = useQuery({ queryKey: ['meta'], queryFn: ({ signal }) => api.meta({ signal }) });
+  const { data: meta } = useQuery({
+    queryKey: ['meta'],
+    queryFn: offlineFirst('meta', ({ signal }) => api.meta({ signal })),
+  });
   const canExport = useAuth((s) => s.hasPerm(PERMS.CUSTOMERS_EXPORT));
   const canWrite = useAuth((s) => s.hasPerm(PERMS.CUSTOMERS_WRITE));
+  const online = useOffline((s) => s.online);
+  const outbox = useOffline((s) => s.items);
   const qc = useQueryClient();
 
   const filterParams = useMemo(() => ({
@@ -147,12 +155,20 @@ export default function Customers({ onOpenCustomer }) {
 
   useEffect(() => { setPage(1); }, [filterParams, pageSize]);
 
-  const { data, isLoading, isFetching } = useQuery({
+  // Only the unfiltered first page is mirrored for offline use; caching every
+  // filter/page combination would grow without bound and age badly.
+  const isDefaultView = page === 1 && Object.values(filterParams).every((v) => v === undefined);
+
+  const { data, isLoading, isFetching, isError } = useQuery({
     queryKey: ['customers', filterParams, page, pageSize],
-    queryFn: ({ signal }) => api.searchCustomers({ ...filterParams, page, limit: pageSize }, { signal }),
+    queryFn: offlineFirst(
+      isDefaultView ? `customers:default:${pageSize}` : null,
+      ({ signal }) => api.searchCustomers({ ...filterParams, page, limit: pageSize }, { signal }),
+    ),
     placeholderData: keepPreviousData,
   });
 
+  const pendingRows = useMemo(() => pendingCustomerRows(outbox), [outbox]);
   const rows = data?.results || [];
   const total = data?.total ?? 0;
   const totalPages = data?.totalPages ?? 1;
@@ -179,7 +195,13 @@ export default function Customers({ onOpenCustomer }) {
       {showCreate && (
         <CustomerFormDrawer onClose={() => setShowCreate(false)}
           onOpenExisting={(c) => { setShowCreate(false); onOpenCustomer(c); }}
-          onSaved={(c) => { setShowCreate(false); qc.invalidateQueries({ queryKey: ['customers'] }); qc.invalidateQueries({ queryKey: ['meta'] }); onOpenCustomer(c); }} />
+          onSaved={(c) => {
+            setShowCreate(false);
+            qc.invalidateQueries({ queryKey: ['customers'] });
+            qc.invalidateQueries({ queryKey: ['meta'] });
+            // A queued customer has no server id yet, so there is no tab to open.
+            if (!c?.queued) onOpenCustomer(c);
+          }} />
       )}
       {showFilters && (
         <FilterDrawer filters={filters} meta={meta} onSet={set} onClear={() => setFilters(EMPTY_FILTERS)} onClose={() => setShowFilters(false)} />
@@ -214,8 +236,16 @@ export default function Customers({ onOpenCustomer }) {
         </div>
       )}
 
+      {!online && (
+        <div className="msg-banner">
+          Χωρίς σύνδεση — εμφανίζεται η τελευταία αποθηκευμένη λίστα. Η αναζήτηση σε όλους τους πελάτες
+          και οι εξαγωγές χρειάζονται δίκτυο.
+        </div>
+      )}
+
       <div className="results-meta">
         <span><b style={{ color: 'var(--text)' }}>{formatNumber(total)}</b> αποτελέσματα</span>
+        {pendingRows.length > 0 && <span className="ob-chip warn">{pendingRows.length} σε αναμονή</span>}
         {tookMs != null && <span className="took">αναζήτηση σε {tookMs} ms</span>}
         <span style={{ marginLeft: 'auto' }}>Ταξινόμηση: {SORTS.find((s) => s.value === sort)?.label}</span>
       </div>
@@ -240,10 +270,35 @@ export default function Customers({ onOpenCustomer }) {
               </div>
             ))}
           </div>
-        ) : rows.length === 0 ? (
-          <EmptyState icon="users" title="Δεν βρέθηκαν πελάτες" hint="Δοκιμάστε διαφορετικά κριτήρια αναζήτησης ή φίλτρα." />
+        ) : rows.length === 0 && pendingRows.length === 0 ? (
+          <EmptyState
+            icon="users"
+            title={isError && !online ? 'Χωρίς αποθηκευμένη λίστα' : 'Δεν βρέθηκαν πελάτες'}
+            hint={isError && !online
+              ? 'Ανοίξτε τη λίστα μία φορά με σύνδεση για να είναι διαθέσιμη offline.'
+              : 'Δοκιμάστε διαφορετικά κριτήρια αναζήτησης ή φίλτρα.'}
+          />
         ) : (
-          rows.map((c) => (
+          <>
+          {pendingRows.map((c) => (
+            <div className="trow pending-row" key={c.id} style={{ cursor: 'default' }} title="Δεν έχει σταλεί ακόμα στον server">
+              <div className="cust-cell">
+                <Avatar name={c.full_name} src={c.avatar_url} size={38} fallback={false} />
+                <div style={{ minWidth: 0 }}>
+                  <div className="nm">{c.full_name} <span className="ob-chip warn">Σε αναμονή</span></div>
+                  <div className="sub">{c.company || TYPE_LABELS[c.customer_type]}{c.city ? ` · ${c.city}` : ''}</div>
+                </div>
+              </div>
+              <div className="mono muted">—</div>
+              <div><StatusBadge status={c.status} /></div>
+              <div className="mono muted">—</div>
+              <div className="muted">—</div>
+              <div className="mono muted">—</div>
+              <div className="num muted">—</div>
+              <div style={{ textAlign: 'right', color: 'var(--text-3)' }}><Icon name="cloudUp" size={16} /></div>
+            </div>
+          ))}
+          {rows.map((c) => (
             <div className="trow" key={c.id} onClick={() => onOpenCustomer(c)}>
               <div className="cust-cell">
                 <Avatar name={c.full_name} src={c.avatar_url} size={38} fallback={false} />
@@ -260,7 +315,8 @@ export default function Customers({ onOpenCustomer }) {
               <div className="num">{formatCurrency(c.total_value)}</div>
               <div style={{ textAlign: 'right', color: 'var(--text-3)' }}><Icon name="chevronRight" size={16} /></div>
             </div>
-          ))
+          ))}
+          </>
         )}
       </div>
 

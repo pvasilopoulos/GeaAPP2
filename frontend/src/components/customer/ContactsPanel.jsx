@@ -5,6 +5,7 @@ import Icon from '../Icon.jsx';
 import { Avatar, EmptyState, Drawer, Skeleton } from '../ui.jsx';
 import { CONTACT_ROLES } from '../../lib/format.js';
 import { useAuth } from '../../store/auth.js';
+import { useOffline } from '../../store/offline.js';
 import { PERMS } from '../../lib/perms.js';
 
 function blank() {
@@ -82,18 +83,38 @@ function ContactDrawer({ customerId, initial, seed, onClose, onSaved }) {
   const [f, setF] = useState(() => ({ ...blank(), ...(initial || seed || {}) }));
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  const online = useOffline((s) => s.online);
+  const queueAction = useOffline((s) => s.add);
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
+  // Editing an existing contact offline is not queued: the row it patches may
+  // itself still be pending, so we would be rewriting an id that does not exist.
+  const canQueue = !initial;
   const submit = async (e) => {
     e.preventDefault(); setErr(''); setSaving(true);
     try {
+      if (canQueue && !online) {
+        await queueAction('contact.create', { customerId, contact: f });
+        onSaved({ queued: true });
+        return;
+      }
       if (initial) await api.updateContact(customerId, initial.id, f);
       else await api.createContact(customerId, f);
       onSaved();
-    } catch (ex) { setErr(ex.message); } finally { setSaving(false); }
+    } catch (ex) {
+      if (ex?.offline && canQueue) {
+        await queueAction('contact.create', { customerId, contact: f });
+        onSaved({ queued: true });
+        return;
+      }
+      setErr(ex?.offline ? 'Χωρίς σύνδεση — η επεξεργασία επαφής χρειάζεται δίκτυο' : ex.message);
+    } finally { setSaving(false); }
   };
   return (
     <Drawer title={initial ? 'Επεξεργασία επαφής' : 'Νέα επαφή'} onClose={onClose}>
       {err && <div className="auth-error">{err}</div>}
+      {!online && canQueue && (
+        <div className="msg-banner">Χωρίς σύνδεση. Η επαφή θα σταλεί μόλις επανέλθει το δίκτυο.</div>
+      )}
       <form onSubmit={submit}>
         <div style={{ display: 'flex', gap: 10 }}>
           <div className="field-group" style={{ flex: 1 }}><label>Όνομα</label><input value={f.first_name} onChange={set('first_name')} required /></div>
@@ -114,7 +135,10 @@ function ContactDrawer({ customerId, initial, seed, onClose, onSaved }) {
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 14px' }}>
           <input type="checkbox" checked={!!f.is_primary} onChange={set('is_primary')} /> Κύρια επαφή
         </label>
-        <button className="btn btn-accent btn-block" disabled={saving}>{saving ? <span className="spinner" /> : <Icon name="check" size={16} />} {initial ? 'Αποθήκευση' : 'Προσθήκη'}</button>
+        <button className="btn btn-accent btn-block" disabled={saving}>
+          {saving ? <span className="spinner" /> : <Icon name={!online && canQueue ? 'cloudUp' : 'check'} size={16} />}
+          {!online && canQueue ? 'Αποθήκευση στη συσκευή' : initial ? 'Αποθήκευση' : 'Προσθήκη'}
+        </button>
       </form>
     </Drawer>
   );

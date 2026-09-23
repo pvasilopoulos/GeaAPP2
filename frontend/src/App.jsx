@@ -8,6 +8,7 @@ import { useTabs } from './store/tabs.js';
 import { useAuth } from './store/auth.js';
 import { PERMS } from './lib/perms.js';
 import { isStandalone, promptInstall, refreshApp, subscribeInstallPrompt } from './lib/pwa.js';
+import OfflineIndicator from './components/OfflineIndicator.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Customers from './pages/Customers.jsx';
 import CustomerProfile from './pages/CustomerProfile.jsx';
@@ -165,6 +166,7 @@ export default function App() {
           </button>
           <GlobalSearch />
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <OfflineIndicator />
             <AppRefresh />
             <button className="btn btn-icon btn-ghost" aria-label="Ειδοποιήσεις"><Icon name="bell" /></button>
             <UserMenu />
