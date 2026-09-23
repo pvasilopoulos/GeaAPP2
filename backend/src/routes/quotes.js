@@ -144,7 +144,7 @@ quotesRouter.post('/resolve-lines', authorize(PERMISSIONS.QUOTES_FETCH_LINES), a
     if (!Array.isArray(lines) && configuredPath === 'lines') lines = payload?.data?.lines;
     if (!Array.isArray(lines)) lines = payload?.data?.lines || payload?.lines || (Array.isArray(payload?.data) ? payload.data : lines);
     if (!Array.isArray(lines)) return res.status(502).json({ error: 'Το response του ERP δεν περιέχει array γραμμών στο JSON path που ορίστηκε', detail: rawSnippet(), ...debugPayload() });
-    res.json({ lines: mapErpLinesToQuoteLines(lines), ...debugPayload() });
+    res.json({ lines: mapErpLinesToQuoteLines(lines, config.line_field_mappings), ...debugPayload() });
   } catch (err) { next(err); }
 });
 

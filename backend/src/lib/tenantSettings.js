@@ -63,6 +63,7 @@ export const DEFAULT_TENANT_SETTINGS = {
     body_template: '{"customerId":"{{customerId}}","customerErpId":"{{customerErpId}}","customerCode":"{{customerCode}}","customerName":"{{customerName}}","customerCompany":"{{customerCompany}}","customerTaxId":"{{customerTaxId}}","customerEmail":"{{customerEmail}}","customerPhone":"{{customerPhone}}","branchId":"{{branchId}}","branchErpId":"{{branchErpId}}","branchCode":"{{branchCode}}","branchName":"{{branchName}}","branchCity":"{{branchCity}}","branchAddress":"{{branchAddress}}","series":"{{series}}","quoteNumber":"{{quoteNumber}}","quoteDate":"{{quoteDate}}","validUntil":"{{validUntil}}","paymentTerms":"{{paymentTerms}}","sellerId":"{{sellerId}}","referenceStartYear":"{{referenceStartYear}}","referenceEndYear":"{{referenceEndYear}}","paymentDueDate":"{{paymentDueDate}}"}',
     headers: '{}',
     response_path: 'data.lines',
+    line_field_mappings: {},
     response_encoding: 'auto',
     timeout_ms: 30000,
     auth: { type: 'none', token: '', username: '', password: '', api_key_name: '', api_key_value: '', api_key_in: 'header' },

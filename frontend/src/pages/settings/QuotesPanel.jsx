@@ -9,6 +9,7 @@ const DEFAULT = {
   enabled: true, url: '', method: 'POST',
   body_template: '{"customerId":"{{customerId}}","customerErpId":"{{customerErpId}}","customerCode":"{{customerCode}}","customerName":"{{customerName}}","customerCompany":"{{customerCompany}}","customerTaxId":"{{customerTaxId}}","customerEmail":"{{customerEmail}}","customerPhone":"{{customerPhone}}","branchId":"{{branchId}}","branchErpId":"{{branchErpId}}","branchCode":"{{branchCode}}","branchName":"{{branchName}}","branchCity":"{{branchCity}}","branchAddress":"{{branchAddress}}","series":"{{series}}","quoteNumber":"{{quoteNumber}}","quoteDate":"{{quoteDate}}","validUntil":"{{validUntil}}","paymentTerms":"{{paymentTerms}}","sellerId":"{{sellerId}}","referenceStartYear":"{{referenceStartYear}}","referenceEndYear":"{{referenceEndYear}}","paymentDueDate":"{{paymentDueDate}}"}',
   headers: '{}', response_path: 'data.lines', response_encoding: 'auto',
+  line_field_mappings: { description: '', quantity: '', unit_price: '', discount_percent: '', tax_percent: '' },
   timeout_ms: 30000, auth: DEFAULT_AUTH, debug: false,
 };
 
@@ -74,6 +75,10 @@ export default function QuotesPanel() {
   useEffect(() => { if (data?.settings?.quote_push_api) setPushValue({ ...PUSH_DEFAULT, ...data.settings.quote_push_api, auth: { ...DEFAULT_AUTH, ...data.settings.quote_push_api.auth } }); }, [data]);
   if (isLoading) return <div className="card card-pad">Φόρτωση…</div>;
   const update = (key) => (event) => setValue((current) => ({ ...current, [key]: event.target.type === 'checkbox' ? event.target.checked : event.target.value }));
+  const updateLineMapping = (key) => (event) => setValue((current) => ({
+    ...current,
+    line_field_mappings: { ...DEFAULT.line_field_mappings, ...current.line_field_mappings, [key]: event.target.value },
+  }));
   const updatePush = (key) => (event) => setPushValue((current) => ({ ...current, [key]: event.target.type === 'checkbox' ? event.target.checked : event.target.value }));
   const save = async (event) => {
     event.preventDefault(); setSaving(true); setMessage('');
@@ -112,6 +117,14 @@ export default function QuotesPanel() {
         <div className="field-group"><label>Timeout (ms)</label><input className="settings-control" type="number" min="2000" max="120000" step="1000" value={value.timeout_ms} onChange={update('timeout_ms')} /></div>
       </div>
       <div className="customers-settings-grid"><AuthFields auth={value.auth} onChange={(auth) => setValue((current) => ({ ...current, auth }))} /></div>
+      <div className="customers-settings-grid">
+        <div className="field-group" style={{ gridColumn: '1 / -1' }}><label>Αντιστοίχιση πεδίων γραμμής ERP <em>Προαιρετικά: γράψε το ακριβές κλειδί από κάθε γραμμή του response</em></label></div>
+        <div className="field-group"><label>Περιγραφή</label><input className="settings-control" value={value.line_field_mappings?.description || ''} onChange={updateLineMapping('description')} placeholder="π.χ. Περιγραφή" /></div>
+        <div className="field-group"><label>Ποσότητα</label><input className="settings-control" value={value.line_field_mappings?.quantity || ''} onChange={updateLineMapping('quantity')} placeholder="π.χ. Ποσότητα" /></div>
+        <div className="field-group"><label>Τιμή μονάδας</label><input className="settings-control" value={value.line_field_mappings?.unit_price || ''} onChange={updateLineMapping('unit_price')} placeholder="π.χ. Αξία" /></div>
+        <div className="field-group"><label>Έκπτωση %</label><input className="settings-control" value={value.line_field_mappings?.discount_percent || ''} onChange={updateLineMapping('discount_percent')} placeholder="π.χ. Έκπτωση" /></div>
+        <div className="field-group"><label>ΦΠΑ %</label><input className="settings-control" value={value.line_field_mappings?.tax_percent || ''} onChange={updateLineMapping('tax_percent')} placeholder="π.χ. ΦΠΑ" /></div>
+      </div>
       <div className="customers-settings-grid"><div className="field-group"><label>Headers JSON <em>Επιπλέον headers (πέραν της αυθεντικοποίησης)</em></label><textarea className="settings-control settings-code" rows="6" value={value.headers} onChange={update('headers')} /></div><div className="field-group"><label>Body template JSON</label><textarea className="settings-control settings-code" rows="6" value={value.body_template} onChange={update('body_template')} /></div></div>
       <div className="muted" style={{ marginTop: 12 }}>Διαθέσιμες μεταβλητές: {RESOLVE_LINES_FIELDS.map((field) => <code key={field} style={{ marginRight: 6 }}>{`{{${field}}}`}</code>)}</div>
       {value.method === 'GET' && <div className="muted" style={{ marginTop: 6 }}>Σε GET requests το body στέλνεται ως query parameters στο URL (π.χ. <code>?customerId=15&amp;...</code>).</div>}

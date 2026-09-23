@@ -11,6 +11,8 @@ assert.equal(normalizeQuoteLine({ price: 12.5 }).unit_price, 12.5);
 assert.equal(normalizeQuoteLine({ unitPrice: 8 }).unit_price, 8);
 assert.equal(normalizeQuoteLine({ amount: 3 }).unit_price, 3);
 assert.equal(normalizeQuoteLine({ value: 4 }).unit_price, 4);
+assert.equal(normalizeQuoteLine({ Αξία: 29.5 }, 0, { unit_price: 'Αξία' }).unit_price, 29.5);
+assert.equal(normalizeQuoteLine({ Ποσότητα: 4 }, 0, { quantity: 'Ποσότητα' }).quantity, 4);
 assert.equal(normalizeQuoteLine({ discount: 15 }).discount_percent, 15);
 assert.equal(normalizeQuoteLine({ discount_percent: 20 }).discount_percent, 20);
 assert.equal(normalizeQuoteLine({ tax: 24 }).tax_percent, 24);
@@ -58,6 +60,7 @@ const mapped = mapErpLinesToQuoteLines([
 assert.equal(mapped.length, 2);
 assert.equal(mapped[0].description, 'Α');
 assert.equal(mapped[1].metadata.extra, true);
+assert.equal(mapErpLinesToQuoteLines([{ Αξία: 7 }], { unit_price: 'Αξία' })[0].unit_price, 7);
 
 // -- backward compatibility with existing fixed-schema ERP responses -----
 const legacy = normalizeQuoteLine({ description: 'Legacy line', quantity: 4, unit_price: 30, discount_percent: 10, tax_percent: 24 });

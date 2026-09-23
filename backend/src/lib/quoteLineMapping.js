@@ -46,13 +46,20 @@ function firstNumericAlias(source, keys) {
  * Normalizes a single raw ERP line object into a quote line: known aliases populate the
  * standard calculable fields, the full original object is kept verbatim under `metadata`.
  */
-export function normalizeQuoteLine(raw, index = 0) {
+function configuredAliases(field, fieldMappings) {
+  const configured = fieldMappings?.[field];
+  if (!configured) return QUOTE_LINE_ALIASES[field];
+  const keys = Array.isArray(configured) ? configured : [configured];
+  return [...keys.map((key) => String(key).trim()).filter(Boolean), ...QUOTE_LINE_ALIASES[field]];
+}
+
+export function normalizeQuoteLine(raw, index = 0, fieldMappings = {}) {
   const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
-  const description = firstTextAlias(source, QUOTE_LINE_ALIASES.description);
-  const quantity = firstNumericAlias(source, QUOTE_LINE_ALIASES.quantity);
-  const unitPrice = firstNumericAlias(source, QUOTE_LINE_ALIASES.unit_price);
-  const discountPercent = firstNumericAlias(source, QUOTE_LINE_ALIASES.discount_percent);
-  const taxPercent = firstNumericAlias(source, QUOTE_LINE_ALIASES.tax_percent);
+  const description = firstTextAlias(source, configuredAliases('description', fieldMappings));
+  const quantity = firstNumericAlias(source, configuredAliases('quantity', fieldMappings));
+  const unitPrice = firstNumericAlias(source, configuredAliases('unit_price', fieldMappings));
+  const discountPercent = firstNumericAlias(source, configuredAliases('discount_percent', fieldMappings));
+  const taxPercent = firstNumericAlias(source, configuredAliases('tax_percent', fieldMappings));
   return {
     description: description ?? `Γραμμή ${index + 1}`,
     quantity: quantity ?? DEFAULTS.quantity,
@@ -64,7 +71,7 @@ export function normalizeQuoteLine(raw, index = 0) {
 }
 
 /** Maps an array of raw ERP objects (the configured `response_path` array) to quote lines. */
-export function mapErpLinesToQuoteLines(lines) {
+export function mapErpLinesToQuoteLines(lines, fieldMappings = {}) {
   if (!Array.isArray(lines)) return [];
-  return lines.map((line, index) => normalizeQuoteLine(line, index));
+  return lines.map((line, index) => normalizeQuoteLine(line, index, fieldMappings));
 }
