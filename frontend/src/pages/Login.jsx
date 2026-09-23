@@ -7,18 +7,12 @@ import Icon from '../components/Icon.jsx';
 import { DEFAULT_APP_NAME } from '../lib/branding.js';
 import InstallAppBanner from '../components/InstallAppBanner.jsx';
 
-const DEMO = [
-  ['Ιδιοκτήτης', 'owner@demo.gr'],
-  ['Manager', 'manager@demo.gr'],
-  ['Θεατής', 'viewer@demo.gr'],
-];
-
 export default function Login() {
   const navigate = useNavigate();
   const login = useAuth((s) => s.login);
   const pub = useQuery({ queryKey: ['public-settings'], queryFn: ({ signal }) => api.publicSettings({ signal }) });
-  const [email, setEmail] = useState('owner@demo.gr');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -53,15 +47,6 @@ export default function Login() {
         {pub.data?.allow_self_register !== false && (
           <div className="auth-hint">Δεν έχετε λογαριασμό; <Link to="/register" style={{ color: 'var(--accent)', fontWeight: 600 }}>Εγγραφή</Link></div>
         )}
-        <div className="demo-box">
-          <b>Demo λογαριασμοί</b> (κωδικός: <code>password123</code>)
-          {DEMO.map(([role, mail]) => (
-            <div className="demo-row" key={mail}>
-              <span>{role}</span>
-              <code style={{ cursor: 'pointer' }} onClick={() => setEmail(mail)}>{mail}</code>
-            </div>
-          ))}
-        </div>
       </div>
     </div>
   );
