@@ -79,7 +79,7 @@ export default function Quotes() {
   const hasPerm = useAuth((state) => state.hasPerm);
   const [editing, setEditing] = useState(null);
   const quotes = useQuery({ queryKey: ['quotes'], queryFn: ({ signal }) => api.quotes({ signal }) });
-  if (editing) return <QuoteEditor quoteId={editing === true ? null : editing} onBack={() => setEditing(null)} onSaved={() => { setEditing(null); quotes.refetch(); }} />;
+  if (editing) return <QuoteEditor quoteId={editing === true ? null : editing} onBack={() => setEditing(null)} onSaved={(id) => { setEditing(id); quotes.refetch(); }} />;
   return <div className="quotes-page">
     <div className="page-head"><div><h1>Προσφορές</h1><div className="sub">Δημιουργία, παρακολούθηση και αποστολή προσφορών</div></div>{hasPerm(PERMS.QUOTES_CREATE) && <button className="btn btn-primary" onClick={() => setEditing(true)}><Icon name="plus" size={16} /> Νέα προσφορά</button>}</div>
     <div className="quotes-summary"><div><span>Σύνολο</span><b>{quotes.data?.results?.length || 0}</b></div><div><span>Πρόχειρες</span><b>{quotes.data?.results?.filter((q) => q.status === 'draft').length || 0}</b></div><div><span>Απεσταλμένες</span><b>{quotes.data?.results?.filter((q) => q.email_sent).length || 0}</b></div></div>
@@ -147,7 +147,8 @@ function QuoteEditor({ quoteId, onBack, onSaved }) {
       const saved = quoteId ? await api.updateQuote(quoteId, payload) : await api.createQuote(payload);
       if (form.sendEmail && hasPerm(PERMS.QUOTES_SEND_EMAIL)) await api.sendQuoteEmail(quoteId || saved.id);
       qc.invalidateQueries({ queryKey: ['quotes'] });
-      onSaved();
+      if (quoteId) await quote.refetch();
+      onSaved(quoteId || saved.id);
     } finally { setSaving(false); }
   };
   const current = quote.data?.quote;
