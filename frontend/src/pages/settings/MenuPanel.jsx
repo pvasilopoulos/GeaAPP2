@@ -740,7 +740,7 @@ function PersonalMenuSection() {
 
 export default function MenuPanel() {
   const hasPerm = useAuth((s) => s.hasPerm);
-  const canManage = hasPerm(PERMS.SETTINGS_MANAGE);
+  const canManage = hasPerm(PERMS.MENU_MANAGE) || hasPerm(PERMS.SETTINGS_MANAGE);
   return (
     <div>
       {canManage && (
@@ -758,4 +758,3 @@ export default function MenuPanel() {
     </div>
   );
 }
-

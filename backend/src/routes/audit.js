@@ -8,7 +8,7 @@ import {
 import { parseDetails } from '../lib/activityDiff.js';
 
 export const auditRouter = Router();
-auditRouter.use(authorize(PERMISSIONS.SETTINGS_MANAGE));
+auditRouter.use(authorize(PERMISSIONS.AUDIT_VIEW, PERMISSIONS.SETTINGS_MANAGE));
 
 auditRouter.get('/', async (req, res, next) => {
   try {

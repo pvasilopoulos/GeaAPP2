@@ -12,7 +12,7 @@ import { mergeTenantSettings } from '../lib/tenantSettings.js';
 
 export const notificationRulesRouter = Router();
 
-const manageGuard = authorize(PERMISSIONS.SETTINGS_MANAGE);
+const manageGuard = authorize(PERMISSIONS.NOTIFICATIONS_MANAGE, PERMISSIONS.SETTINGS_MANAGE);
 
 function publicRule(row) {
   return {

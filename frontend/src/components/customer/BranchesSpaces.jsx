@@ -11,7 +11,9 @@ import { BranchFormDrawer, SpaceFormDrawer } from '../forms.jsx';
 
 export default function BranchesSpaces({ customerId }) {
   const qc = useQueryClient();
-  const canWrite = useAuth((s) => s.hasPerm(PERMS.CUSTOMERS_WRITE));
+  const canWrite = useAuth((s) => s.hasPerm(PERMS.CUSTOMERS_WRITE)
+    || s.hasPerm(PERMS.BRANCHES_CREATE) || s.hasPerm(PERMS.BRANCHES_EDIT) || s.hasPerm(PERMS.BRANCHES_DELETE)
+    || s.hasPerm(PERMS.SPACES_CREATE) || s.hasPerm(PERMS.SPACES_EDIT) || s.hasPerm(PERMS.SPACES_DELETE));
   const [selectedId, setSelectedId] = useState(null);
   const [term, setTerm] = useState('');
   const [drawerSpace, setDrawerSpace] = useState(null);

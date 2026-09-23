@@ -35,6 +35,7 @@ import { auditRouter } from './routes/audit.js';
 import { pushRouter, pushPublicRouter } from './routes/push.js';
 import { notificationRulesRouter } from './routes/notificationRules.js';
 import { brandingPublicRouter } from './routes/branding.js';
+import { sellersRouter } from './routes/sellers.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -93,6 +94,7 @@ app.use('/api/geo', geoRouter);
 app.use('/api/tenants', tenantsRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/connectors', connectorsRouter);
+app.use('/api/sellers', sellersRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/notification-rules', notificationRulesRouter);
 app.use('/api/push', pushRouter);

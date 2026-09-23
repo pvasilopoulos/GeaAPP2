@@ -10,7 +10,7 @@ import { logAuditFromReq } from '../lib/audit.js';
 import { renderPushTemplate, processOutbox } from '../lib/pushSync.js';
 
 export const connectorsRouter = Router();
-const guard = authorize(PERMISSIONS.SETTINGS_MANAGE);
+const guard = authorize(PERMISSIONS.ERP_SYNC_MANAGE, PERMISSIONS.SETTINGS_MANAGE);
 connectorsRouter.get('/', guard, async (req, res, next) => { try { const { rows } = await query('SELECT * FROM connectors WHERE tenant_id = ? ORDER BY name', [req.user.tenantId]); res.json({ connectors: rows.map(redactConnector) }); } catch (e) { next(e); } });
 connectorsRouter.post('/', guard, async (req, res, next) => {
   try {

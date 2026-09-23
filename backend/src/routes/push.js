@@ -81,7 +81,7 @@ pushRouter.post('/test', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-const manageGuard = authorize(PERMISSIONS.SETTINGS_MANAGE);
+const manageGuard = authorize(PERMISSIONS.NOTIFICATIONS_MANAGE, PERMISSIONS.SETTINGS_MANAGE);
 
 // Active tenant users with their current device (push subscription) count —
 // powers the recipient picker in the admin "send notification" panel.
@@ -237,4 +237,3 @@ pushRouter.delete('/templates/:id', manageGuard, async (req, res, next) => {
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
-

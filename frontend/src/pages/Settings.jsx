@@ -16,20 +16,22 @@ import QuotesPanel from './settings/QuotesPanel.jsx';
 import MenuPanel from './settings/MenuPanel.jsx';
 import NotificationsCenterPanel from './settings/NotificationsCenterPanel.jsx';
 import AuditLog from './AuditLog.jsx';
+import SellersPanel from './settings/SellersPanel.jsx';
 
 const CATS = [
   { id: 'org', label: 'Οργανισμός', hint: 'Επωνυμία, γλώσσα, νόμισμα', icon: 'building', perms: [PERMS.TENANT_MANAGE, PERMS.SETTINGS_MANAGE] },
-  { id: 'app', label: 'Εφαρμογή', hint: 'Προεπιλογές πελατών και εμφάνισης', icon: 'layers', perms: [PERMS.SETTINGS_MANAGE] },
+  { id: 'app', label: 'Εφαρμογή', hint: 'Προεπιλογές πελατών και εμφάνισης', icon: 'layers', perms: [PERMS.APP_SETTINGS_MANAGE, PERMS.SETTINGS_MANAGE] },
   { id: 'customers', label: 'Customers', hint: 'Tabs, εμφάνιση και προεπιλογές πελατών', icon: 'users', perms: [PERMS.SETTINGS_MANAGE] },
+  { id: 'sellers', label: 'Πωλητές', hint: 'Πωλητές για προσφορές και αναθέσεις', icon: 'users', perms: [PERMS.SELLERS_MANAGE, PERMS.SETTINGS_MANAGE] },
   { id: 'quotes', label: 'Προσφορές / ERP API', hint: 'Endpoint και JSON για τις γραμμές προσφορών', icon: 'file', perms: [PERMS.SETTINGS_MANAGE] },
-  { id: 'messaging', label: 'Μηνύματα', hint: 'Email, Viber, Viber Routee, SMS, Telegram', icon: 'message', perms: [PERMS.SETTINGS_MANAGE] },
-  { id: 'reminders', label: 'Υπενθυμίσεις', hint: 'Προειδοποιήσεις, εργάσιμο ωράριο, snooze', icon: 'bell', perms: [PERMS.SETTINGS_MANAGE] },
+  { id: 'messaging', label: 'Μηνύματα', hint: 'Email, Viber, Viber Routee, SMS, Telegram', icon: 'message', perms: [PERMS.MESSAGING_MANAGE, PERMS.SETTINGS_MANAGE] },
+  { id: 'reminders', label: 'Υπενθυμίσεις', hint: 'Προειδοποιήσεις, εργάσιμο ωράριο, snooze', icon: 'bell', perms: [PERMS.REMINDERS_MANAGE, PERMS.SETTINGS_MANAGE] },
   { id: 'users', label: 'Χρήστες & Ρόλοι', hint: 'Μέλη οργανισμού και δικαιώματα', icon: 'users', perms: [PERMS.USERS_MANAGE, PERMS.ROLES_MANAGE] },
-  { id: 'fields', label: 'Custom Fields', hint: 'Δυναμικά πεδία πελατών / χώρων', icon: 'tag', perms: [PERMS.SETTINGS_MANAGE] },
+  { id: 'fields', label: 'Custom Fields', hint: 'Δυναμικά πεδία πελατών / χώρων', icon: 'tag', perms: [PERMS.CUSTOM_FIELDS_MANAGE, PERMS.SETTINGS_MANAGE] },
   { id: 'tenants', label: 'Tenants', hint: 'Δημιουργία, επεξεργασία, διαγραφή οργανισμών', icon: 'grid', perms: [PERMS.TENANTS_PLATFORM] },
   { id: 'security', label: 'Ασφάλεια', hint: 'Εγγραφή, πρόσβαση, πλατφόρμα', icon: 'settings', perms: [PERMS.SETTINGS_MANAGE, PERMS.TENANT_MANAGE, PERMS.TENANTS_PLATFORM] },
-  { id: 'audit', label: 'Ιστορικό αλλαγών', hint: 'Ποιος άλλαξε τι στον οργανισμό', icon: 'clock', perms: [PERMS.SETTINGS_MANAGE] },
-  { id: 'connectors', label: 'ERP Sync', hint: 'Συνδέσεις, αντιστοιχίσεις και συγχρονισμοί', icon: 'refresh', perms: [PERMS.SETTINGS_MANAGE] },
+  { id: 'audit', label: 'Ιστορικό αλλαγών', hint: 'Ποιος άλλαξε τι στον οργανισμό', icon: 'clock', perms: [PERMS.AUDIT_VIEW, PERMS.SETTINGS_MANAGE] },
+  { id: 'connectors', label: 'ERP Sync', hint: 'Συνδέσεις, αντιστοιχίσεις και συγχρονισμοί', icon: 'refresh', perms: [PERMS.ERP_SYNC_MANAGE, PERMS.SETTINGS_MANAGE] },
   // No perms gate: every authenticated user can personalize their own menu;
   // the panel itself gates the tenant-wide default section by SETTINGS_MANAGE.
   { id: 'menu', label: 'Μενού', hint: 'Πλαϊνό μενού & κάτω μπάρα (mobile) — γενικά και προσωπικά', icon: 'grid', perms: [] },
@@ -40,7 +42,7 @@ const CATS = [
 ];
 
 const GROUPS = [
-  { id: 'workspace', label: 'Χώρος εργασίας', items: ['org', 'app', 'customers', 'fields'] },
+  { id: 'workspace', label: 'Χώρος εργασίας', items: ['org', 'app', 'customers', 'sellers', 'fields'] },
   { id: 'operations', label: 'Λειτουργίες', items: ['messaging', 'reminders', 'connectors', 'quotes'] },
   { id: 'access', label: 'Πρόσβαση & ασφάλεια', items: ['users', 'security', 'audit'] },
   { id: 'platform', label: 'Πλατφόρμα', items: ['tenants'] },
@@ -103,6 +105,7 @@ export default function Settings({ initialCat } = {}) {
               {active.id === 'org' && <OrgPanel />}
               {active.id === 'app' && <AppPanel />}
               {active.id === 'customers' && <CustomersPanel />}
+              {active.id === 'sellers' && <SellersPanel />}
               {active.id === 'quotes' && <QuotesPanel />}
               {active.id === 'messaging' && <MessagingPanel />}
               {active.id === 'reminders' && <RemindersPanel />}

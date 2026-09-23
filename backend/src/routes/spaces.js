@@ -12,7 +12,7 @@ import { diffRecords, snapshotFields, packDetails, changeSummary } from '../lib/
 import { enqueuePush } from '../lib/pushSync.js';
 
 export const spacesRouter = Router();
-spacesRouter.use(authorize(PERMISSIONS.SPACES_READ));
+spacesRouter.use(authorize(PERMISSIONS.SPACES_VIEW));
 
 const FIELDS = ['name', 'space_type', 'capacity', 'floor', 'hourly_price', 'daily_price',
   'weekend_hourly_price', 'description', 'image_url'];
@@ -48,7 +48,7 @@ spacesRouter.get('/', async (req, res, next) => {
 });
 
 // POST /api/spaces — create a space under a branch.
-spacesRouter.post('/', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
+spacesRouter.post('/', authorize(PERMISSIONS.SPACES_CREATE), async (req, res, next) => {
   try {
     const b = req.body || {};
     const branchId = Number(b.branchId);
@@ -114,7 +114,7 @@ spacesRouter.get('/:id/custom-fields', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-spacesRouter.put('/:id/custom-fields', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
+spacesRouter.put('/:id/custom-fields', authorize(PERMISSIONS.SPACES_EDIT), async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     const cur = (await query('SELECT id FROM spaces WHERE id = ? AND tenant_id = ?', [id, req.user.tenantId])).rows[0];
@@ -127,7 +127,7 @@ spacesRouter.put('/:id/custom-fields', authorize(PERMISSIONS.CUSTOMERS_WRITE), a
 });
 
 // PATCH /api/spaces/:id — edit a space.
-spacesRouter.patch('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
+spacesRouter.patch('/:id', authorize(PERMISSIONS.SPACES_EDIT), async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     const cur = (await query(`SELECT s.*, b.name AS branch_name FROM spaces s JOIN branches b ON b.id = s.branch_id
@@ -181,7 +181,7 @@ spacesRouter.patch('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, r
 });
 
 // DELETE /api/spaces/:id — remove a space.
-spacesRouter.delete('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
+spacesRouter.delete('/:id', authorize(PERMISSIONS.SPACES_DELETE), async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     const cur = (await query('SELECT customer_id, branch_id, name FROM spaces WHERE id = ? AND tenant_id = ?', [id, req.user.tenantId])).rows[0];

@@ -14,7 +14,7 @@ import { diffRecords, snapshotFields, packDetails, changeSummary } from '../lib/
 import { enqueuePush } from '../lib/pushSync.js';
 
 export const branchesRouter = Router();
-branchesRouter.use(authorize(PERMISSIONS.BRANCHES_READ));
+branchesRouter.use(authorize(PERMISSIONS.BRANCHES_VIEW));
 
 const FIELDS = ['name', 'address_line', 'city', 'area', 'postal_code', 'phone', 'email', 'image_url'];
 
@@ -46,7 +46,7 @@ branchesRouter.get('/', async (req, res, next) => {
 });
 
 // POST /api/branches — create a branch owned by a customer.
-branchesRouter.post('/', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
+branchesRouter.post('/', authorize(PERMISSIONS.BRANCHES_CREATE), async (req, res, next) => {
   try {
     const b = req.body || {};
     const customerId = Number(b.customerId);
@@ -113,7 +113,7 @@ branchesRouter.get('/:id/custom-fields', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-branchesRouter.put('/:id/custom-fields', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
+branchesRouter.put('/:id/custom-fields', authorize(PERMISSIONS.BRANCHES_EDIT), async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     const cur = (await query('SELECT id FROM branches WHERE id = ? AND tenant_id = ?', [id, req.user.tenantId])).rows[0];
@@ -126,7 +126,7 @@ branchesRouter.put('/:id/custom-fields', authorize(PERMISSIONS.CUSTOMERS_WRITE),
 });
 
 // PATCH /api/branches/:id — edit a branch.
-branchesRouter.patch('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
+branchesRouter.patch('/:id', authorize(PERMISSIONS.BRANCHES_EDIT), async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     const cur = (await query('SELECT * FROM branches WHERE id = ? AND tenant_id = ?', [id, req.user.tenantId])).rows[0];
@@ -173,7 +173,7 @@ branchesRouter.patch('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req,
 });
 
 // DELETE /api/branches/:id — remove a branch (and its spaces via cascade).
-branchesRouter.delete('/:id', authorize(PERMISSIONS.CUSTOMERS_WRITE), async (req, res, next) => {
+branchesRouter.delete('/:id', authorize(PERMISSIONS.BRANCHES_DELETE), async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     const cur = (await query('SELECT customer_id, spaces_count, name FROM branches WHERE id = ? AND tenant_id = ?', [id, req.user.tenantId])).rows[0];

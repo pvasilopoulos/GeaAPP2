@@ -14,7 +14,7 @@ import NotificationsPanel from './NotificationsPanel.jsx';
  */
 export default function NotificationsCenterPanel() {
   const hasPerm = useAuth((s) => s.hasPerm);
-  const canManage = hasPerm(PERMS.SETTINGS_MANAGE);
+  const canManage = hasPerm(PERMS.NOTIFICATIONS_MANAGE) || hasPerm(PERMS.SETTINGS_MANAGE);
 
   const TABS = [
     canManage && { key: 'rules', label: 'Κανόνες ειδοποιήσεων' },

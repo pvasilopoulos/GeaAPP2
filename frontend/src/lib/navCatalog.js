@@ -17,8 +17,8 @@ export const NAV = [
   { id: 'branch-actions', type: 'branch-actions', label: 'Ενέργειες ανά υποκατάστημα', icon: 'activity' },
   { id: 'invoices', type: 'invoices', label: 'Τιμολόγια', icon: 'file' },
   { id: 'quotes', type: 'quotes', label: 'Προσφορές', icon: 'file', perms: [PERMS.QUOTES_VIEW] },
-  { id: 'settings', type: 'settings', label: 'Ρυθμίσεις', icon: 'settings', perms: [PERMS.SETTINGS_MANAGE, PERMS.USERS_MANAGE, PERMS.ROLES_MANAGE, PERMS.TENANT_MANAGE, PERMS.TENANTS_PLATFORM] },
-  { id: 'audit', type: 'audit', label: 'Ιστορικό αλλαγών', icon: 'clock', perms: [PERMS.SETTINGS_MANAGE] },
+  { id: 'settings', type: 'settings', label: 'Ρυθμίσεις', icon: 'settings', perms: [PERMS.SETTINGS_MANAGE, PERMS.APP_SETTINGS_MANAGE, PERMS.MESSAGING_MANAGE, PERMS.REMINDERS_MANAGE, PERMS.MENU_MANAGE, PERMS.CUSTOM_FIELDS_MANAGE, PERMS.ERP_SYNC_MANAGE, PERMS.NOTIFICATIONS_MANAGE, PERMS.AUDIT_VIEW, PERMS.SELLERS_MANAGE, PERMS.USERS_MANAGE, PERMS.ROLES_MANAGE, PERMS.TENANT_MANAGE, PERMS.TENANTS_PLATFORM] },
+  { id: 'audit', type: 'audit', label: 'Ιστορικό αλλαγών', icon: 'clock', perms: [PERMS.AUDIT_VIEW, PERMS.SETTINGS_MANAGE] },
 ];
 
 export const NAV_GROUPS = [

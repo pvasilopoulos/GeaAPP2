@@ -43,14 +43,14 @@ settingsRouter.patch('/organization', authorize(PERMISSIONS.TENANT_MANAGE), asyn
   } catch (err) { next(err); }
 });
 
-settingsRouter.get('/app', authorize(PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.TENANT_MANAGE), async (req, res, next) => {
+settingsRouter.get('/app', authorize(PERMISSIONS.APP_SETTINGS_MANAGE, PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.TENANT_MANAGE), async (req, res, next) => {
   try {
     const { rows } = await query('SELECT settings FROM tenants WHERE id = ?', [req.user.tenantId]);
     res.json({ settings: publicAppSettings(rows[0]?.settings) });
   } catch (err) { next(err); }
 });
 
-settingsRouter.patch('/app', authorize(PERMISSIONS.SETTINGS_MANAGE), async (req, res, next) => {
+settingsRouter.patch('/app', authorize(PERMISSIONS.APP_SETTINGS_MANAGE, PERMISSIONS.SETTINGS_MANAGE), async (req, res, next) => {
   try {
     const { rows } = await query('SELECT settings FROM tenants WHERE id = ?', [req.user.tenantId]);
     const current = parseJson(rows[0]?.settings, {}) || {};
@@ -74,7 +74,7 @@ settingsRouter.get('/messaging/channels', authorize(PERMISSIONS.CUSTOMERS_READ, 
   } catch (err) { next(err); }
 });
 
-settingsRouter.get('/messaging', authorize(PERMISSIONS.SETTINGS_MANAGE), async (req, res, next) => {
+settingsRouter.get('/messaging', authorize(PERMISSIONS.MESSAGING_MANAGE, PERMISSIONS.SETTINGS_MANAGE), async (req, res, next) => {
   try {
     const { rows } = await query('SELECT settings FROM tenants WHERE id = ?', [req.user.tenantId]);
     const settings = mergeTenantSettings(rows[0]?.settings);
@@ -82,7 +82,7 @@ settingsRouter.get('/messaging', authorize(PERMISSIONS.SETTINGS_MANAGE), async (
   } catch (err) { next(err); }
 });
 
-settingsRouter.patch('/messaging', authorize(PERMISSIONS.SETTINGS_MANAGE), async (req, res, next) => {
+settingsRouter.patch('/messaging', authorize(PERMISSIONS.MESSAGING_MANAGE, PERMISSIONS.SETTINGS_MANAGE), async (req, res, next) => {
   try {
     const { rows } = await query('SELECT settings FROM tenants WHERE id = ?', [req.user.tenantId]);
     const current = parseJson(rows[0]?.settings, {}) || {};
@@ -101,14 +101,14 @@ settingsRouter.patch('/messaging', authorize(PERMISSIONS.SETTINGS_MANAGE), async
   } catch (err) { next(err); }
 });
 
-settingsRouter.get('/reminders', authorize(PERMISSIONS.CUSTOMERS_READ, PERMISSIONS.SETTINGS_MANAGE), async (req, res, next) => {
+settingsRouter.get('/reminders', authorize(PERMISSIONS.REMINDERS_MANAGE, PERMISSIONS.CUSTOMERS_READ, PERMISSIONS.SETTINGS_MANAGE), async (req, res, next) => {
   try {
     const { rows } = await query('SELECT settings FROM tenants WHERE id = ?', [req.user.tenantId]);
     res.json({ reminders: publicReminderSettings(mergeTenantSettings(rows[0]?.settings).reminders) });
   } catch (err) { next(err); }
 });
 
-settingsRouter.patch('/reminders', authorize(PERMISSIONS.SETTINGS_MANAGE), async (req, res, next) => {
+settingsRouter.patch('/reminders', authorize(PERMISSIONS.REMINDERS_MANAGE, PERMISSIONS.SETTINGS_MANAGE), async (req, res, next) => {
   try {
     const { rows } = await query('SELECT settings FROM tenants WHERE id = ?', [req.user.tenantId]);
     const current = parseJson(rows[0]?.settings, {}) || {};
@@ -145,14 +145,14 @@ settingsRouter.get('/menu', async (req, res, next) => {
 // Tenant's role keys, for the admin menu editor's role-restriction picker.
 // Scoped to authorize(SETTINGS_MANAGE) (rather than USERS_MANAGE/ROLES_MANAGE)
 // since it's specifically for this editor and must never leak across tenants.
-settingsRouter.get('/menu/roles', authorize(PERMISSIONS.SETTINGS_MANAGE), async (req, res, next) => {
+settingsRouter.get('/menu/roles', authorize(PERMISSIONS.MENU_MANAGE, PERMISSIONS.SETTINGS_MANAGE), async (req, res, next) => {
   try {
     const { rows } = await query('SELECT `key`, name FROM roles WHERE tenant_id = ? ORDER BY id', [req.user.tenantId]);
     res.json({ roles: rows });
   } catch (err) { next(err); }
 });
 
-settingsRouter.patch('/menu', authorize(PERMISSIONS.SETTINGS_MANAGE), async (req, res, next) => {
+settingsRouter.patch('/menu', authorize(PERMISSIONS.MENU_MANAGE, PERMISSIONS.SETTINGS_MANAGE), async (req, res, next) => {
   try {
     const { rows } = await query('SELECT settings FROM tenants WHERE id = ?', [req.user.tenantId]);
     const current = parseJson(rows[0]?.settings, {}) || {};

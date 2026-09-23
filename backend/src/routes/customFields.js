@@ -5,7 +5,7 @@ import { PERMISSIONS } from '../lib/permissions.js';
 import { normalize } from '../lib/normalize.js';
 
 export const customFieldsRouter = Router();
-customFieldsRouter.use(authorize(PERMISSIONS.SETTINGS_MANAGE));
+customFieldsRouter.use(authorize(PERMISSIONS.CUSTOM_FIELDS_MANAGE, PERMISSIONS.SETTINGS_MANAGE));
 
 const ENTITIES = ['customer', 'branch', 'space'];
 const FLAGS = ['required', 'searchable', 'filterable', 'visible_in_list', 'active'];
