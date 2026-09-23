@@ -397,7 +397,10 @@ quotesRouter.post('/:id/push-erp', authorize(PERMISSIONS.QUOTES_SEND_ERP), async
     try {
       call = await callConfiguredErp(config, headers, rendered);
     } catch (callError) {
-      await query('UPDATE quotes SET erp_push_status = ?, erp_push_error = ? WHERE id = ? AND tenant_id = ?', ['failed', callError.message, id, req.user.tenantId]);
+      await query(
+        'UPDATE quotes SET erp_push_status = ?, erp_push_error = ?, erp_push_request = ?, erp_push_response = NULL WHERE id = ? AND tenant_id = ?',
+        ['failed', callError.message, JSON.stringify(rendered), id, req.user.tenantId],
+      );
       return res.status(callError.status || 502).json({
         error: callError.message,
         ...(config.debug && callError.requestSnapshot ? { debug: { request: callError.requestSnapshot } } : {}),
@@ -408,17 +411,26 @@ quotesRouter.post('/:id/push-erp', authorize(PERMISSIONS.QUOTES_SEND_ERP), async
     const erpResponse = responseSnapshot(response, rawBody);
     const debugPayload = () => (config.debug ? { debug: { request: requestSnapshot, response: erpResponse } } : {});
     if (!response.ok) {
-      await query('UPDATE quotes SET erp_push_status = ?, erp_push_error = ? WHERE id = ? AND tenant_id = ?', ['failed', `HTTP ${response.status}: ${raw.slice(0, 500)}`, id, req.user.tenantId]);
+      await query(
+        'UPDATE quotes SET erp_push_status = ?, erp_push_error = ?, erp_push_request = ?, erp_push_response = ? WHERE id = ? AND tenant_id = ?',
+        ['failed', `HTTP ${response.status}: ${raw.slice(0, 500)}`, JSON.stringify(rendered), erpResponse.body, id, req.user.tenantId],
+      );
       return res.status(502).json({ error: `Το ERP API επέστρεψε HTTP ${response.status}`, detail: raw.slice(0, 500), erpResponse, ...debugPayload() });
     }
     let erpId = null;
     try {
       const parsed = raw ? JSON.parse(raw) : null;
-      erpId = parsed ? getPath(parsed, config.response_id_path || 'id') : null;
+      const candidates = [
+        parsed ? getPath(parsed, config.response_id_path || 'id') : null,
+        parsed?.erp_id, parsed?.erpId, parsed?.ErpId, parsed?.ERP_ID,
+      ];
+      const candidate = candidates.find((value) => Number.isFinite(Number(value)) && Number(value) > 0);
+      erpId = candidate == null ? null : String(candidate);
     } catch { /* non-JSON response, skip erp_id capture */ }
     await query(
-      'UPDATE quotes SET erp_id = COALESCE(?, erp_id), erp_pushed_at = NOW(), erp_push_status = ?, erp_push_error = NULL WHERE id = ? AND tenant_id = ?',
-      [erpId != null ? String(erpId) : null, 'sent', id, req.user.tenantId]);
+      `UPDATE quotes SET erp_id = COALESCE(?, erp_id), erp_pushed_at = NOW(), erp_push_status = ?,
+       erp_push_error = NULL, erp_push_request = ?, erp_push_response = ? WHERE id = ? AND tenant_id = ?`,
+      [erpId, 'sent', JSON.stringify(rendered), erpResponse.body, id, req.user.tenantId]);
     await logActivity({ tenantId: req.user.tenantId, customerId: quote.customer_id, type: 'quote_pushed_erp', description: `Αποστολή προσφοράς ${quote.series}-${quote.quote_number} στο ERP`, details: { actor: { id: req.user.id }, quote_id: id, erp_id: erpId } });
     await logAuditFromReq(query, req, {
       action: 'push_erp', entityType: 'quote', entityId: id, customerId: quote.customer_id,
