@@ -9,16 +9,14 @@ import { PERMS } from '../lib/perms.js';
 const today = new Date().toISOString().slice(0, 10);
 const initial = { series: '7001', quoteNumber: '', quoteDate: today, customerId: '', branchId: '', emailTemplate: 'SALES - Προσφορά // EVENTS', paymentTerms: 'Επί Πίστωση', validUntil: '', sellerId: '', referenceStartYear: '', referenceEndYear: '', paymentDueDate: '', sendEmail: false };
 
-// Popup panel shown after an ERP call when the config's "debug" toggle is on
-// (Settings → Προσφορές / ERP API) — surfaces the exact request sent and the
-// response received, so template/auth issues can be diagnosed without
-// digging through server logs.
-function ErpDebugPanel({ debug, onClose }) {
-  if (!debug) return null;
+// Popup panel shown after an ERP quote push. The response is always visible;
+// the request is included only when the ERP debug setting is enabled.
+function ErpResponsePanel({ debug, onClose }) {
+  if (!debug?.response) return null;
   return <div className="erp-debug-overlay" role="dialog" aria-label="ERP request/response debug">
     <div className="erp-debug-panel">
-      <div className="erp-debug-head"><h4><Icon name="bell" size={16} /> Debug: αίτημα &amp; απάντηση ERP</h4><button type="button" className="btn btn-icon btn-sm" onClick={onClose}><Icon name="x" size={14} /></button></div>
-      {debug.request && <div className="erp-debug-block"><h5>Αίτημα</h5><pre className="settings-control settings-code">{JSON.stringify(debug.request, null, 2)}</pre></div>}
+      <div className="erp-debug-head"><h4><Icon name="bell" size={16} /> Απάντηση ERP</h4><button type="button" className="btn btn-icon btn-sm" onClick={onClose}><Icon name="x" size={14} /></button></div>
+      {debug.request && <div className="erp-debug-block"><h5>Αίτημα (debug)</h5><pre className="settings-control settings-code">{JSON.stringify(debug.request, null, 2)}</pre></div>}
       {debug.response && <div className="erp-debug-block"><h5>Απάντηση (HTTP {debug.response.status})</h5><pre className="settings-control settings-code">{JSON.stringify(debug.response, null, 2)}</pre></div>}
     </div>
   </div>;
@@ -56,8 +54,14 @@ function QuoteLineMetadata({ metadata }) {
 function SearchSelect({ label, value, selectedLabel, disabled, onSelect, queryFn, placeholder }) {
   const [open, setOpen] = useState(false);
   const [term, setTerm] = useState('');
-  const result = useQuery({ queryKey: ['quote-select', label, term, value], queryFn: ({ signal }) => queryFn(term, signal), enabled: open && !disabled });
-  return <label className="search-select-label">{label}<div className="search-select"><button type="button" className="search-select-trigger" disabled={disabled} onClick={() => setOpen((current) => !current)}>{selectedLabel || placeholder}<Icon name="chevronDown" size={14} /></button>{open && !disabled && <div className="search-select-menu"><input autoFocus placeholder="Αναζήτηση…" value={term} onChange={(event) => setTerm(event.target.value)} />{(result.data?.results || []).map((item) => <button type="button" key={item.id} onClick={() => { onSelect(item); setOpen(false); setTerm(''); }}>{item.company || item.full_name || item.name}<small>{item.code || item.city || item.address_line || ''}</small></button>)}{!result.data?.results?.length && <span className="search-select-empty">Δεν βρέθηκαν αποτελέσματα</span>}</div>}</div></label>;
+  const [debouncedTerm, setDebouncedTerm] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedTerm(term.trim()), 250);
+    return () => clearTimeout(timer);
+  }, [term]);
+  const ready = open && !disabled && debouncedTerm.length >= 3;
+  const result = useQuery({ queryKey: ['quote-select', label, debouncedTerm], queryFn: ({ signal }) => queryFn(debouncedTerm, signal), enabled: ready });
+  return <label className="search-select-label">{label}<div className="search-select"><button type="button" className="search-select-trigger" disabled={disabled} onClick={() => setOpen((current) => !current)}>{selectedLabel || placeholder}<Icon name="chevronDown" size={14} /></button>{open && !disabled && <div className="search-select-menu"><input autoFocus placeholder="Πληκτρολόγησε τουλάχιστον 3 χαρακτήρες…" value={term} onChange={(event) => setTerm(event.target.value)} />{ready && (result.data?.results || []).map((item) => <button type="button" key={item.id} onClick={() => { onSelect(item); setOpen(false); setTerm(''); }}>{item.company || item.full_name || item.name}<small>{item.code || item.city || item.address_line || ''}</small></button>)}{term.trim().length >= 3 && !result.isFetching && !(result.data?.results || []).length && <span className="search-select-empty">Δεν βρέθηκαν αποτελέσματα</span>}{term.trim().length < 3 && <span className="search-select-empty">Γράψε τουλάχιστον 3 χαρακτήρες</span>}</div>}</div></label>;
 }
 
 export default function Quotes() {
@@ -141,8 +145,14 @@ function QuoteEditor({ quoteId, onBack, onSaved }) {
   const [debugInfo, setDebugInfo] = useState(null);
   const pushErp = async () => {
     if (!quoteId) return; setActionBusy(true); setErpError('');
-    try { const response = await api.pushQuoteToErp(quoteId); await quote.refetch(); if (response.debug) setDebugInfo(response.debug); }
-    catch (error) { setErpError(error.message || 'Η αποστολή στο ERP απέτυχε'); if (error.debug) setDebugInfo(error.debug); }
+    try {
+      const response = await api.pushQuoteToErp(quoteId);
+      await quote.refetch();
+      setDebugInfo(response.debug || { response: response.erpResponse });
+    } catch (error) {
+      setErpError(error.message || 'Η αποστολή στο ERP απέτυχε');
+      setDebugInfo(error.debug || (error.erpResponse ? { response: error.erpResponse } : null));
+    }
     finally { setActionBusy(false); }
   };
   const downloadPdf = async () => { if (!quoteId) return; setActionBusy(true); try { await api.downloadQuotePdf(quoteId); } finally { setActionBusy(false); } };
@@ -151,7 +161,7 @@ function QuoteEditor({ quoteId, onBack, onSaved }) {
     <form onSubmit={save} className="quote-editor-grid"><div className="quote-main">
       <section className="quote-card"><div className="quote-card-head"><h3>Στοιχεία προσφοράς</h3><Icon name="file" size={18} /></div><div className="quote-form-grid">
         <label>Σειρά<select value={form.series} onChange={set('series')}><option>7001</option><option>7002</option></select></label><label>Αριθμός<input value={form.quoteNumber} onChange={set('quoteNumber')} placeholder="Αυτόματο" /></label><label>Ημερομηνία<input type="date" value={form.quoteDate} onChange={set('quoteDate')} /></label>
-        <SearchSelect label="Πελάτης" value={form.customerId} selectedLabel={selectedCustomer ? `${selectedCustomer.company || selectedCustomer.full_name || selectedCustomer.name || 'Πελάτης'}${selectedCustomer.code ? ` · ${selectedCustomer.code}` : ''}` : ''} placeholder="Επιλογή πελάτη" onSelect={(customer) => { setSelectedCustomer(customer); setForm((current) => ({ ...current, customerId: customer.id, branchId: '' })); }} queryFn={(term, signal) => api.searchCustomers({ page: 1, limit: 25, q: term, sort: 'name', sortDir: 'ASC' }, { signal })} />
+        <SearchSelect label="Πελάτης" value={form.customerId} selectedLabel={selectedCustomer ? `${selectedCustomer.company || selectedCustomer.full_name || selectedCustomer.name || 'Πελάτης'}${selectedCustomer.code ? ` · ${selectedCustomer.code}` : ''}` : ''} placeholder="Επιλογή πελάτη" onSelect={(customer) => { setSelectedCustomer(customer); setForm((current) => ({ ...current, customerId: customer.id, branchId: '' })); }} queryFn={(term, signal) => api.lookupCustomers({ limit: 10, q: term }, { signal })} />
         <SearchSelect label="Υποκατάστημα" value={form.branchId} selectedLabel={selectedBranch?.name || branches.data?.results?.find((branch) => String(branch.id) === String(form.branchId))?.name} placeholder="Όλα τα υποκαταστήματα" disabled={!form.customerId} onSelect={(branch) => { setSelectedBranch(branch); setForm((current) => ({ ...current, branchId: branch.id })); }} queryFn={(term, signal) => api.branches({ customerId: form.customerId, q: term, limit: 25 }, { signal })} />
         <label>Πωλητής<select value={form.sellerId} onChange={set('sellerId')}><option value="">Επιλογή πωλητή</option>{(meta.data?.employees || []).map((employee) => <option key={employee.id} value={employee.id}>{employee.full_name}</option>)}</select></label>
         <label>Email template<select value={form.emailTemplate} onChange={set('emailTemplate')}><option>SALES - Προσφορά // EVENTS</option></select></label>
@@ -162,6 +172,6 @@ function QuoteEditor({ quoteId, onBack, onSaved }) {
       {quoteId && <div className="quote-email-status"><span className={`status-dot ${current?.erp_push_status === 'sent' ? 'sent' : ''}`} /> {current?.erp_push_status === 'sent' ? `Στάλθηκε στο ERP ${current.erp_pushed_at ? formatDate(current.erp_pushed_at) : ''}${current.erp_id ? ` · ERP ID ${current.erp_id}` : ''}` : current?.erp_push_status === 'failed' ? 'Η αποστολή στο ERP απέτυχε' : 'Δεν έχει σταλεί στο ERP'}</div>}
       {(current?.erp_push_error || erpError) && <div className="quote-error">{erpError || current?.erp_push_error}</div>}
       {quoteId && <div className="quote-actions"><button type="button" className="btn" disabled={actionBusy} onClick={downloadPdf}><Icon name="download" size={15} /> PDF</button>{hasPerm(PERMS.QUOTES_SEND_EMAIL) && <button type="button" className="btn btn-accent" disabled={actionBusy} onClick={sendEmail}><Icon name="message" size={15} /> Αποστολή</button>}{hasPerm(PERMS.QUOTES_SEND_ERP) && <button type="button" className="btn" disabled={actionBusy} onClick={pushErp}><Icon name="send" size={15} /> Αποστολή στο ERP</button>}{hasPerm(PERMS.QUOTES_EDIT) && <select value={current?.status || 'draft'} disabled={actionBusy} onChange={(event) => changeStatus(event.target.value)}><option value="draft">Πρόχειρη</option><option value="ready">Έτοιμη</option><option value="accepted">Αποδεκτή</option><option value="rejected">Απορριφθείσα</option><option value="expired">Έληξε</option><option value="cancelled">Ακυρωμένη</option></select>}</div>}</div></aside></form>
-          <ErpDebugPanel debug={debugInfo} onClose={() => setDebugInfo(null)} />
+          <ErpResponsePanel debug={debugInfo} onClose={() => setDebugInfo(null)} />
         </div>;
       }

@@ -5,6 +5,8 @@ import { buildFilters, resolveSort } from '../lib/customerFilters.js';
 import { authorize } from '../middleware/auth.js';
 import { PERMISSIONS } from '../lib/permissions.js';
 import { normalizeFields } from '../lib/normalize.js';
+import { normalize } from '../lib/normalize.js';
+import { searchClause } from '../lib/search.js';
 import { loadEntityCustomFields, saveEntityCustomFields } from '../lib/customFields.js';
 import { logActivity } from '../lib/activity.js';
 import { parseJson } from '../lib/masterData.js';
@@ -43,6 +45,29 @@ customersRouter.param('id', async (req, res, next, id) => {
     const { rows } = await query('SELECT id FROM customers WHERE id = ? AND tenant_id = ?', [cid, req.user.tenantId]);
     if (!rows.length) return res.status(404).json({ error: 'Customer not found' });
     next();
+  } catch (err) { next(err); }
+});
+
+// GET /api/customers/lookup — lean, type-ahead lookup for selectors. Unlike
+// the directory search, it does not aggregate custom fields or count every
+// matching customer, which keeps quote/customer pickers responsive at scale.
+customersRouter.get('/lookup', async (req, res, next) => {
+  try {
+    const term = String(req.query.q || '').trim();
+    if (term.length < 3) return res.json({ results: [] });
+    const limit = clampLimit(req.query.limit, 10, 25);
+    const normalized = normalize(term);
+    const search = searchClause(normalized, 'c.search_norm');
+    if (!search) return res.json({ results: [] });
+    const { rows } = await query(
+      `SELECT c.id, c.code, c.full_name, c.company, c.city, c.email, c.phone, c.mobile, c.tax_id
+       FROM customers c
+       WHERE c.tenant_id = ? AND ${search.clause}
+       ORDER BY c.full_name ASC, c.id ASC
+       LIMIT ${limit}`,
+      [req.user.tenantId, ...search.params],
+    );
+    res.json({ results: rows });
   } catch (err) { next(err); }
 });
 

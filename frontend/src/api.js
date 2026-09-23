@@ -19,6 +19,7 @@ async function handle(res) {
     const body = await res.json().catch(() => ({}));
     const err = new Error(body.detail ? `${body.error || 'Request failed'}: ${body.detail}` : (body.error || `Request failed: ${res.status}`));
     if (body.debug) err.debug = body.debug;
+    if (body.erpResponse) err.erpResponse = body.erpResponse;
     throw err;
   }
   return res.json();
@@ -170,6 +171,7 @@ export const api = {
   deleteBooking: (id) => send('DELETE', `/bookings/${id}`),
   customerFollowUps: (id, opts) => get(`/customers/${id}/follow-ups`, opts),
   searchCustomers: (params, opts) => get(`/customers/search${qs(params)}`, opts),
+  lookupCustomers: (params, opts) => get(`/customers/lookup${qs(params)}`, opts),
   customerViews: (opts) => get('/customer-views', opts),
   createCustomerView: (payload) => send('POST', '/customer-views', payload),
   updateCustomerView: (id, payload) => send('PATCH', `/customer-views/${id}`, payload),

@@ -334,16 +334,17 @@ quotesRouter.post('/:id/send', authorize(PERMISSIONS.QUOTES_SEND_EMAIL), async (
 // quote_push_api.body_template — mirrors ENTITY_TEMPLATE_FIELDS in pushSync.js
 // but for the quotes/quote_lines domain.
 function quotePushData(quote) {
+  const dateOnly = (value) => value ? String(value).slice(0, 10) : null;
   return {
     quoteId: quote.id, series: quote.series, quoteNumber: quote.quote_number,
-    quoteDate: quote.quote_date ? String(quote.quote_date).slice(0, 10) : null,
-    validUntil: quote.valid_until ? String(quote.valid_until).slice(0, 10) : null,
+    quoteDate: dateOnly(quote.quote_date),
+    validUntil: dateOnly(quote.valid_until),
     status: quote.status,
     customerId: quote.customer_id, customerErpId: quote.customer_erp_id || null,
     customerName: quote.customer_name, customerCompany: quote.company,
     branchId: quote.branch_id || null, branchErpId: quote.branch_erp_id || null, branchName: quote.branch_name || null,
     sellerId: quote.seller_erp_id || quote.seller_id || null,
-    paymentTerms: quote.payment_terms, paymentDueDate: quote.payment_due_date ? String(quote.payment_due_date).slice(0, 10) : null,
+    paymentTerms: quote.payment_terms, paymentDueDate: dateOnly(quote.payment_due_date),
     referenceStartYear: quote.reference_start_year || null, referenceEndYear: quote.reference_end_year || null,
     subtotal: Number(quote.subtotal || 0), taxTotal: Number(quote.tax_total || 0), total: Number(quote.total || 0),
     lines: (quote.lines || []).map((line) => ({
@@ -396,10 +397,11 @@ quotesRouter.post('/:id/push-erp', authorize(PERMISSIONS.QUOTES_SEND_ERP), async
     }
     const { response, rawBody, requestSnapshot } = call;
     const raw = rawBody.toString('utf8');
-    const debugPayload = () => (config.debug ? { debug: { request: requestSnapshot, response: responseSnapshot(response, rawBody) } } : {});
+    const erpResponse = responseSnapshot(response, rawBody);
+    const debugPayload = () => (config.debug ? { debug: { request: requestSnapshot, response: erpResponse } } : {});
     if (!response.ok) {
       await query('UPDATE quotes SET erp_push_status = ?, erp_push_error = ? WHERE id = ? AND tenant_id = ?', ['failed', `HTTP ${response.status}: ${raw.slice(0, 500)}`, id, req.user.tenantId]);
-      return res.status(502).json({ error: `Το ERP API επέστρεψε HTTP ${response.status}`, detail: raw.slice(0, 500), ...debugPayload() });
+      return res.status(502).json({ error: `Το ERP API επέστρεψε HTTP ${response.status}`, detail: raw.slice(0, 500), erpResponse, ...debugPayload() });
     }
     let erpId = null;
     try {
@@ -415,6 +417,6 @@ quotesRouter.post('/:id/push-erp', authorize(PERMISSIONS.QUOTES_SEND_ERP), async
       summary: `Αποστολή προσφοράς ${quote.series}-${quote.quote_number} στο ERP`,
       details: { erp_id: erpId },
     });
-    res.json({ id, erp_id: erpId, status: 'sent', ...debugPayload() });
+    res.json({ id, erp_id: erpId, status: 'sent', erpResponse, ...debugPayload() });
   } catch (err) { next(err); }
 });
