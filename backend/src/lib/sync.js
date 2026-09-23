@@ -82,6 +82,7 @@ const ENTITY_FIELDS = {
   branches: ['customer_id', 'customer_erp_id', 'code', 'name', 'address_line', 'city', 'phone', 'status'],
   spaces: ['customer_id', 'branch_id', 'branch_erp_id', 'code', 'name', 'space_type', 'status'],
 };
+const IMPORT_BATCH_SIZE = 500;
 
 function searchNorm(table, data) {
   if (table === 'customers') {
@@ -231,26 +232,111 @@ async function upsert(conn, table, tenantId, data) {
   return (await findByErpId(conn, table, tenantId, erpId, parentErpId))?.id;
 }
 
-async function resolveCustomer(conn, tenantId, current, data) {
-  const erpId = data.customer_erp_id || data.customer_id;
-  const customerId = current.get(String(erpId)) || (await findByErpId(conn, 'customers', tenantId, erpId))?.id;
-  if (!customerId) throw new Error(`Branch ${data.erp_id} references unknown customer ${erpId}`);
-  return customerId;
+function entityKey(table, data) {
+  const parentErpId = table === 'branches' ? data.customer_erp_id
+    : table === 'spaces' ? data.branch_erp_id : null;
+  return parentErpId == null
+    ? String(data.erp_id)
+    : `${parentErpId}\u0000${data.erp_id}`;
 }
 
-async function resolveBranch(conn, tenantId, current, data) {
-  const erpId = data.branch_erp_id || data.branch_id;
-  const [branchRows] = await conn.query(
-    'SELECT id, customer_id, erp_id FROM branches WHERE tenant_id = ? AND erp_id = ? LIMIT 1',
-    [tenantId, erpId],
+function entityDefaults(table, tenantId, data, searchNormValue) {
+  if (table === 'branches') {
+    return [
+      tenantId, data.customer_id, data.customer_erp_id, data.erp_id,
+      data.code || `ERP-${tenantId}-${data.erp_id}`, data.name || data.erp_id,
+      data.address_line, data.city, data.phone, data.status || 'active', searchNormValue,
+    ];
+  }
+  return [
+    tenantId, data.customer_id, data.branch_id, data.branch_erp_id, data.erp_id,
+    data.code || `ERP-${tenantId}-${data.erp_id}`, data.name || data.erp_id,
+    data.space_type, data.status || 'available', searchNormValue,
+  ];
+}
+
+async function loadEntityIndex(conn, table, tenantId) {
+  const columns = table === 'branches'
+    ? 'id, customer_id, customer_erp_id, erp_id, code, name, address_line, city, phone, status'
+    : 'id, customer_id, branch_id, branch_erp_id, erp_id, code, name, space_type, status';
+  const [rows] = await conn.query(
+    `SELECT ${columns} FROM ${table} WHERE tenant_id = ? AND erp_id IS NOT NULL`,
+    [tenantId],
   );
-  const branchId = current.get(String(erpId)) || branchRows[0]?.id;
-  if (!branchId) throw new Error(`Space ${data.erp_id} references unknown branch ${erpId}`);
-  const rows = branchRows.length
-    ? branchRows
-    : (await conn.query('SELECT customer_id, erp_id FROM branches WHERE id = ? AND tenant_id = ?', [branchId, tenantId]))[0];
-  if (!rows.length) throw new Error(`Space ${data.erp_id} references an invalid branch`);
-  return { branchId, customerId: rows[0].customer_id, branchErpId: rows[0].erp_id };
+  return new Map(rows.map((row) => [entityKey(table, row), row]));
+}
+
+async function loadCustomerIndex(conn, tenantId) {
+  const [rows] = await conn.query(
+    'SELECT id, erp_id FROM customers WHERE tenant_id = ? AND erp_id IS NOT NULL',
+    [tenantId],
+  );
+  return new Map(rows.map((row) => [String(row.erp_id), row.id]));
+}
+
+function batches(records) {
+  const result = [];
+  for (let i = 0; i < records.length; i += IMPORT_BATCH_SIZE) result.push(records.slice(i, i + IMPORT_BATCH_SIZE));
+  return result;
+}
+
+async function insertEntities(conn, table, tenantId, records) {
+  if (!records.length) return;
+  const columns = table === 'branches'
+    ? 'tenant_id, customer_id, customer_erp_id, erp_id, code, name, address_line, city, phone, status, search_norm'
+    : 'tenant_id, customer_id, branch_id, branch_erp_id, erp_id, code, name, space_type, status, search_norm';
+  for (const batch of batches(records)) {
+    await conn.query(
+      `INSERT INTO ${table} (${columns}) VALUES ?`,
+      [batch.map(({ data, normalized }) => entityDefaults(table, tenantId, data, normalized))],
+    );
+  }
+}
+
+async function updateEntities(conn, table, tenantId, records) {
+  if (!records.length) return;
+  const fields = ENTITY_FIELDS[table];
+  for (const batch of batches(records)) {
+    const sets = [];
+    const params = [];
+    for (const field of fields) {
+      const changed = batch.filter(({ data }) => data[field] !== undefined);
+      if (!changed.length) continue;
+      sets.push(`${field} = CASE id ${changed.map(() => 'WHEN ? THEN ?').join(' ')} ELSE ${field} END`);
+      for (const record of changed) params.push(record.existing.id, record.data[field]);
+    }
+    sets.push(`search_norm = CASE id ${batch.map(() => 'WHEN ? THEN ?').join(' ')} ELSE search_norm END`);
+    for (const record of batch) params.push(record.existing.id, record.normalized);
+    params.push(tenantId, ...batch.map(({ existing }) => existing.id));
+    await conn.query(
+      `UPDATE ${table} SET ${sets.join(', ')} WHERE tenant_id = ? AND id IN (?)`,
+      params,
+    );
+  }
+}
+
+async function bulkUpsertEntities(conn, table, tenantId, records, existingByKey) {
+  const preparedByKey = new Map();
+  for (const { raw, data } of records) {
+    data.erp_id = String(data.erp_id || '').trim();
+    if (!data.erp_id) throw new Error(`${table}.erp_id is empty`);
+    const parentErpId = table === 'branches' ? data.customer_erp_id : data.branch_erp_id;
+    if (!String(parentErpId || '').trim()) {
+      throw new Error(`${table}.${table === 'branches' ? 'customer_erp_id' : 'branch_erp_id'} is empty`);
+    }
+    const key = entityKey(table, data);
+    const existing = existingByKey.get(entityKey(table, data));
+    preparedByKey.set(key, {
+      raw,
+      data,
+      existing,
+      normalized: searchNorm(table, { ...existing, ...data }),
+    });
+  }
+  const prepared = [...preparedByKey.values()];
+  await insertEntities(conn, table, tenantId, prepared.filter(({ existing }) => !existing));
+  await updateEntities(conn, table, tenantId, prepared.filter(({ existing }) => existing));
+  return prepared;
 }
 
 export async function runSync(tenantId, connectorId) {
@@ -307,23 +393,49 @@ export async function runSync(tenantId, connectorId) {
           customers.set(String(data.erp_id), id);
           upserted += 1;
         }
-        for (const raw of entities.branches) {
-          const data = mapEntityRecord('branches', raw, mappings.branches);
-          data.customer_id = await resolveCustomer(conn, tenantId, customers, data);
-          const id = await upsert(conn, 'branches', tenantId, data);
-          await saveMappedCustomFields(conn, 'branches', id, mapCustomFields(raw, mappings.branches, customDefinitions.branches));
-          branches.set(String(data.erp_id), id);
-          upserted += 1;
+        if (entities.branches.length) {
+          const customerIndex = await loadCustomerIndex(conn, tenantId);
+          const branchRecords = entities.branches.map((raw) => {
+            const data = mapEntityRecord('branches', raw, mappings.branches);
+            const customerErpId = String(data.customer_erp_id || data.customer_id || '').trim();
+            const customerId = customers.get(customerErpId) || customerIndex.get(customerErpId);
+            if (!customerId) throw new Error(`Branch ${data.erp_id} references unknown customer ${customerErpId}`);
+            data.customer_id = customerId;
+            data.customer_erp_id = customerErpId;
+            return { raw, data };
+          });
+          await bulkUpsertEntities(conn, 'branches', tenantId, branchRecords, await loadEntityIndex(conn, 'branches', tenantId));
+          const branchIndex = await loadEntityIndex(conn, 'branches', tenantId);
+          for (const { raw, data } of branchRecords) {
+            const id = branchIndex.get(entityKey('branches', data))?.id;
+            await saveMappedCustomFields(conn, 'branches', id, mapCustomFields(raw, mappings.branches, customDefinitions.branches));
+            branches.set(String(data.erp_id), id);
+          }
+          upserted += branchRecords.length;
         }
-        for (const raw of entities.spaces) {
-          const data = mapEntityRecord('spaces', raw, mappings.spaces);
-          const parent = await resolveBranch(conn, tenantId, branches, data);
-          data.branch_id = parent.branchId;
-          data.customer_id = parent.customerId;
-          data.branch_erp_id = data.branch_erp_id || parent.branchErpId;
-          const id = await upsert(conn, 'spaces', tenantId, data);
-          await saveMappedCustomFields(conn, 'spaces', id, mapCustomFields(raw, mappings.spaces, customDefinitions.spaces));
-          upserted += 1;
+        if (entities.spaces.length) {
+          const branchIndex = await loadEntityIndex(conn, 'branches', tenantId);
+          const branchesByErpId = new Map();
+          for (const branch of branchIndex.values()) {
+            if (!branchesByErpId.has(String(branch.erp_id))) branchesByErpId.set(String(branch.erp_id), branch);
+          }
+          const spaceRecords = entities.spaces.map((raw) => {
+            const data = mapEntityRecord('spaces', raw, mappings.spaces);
+            const branchErpId = String(data.branch_erp_id || data.branch_id || '').trim();
+            const branch = branchesByErpId.get(branchErpId);
+            if (!branch) throw new Error(`Space ${data.erp_id} references unknown branch ${branchErpId}`);
+            data.branch_id = branch.id;
+            data.customer_id = branch.customer_id;
+            data.branch_erp_id = branchErpId;
+            return { raw, data };
+          });
+          await bulkUpsertEntities(conn, 'spaces', tenantId, spaceRecords, await loadEntityIndex(conn, 'spaces', tenantId));
+          const spaceIndex = await loadEntityIndex(conn, 'spaces', tenantId);
+          for (const { raw, data } of spaceRecords) {
+            const id = spaceIndex.get(entityKey('spaces', data))?.id;
+            await saveMappedCustomFields(conn, 'spaces', id, mapCustomFields(raw, mappings.spaces, customDefinitions.spaces));
+          }
+          upserted += spaceRecords.length;
         }
         await conn.commit();
       } catch (error) {
