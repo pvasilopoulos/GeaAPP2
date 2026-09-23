@@ -334,7 +334,15 @@ quotesRouter.post('/:id/send', authorize(PERMISSIONS.QUOTES_SEND_EMAIL), async (
 // quote_push_api.body_template — mirrors ENTITY_TEMPLATE_FIELDS in pushSync.js
 // but for the quotes/quote_lines domain.
 function quotePushData(quote) {
-  const dateOnly = (value) => value ? String(value).slice(0, 10) : null;
+  const dateOnly = (value) => {
+    if (!value) return null;
+    const text = String(value);
+    if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10);
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    const pad = (part) => String(part).padStart(2, '0');
+    return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
+  };
   return {
     quoteId: quote.id, series: quote.series, quoteNumber: quote.quote_number,
     quoteDate: dateOnly(quote.quote_date),
