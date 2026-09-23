@@ -14,6 +14,7 @@ function sellerPayload(body = {}) {
   return {
     firstName,
     lastName,
+    erpId: body.erpId ? String(body.erpId).trim() : null,
     email: body.email ? String(body.email).trim().toLowerCase() : null,
     role: body.role ? String(body.role).trim() : 'Πωλητής',
     avatarUrl: body.avatarUrl ? String(body.avatarUrl).trim() : null,
@@ -23,7 +24,7 @@ function sellerPayload(body = {}) {
 sellersRouter.get('/', manageSellers, async (req, res, next) => {
   try {
     const { rows } = await query(
-      'SELECT id, first_name, last_name, full_name, email, role, avatar_url FROM employees WHERE tenant_id = ? ORDER BY full_name',
+      'SELECT id, first_name, last_name, full_name, erp_id, email, role, avatar_url FROM employees WHERE tenant_id = ? ORDER BY full_name',
       [req.user.tenantId],
     );
     res.json({ sellers: rows });
@@ -34,8 +35,8 @@ sellersRouter.post('/', manageSellers, async (req, res, next) => {
   try {
     const seller = sellerPayload(req.body);
     const result = await query(
-      'INSERT INTO employees (tenant_id, first_name, last_name, email, role, avatar_url) VALUES (?, ?, ?, ?, ?, ?)',
-      [req.user.tenantId, seller.firstName, seller.lastName, seller.email, seller.role, seller.avatarUrl],
+      'INSERT INTO employees (tenant_id, first_name, last_name, erp_id, email, role, avatar_url) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [req.user.tenantId, seller.firstName, seller.lastName, seller.erpId, seller.email, seller.role, seller.avatarUrl],
     );
     await logAuditFromReq(query, req, {
       action: 'create', entityType: 'seller', entityId: result.rows.insertId,
@@ -55,8 +56,8 @@ sellersRouter.patch('/:id', manageSellers, async (req, res, next) => {
     if (!rows.length) return res.status(404).json({ error: 'Ο πωλητής δεν βρέθηκε' });
     const seller = sellerPayload(req.body);
     await query(
-      'UPDATE employees SET first_name = ?, last_name = ?, email = ?, role = ?, avatar_url = ? WHERE id = ? AND tenant_id = ?',
-      [seller.firstName, seller.lastName, seller.email, seller.role, seller.avatarUrl, id, req.user.tenantId],
+      'UPDATE employees SET first_name = ?, last_name = ?, erp_id = ?, email = ?, role = ?, avatar_url = ? WHERE id = ? AND tenant_id = ?',
+      [seller.firstName, seller.lastName, seller.erpId, seller.email, seller.role, seller.avatarUrl, id, req.user.tenantId],
     );
     await logAuditFromReq(query, req, {
       action: 'update', entityType: 'seller', entityId: id,

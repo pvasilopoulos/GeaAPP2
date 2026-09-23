@@ -24,6 +24,15 @@ const FONT_BOLD = path.resolve(__dirname, '../../assets/fonts/DejaVuSans-Bold.tt
 export const quotesRouter = Router();
 quotesRouter.use(authorize(PERMISSIONS.QUOTES_VIEW));
 
+async function erpSellerId(tenantId, sellerId) {
+  if (!sellerId) return null;
+  const { rows } = await query(
+    'SELECT erp_id FROM employees WHERE id = ? AND tenant_id = ?',
+    [sellerId, tenantId],
+  );
+  return rows[0]?.erp_id || sellerId;
+}
+
 function totals(lines = []) {
   return lines.reduce((result, line) => {
     const net = Number(line.quantity || 0) * Number(line.unit_price || 0) * (1 - Number(line.discount_percent || 0) / 100);
@@ -98,7 +107,7 @@ quotesRouter.post('/resolve-lines', authorize(PERMISSIONS.QUOTES_FETCH_LINES), a
       branchId: branchId || null, branchErpId: branch?.erp_id || null, branchCode: branch?.code || null,
       branchName: branch?.name || null, branchCity: branch?.city || null, branchAddress: branch?.address_line || null,
       series: series || null, quoteNumber: quoteNumber || null, quoteDate: quoteDate || null, validUntil: validUntil || null,
-      paymentTerms: paymentTerms || null, sellerId: sellerId || null,
+      paymentTerms: paymentTerms || null, sellerId: await erpSellerId(req.user.tenantId, sellerId),
       referenceStartYear: referenceStartYear || null, referenceEndYear: referenceEndYear || null, paymentDueDate: paymentDueDate || null,
     };
     let rendered;
@@ -255,8 +264,9 @@ function quoteEmailBody(quote, lines, customBody) {
 async function loadQuote(id, tenantId) {
   const quote = (await query(
     `SELECT q.*, c.full_name AS customer_name, c.company, c.email AS customer_email, c.erp_id AS customer_erp_id,
-            b.name AS branch_name, b.erp_id AS branch_erp_id
-     FROM quotes q JOIN customers c ON c.id = q.customer_id LEFT JOIN branches b ON b.id = q.branch_id
+            b.name AS branch_name, b.erp_id AS branch_erp_id, e.erp_id AS seller_erp_id
+     FROM quotes q JOIN customers c ON c.id = q.customer_id
+     LEFT JOIN branches b ON b.id = q.branch_id LEFT JOIN employees e ON e.id = q.seller_id
      WHERE q.id = ? AND q.tenant_id = ?`, [id, tenantId])).rows[0];
   if (quote) quote.lines = (await query('SELECT * FROM quote_lines WHERE quote_id = ? ORDER BY line_order, id', [id])).rows;
   return quote;
@@ -332,7 +342,7 @@ function quotePushData(quote) {
     customerId: quote.customer_id, customerErpId: quote.customer_erp_id || null,
     customerName: quote.customer_name, customerCompany: quote.company,
     branchId: quote.branch_id || null, branchErpId: quote.branch_erp_id || null, branchName: quote.branch_name || null,
-    sellerId: quote.seller_id || null,
+    sellerId: quote.seller_erp_id || quote.seller_id || null,
     paymentTerms: quote.payment_terms, paymentDueDate: quote.payment_due_date ? String(quote.payment_due_date).slice(0, 10) : null,
     referenceStartYear: quote.reference_start_year || null, referenceEndYear: quote.reference_end_year || null,
     subtotal: Number(quote.subtotal || 0), taxTotal: Number(quote.tax_total || 0), total: Number(quote.total || 0),

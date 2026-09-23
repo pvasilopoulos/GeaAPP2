@@ -175,10 +175,12 @@ CREATE TABLE employees (
   first_name VARCHAR(120) NOT NULL,
   last_name  VARCHAR(120) NOT NULL,
   full_name  VARCHAR(255) GENERATED ALWAYS AS (CONCAT(first_name, ' ', last_name)) STORED,
+  erp_id     VARCHAR(160) NULL,
   email      VARCHAR(255),
   role       VARCHAR(120),
   avatar_url VARCHAR(512),
   KEY idx_employees_tenant (tenant_id),
+  KEY idx_employees_tenant_erp (tenant_id, erp_id),
   CONSTRAINT fk_employees_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

@@ -70,6 +70,8 @@ export async function ensureSchema() {
   await addColumn('tenants', 'settings', "JSON NULL");
   await addColumn('tenants', 'updated_at', 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP');
   await addColumn('users', 'is_platform_admin', 'TINYINT(1) NOT NULL DEFAULT 0');
+  await addColumn('employees', 'erp_id', 'VARCHAR(160) NULL');
+  await addIndex('employees', 'idx_employees_tenant_erp', 'tenant_id, erp_id');
   // Personal nav-menu override (sidebar/mobile-footer order & visibility).
   // NULL means the user has no personal preference and falls back to the
   // tenant-wide default menu configuration.

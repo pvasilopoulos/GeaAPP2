@@ -29,7 +29,7 @@ export default function SellersPanel() {
                 <div className="avatar" style={{ width: 40, height: 40 }}>{seller.full_name.slice(0, 1)}</div>
                 <div className="people-id">
                   <div className="nm">{seller.full_name}</div>
-                  <div className="sub">{[seller.role, seller.email].filter(Boolean).join(' · ') || 'Πωλητής'}</div>
+                  <div className="sub">{[seller.role, seller.erp_id ? `ERP ID: ${seller.erp_id}` : null, seller.email].filter(Boolean).join(' · ') || 'Πωλητής'}</div>
                 </div>
                 <div className="people-actions">
                   <button className="btn btn-sm btn-ghost btn-icon" title="Επεξεργασία" onClick={() => setEditing({ seller })}><Icon name="edit" size={15} /></button>
@@ -47,7 +47,7 @@ export default function SellersPanel() {
 function SellerDrawer({ seller, onClose, onSaved }) {
   const [form, setForm] = useState({
     firstName: seller?.first_name || '', lastName: seller?.last_name || '',
-    email: seller?.email || '', role: seller?.role || 'Πωλητής', avatarUrl: seller?.avatar_url || '',
+    erpId: seller?.erp_id || '', email: seller?.email || '', role: seller?.role || 'Πωλητής', avatarUrl: seller?.avatar_url || '',
   });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -68,6 +68,7 @@ function SellerDrawer({ seller, onClose, onSaved }) {
           <div className="field-group" style={{ flex: 1 }}><label>Όνομα</label><input style={inp} value={form.firstName} onChange={set('firstName')} required /></div>
           <div className="field-group" style={{ flex: 1 }}><label>Επώνυμο</label><input style={inp} value={form.lastName} onChange={set('lastName')} required /></div>
         </div>
+        <div className="field-group"><label>ERP ID</label><input style={inp} value={form.erpId} onChange={set('erpId')} placeholder="ID πωλητή στο ERP" /></div>
         <div className="field-group"><label>Email</label><input style={inp} type="email" value={form.email} onChange={set('email')} /></div>
         <div className="field-group"><label>Ρόλος / τίτλος</label><input style={inp} value={form.role} onChange={set('role')} placeholder="π.χ. Πωλητής" /></div>
         <div className="field-group"><label>URL φωτογραφίας (προαιρετικό)</label><input style={inp} value={form.avatarUrl} onChange={set('avatarUrl')} /></div>
