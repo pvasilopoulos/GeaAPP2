@@ -60,7 +60,7 @@ function QuoteLineMetadata({ metadata }) {
   </div>;
 }
 
-function SearchSelect({ label, value, selectedLabel, disabled, onSelect, queryFn, placeholder }) {
+function SearchSelect({ label, value, selectedLabel, disabled, onSelect, queryFn, placeholder, initialItems = [], initialLoading = false, queryKey }) {
   const [open, setOpen] = useState(false);
   const [term, setTerm] = useState('');
   const [debouncedTerm, setDebouncedTerm] = useState('');
@@ -68,9 +68,11 @@ function SearchSelect({ label, value, selectedLabel, disabled, onSelect, queryFn
     const timer = setTimeout(() => setDebouncedTerm(term.trim()), 250);
     return () => clearTimeout(timer);
   }, [term]);
-  const ready = open && !disabled && debouncedTerm.length >= 3;
-  const result = useQuery({ queryKey: ['quote-select', label, debouncedTerm], queryFn: ({ signal }) => queryFn(debouncedTerm, signal), enabled: ready });
-  return <label className="search-select-label">{label}<div className="search-select"><button type="button" className="search-select-trigger" disabled={disabled} onClick={() => setOpen((current) => !current)}>{selectedLabel || placeholder}<Icon name="chevronDown" size={14} /></button>{open && !disabled && <div className="search-select-menu"><input autoFocus placeholder="Πληκτρολόγησε τουλάχιστον 3 χαρακτήρες…" value={term} onChange={(event) => setTerm(event.target.value)} />{ready && (result.data?.results || []).map((item) => <button type="button" key={item.id} onClick={() => { onSelect(item); setOpen(false); setTerm(''); }}>{item.company || item.full_name || item.name}<small>{item.code || item.city || item.address_line || ''}</small></button>)}{term.trim().length >= 3 && !result.isFetching && !(result.data?.results || []).length && <span className="search-select-empty">Δεν βρέθηκαν αποτελέσματα</span>}{term.trim().length < 3 && <span className="search-select-empty">Γράψε τουλάχιστον 3 χαρακτήρες</span>}</div>}</div></label>;
+  const hasSearchTerm = debouncedTerm.length >= 3;
+  const ready = open && !disabled && hasSearchTerm;
+  const result = useQuery({ queryKey: ['quote-select', label, queryKey, debouncedTerm], queryFn: ({ signal }) => queryFn(debouncedTerm, signal), enabled: ready });
+  const items = hasSearchTerm ? (result.data?.results || []) : initialItems;
+  return <label className="search-select-label">{label}<div className="search-select"><button type="button" className="search-select-trigger" disabled={disabled} onClick={() => setOpen((current) => !current)}>{selectedLabel || placeholder}<Icon name="chevronDown" size={14} /></button>{open && !disabled && <div className="search-select-menu"><input autoFocus placeholder={initialItems.length ? 'Αναζήτηση υποκαταστήματος…' : 'Πληκτρολόγησε τουλάχιστον 3 χαρακτήρες…'} value={term} onChange={(event) => setTerm(event.target.value)} />{items.map((item) => <button type="button" key={item.id} onClick={() => { onSelect(item); setOpen(false); setTerm(''); }}>{item.company || item.full_name || item.name}<small>{item.code || item.city || item.address_line || ''}</small></button>)}{!hasSearchTerm && initialLoading && <span className="search-select-empty">Φόρτωση υποκαταστημάτων…</span>}{hasSearchTerm && !result.isFetching && !items.length && <span className="search-select-empty">Δεν βρέθηκαν αποτελέσματα</span>}{!hasSearchTerm && !initialLoading && !initialItems.length && <span className="search-select-empty">Γράψε τουλάχιστον 3 χαρακτήρες</span>}</div>}</div></label>;
 }
 
 export default function Quotes() {
@@ -95,7 +97,7 @@ function QuoteEditor({ quoteId, onBack, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const hasPerm = useAuth((state) => state.hasPerm);
-  const branches = useQuery({ queryKey: ['quote-branches', form.customerId], queryFn: ({ signal }) => api.branches({ customerId: form.customerId, limit: 100 }, { signal }), enabled: !!form.customerId });
+  const branches = useQuery({ queryKey: ['quote-branches', form.customerId], queryFn: ({ signal }) => api.customerBranches(form.customerId, { signal }), enabled: !!form.customerId });
   const meta = useQuery({ queryKey: ['meta'], queryFn: ({ signal }) => api.meta({ signal }) });
   const quote = useQuery({ queryKey: ['quote', quoteId], queryFn: ({ signal }) => api.quote(quoteId, { signal }), enabled: !!quoteId });
   useEffect(() => {
@@ -176,7 +178,7 @@ function QuoteEditor({ quoteId, onBack, onSaved }) {
       <section className="quote-card"><div className="quote-card-head"><h3>Στοιχεία προσφοράς</h3><Icon name="file" size={18} /></div><div className="quote-form-grid">
         <label>Σειρά<select value={form.series} onChange={set('series')}><option>7001</option><option>7002</option></select></label><label>Αριθμός<input value={form.quoteNumber} onChange={set('quoteNumber')} placeholder="Αυτόματο" /></label><label>Ημερομηνία<input type="date" value={form.quoteDate} onChange={set('quoteDate')} /></label>
         <SearchSelect label="Πελάτης" value={form.customerId} selectedLabel={selectedCustomer ? `${selectedCustomer.company || selectedCustomer.full_name || selectedCustomer.name || 'Πελάτης'}${selectedCustomer.code ? ` · ${selectedCustomer.code}` : ''}` : ''} placeholder="Επιλογή πελάτη" onSelect={(customer) => { setSelectedCustomer(customer); setForm((current) => ({ ...current, customerId: customer.id, branchId: '' })); }} queryFn={(term, signal) => api.lookupCustomers({ limit: 10, q: term }, { signal })} />
-        <SearchSelect label="Υποκατάστημα" value={form.branchId} selectedLabel={selectedBranch?.name || branches.data?.results?.find((branch) => String(branch.id) === String(form.branchId))?.name} placeholder="Όλα τα υποκαταστήματα" disabled={!form.customerId} onSelect={(branch) => { setSelectedBranch(branch); setForm((current) => ({ ...current, branchId: branch.id })); }} queryFn={(term, signal) => api.branches({ customerId: form.customerId, q: term, limit: 25 }, { signal })} />
+        <SearchSelect label="Υποκατάστημα" value={form.branchId} selectedLabel={selectedBranch?.name || branches.data?.branches?.find((branch) => String(branch.id) === String(form.branchId))?.name} placeholder="Όλα τα υποκαταστήματα" disabled={!form.customerId} initialItems={branches.data?.branches || []} initialLoading={branches.isLoading} queryKey={form.customerId} onSelect={(branch) => { setSelectedBranch(branch); setForm((current) => ({ ...current, branchId: branch.id })); }} queryFn={(term, signal) => api.branches({ customerId: form.customerId, q: term, limit: 25 }, { signal })} />
         <label>Πωλητής<select value={form.sellerId} onChange={set('sellerId')}><option value="">Επιλογή πωλητή</option>{(meta.data?.employees || []).map((employee) => <option key={employee.id} value={employee.id}>{employee.full_name}</option>)}</select></label>
         <label>Email template<select value={form.emailTemplate} onChange={set('emailTemplate')}><option>SALES - Προσφορά // EVENTS</option></select></label>
       </div></section>
