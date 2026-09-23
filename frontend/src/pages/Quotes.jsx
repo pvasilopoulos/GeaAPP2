@@ -13,11 +13,20 @@ const initial = { series: '7001', quoteNumber: '', quoteDate: today, customerId:
 // the request is included only when the ERP debug setting is enabled.
 function ErpResponsePanel({ debug, onClose }) {
   if (!debug?.response) return null;
+  let responseBody = debug.response.body;
+  let isSuccess = false;
+  try {
+    const parsed = JSON.parse(responseBody);
+    isSuccess = parsed?.success === true || parsed?.sucess === true;
+    if (isSuccess) responseBody = JSON.stringify(parsed, null, 2);
+  } catch { /* Non-JSON ERP responses retain the full diagnostic view. */ }
   return <div className="erp-debug-overlay" role="dialog" aria-label="ERP request/response debug">
     <div className="erp-debug-panel">
-      <div className="erp-debug-head"><h4><Icon name="bell" size={16} /> Απάντηση ERP</h4><button type="button" className="btn btn-icon btn-sm" onClick={onClose}><Icon name="x" size={14} /></button></div>
-      {debug.request && <div className="erp-debug-block"><h5>Αίτημα (debug)</h5><pre className="settings-control settings-code">{JSON.stringify(debug.request, null, 2)}</pre></div>}
-      {debug.response && <div className="erp-debug-block"><h5>Απάντηση (HTTP {debug.response.status})</h5><pre className="settings-control settings-code">{JSON.stringify(debug.response, null, 2)}</pre></div>}
+      <div className="erp-debug-head"><h4><Icon name="bell" size={16} /> {isSuccess ? 'Επιτυχής απάντηση ERP' : 'Απάντηση ERP'}</h4><button type="button" className="btn btn-icon btn-sm" onClick={onClose}><Icon name="x" size={14} /></button></div>
+      {isSuccess ? <div className="erp-debug-block"><pre className="settings-control settings-code">{responseBody}</pre></div> : <>
+        {debug.request && <div className="erp-debug-block"><h5>Αίτημα (debug)</h5><pre className="settings-control settings-code">{JSON.stringify(debug.request, null, 2)}</pre></div>}
+        <div className="erp-debug-block"><h5>Απάντηση (HTTP {debug.response.status})</h5><pre className="settings-control settings-code">{JSON.stringify(debug.response, null, 2)}</pre></div>
+      </>}
     </div>
   </div>;
 }
