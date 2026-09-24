@@ -144,6 +144,7 @@ export const DEFAULT_TENANT_SETTINGS = {
 };
 
 export const DEFAULT_PLATFORM_SETTINGS = {
+  app_name: 'SpaceHub',
   allow_self_register: true,
   min_password_length: 6,
 };

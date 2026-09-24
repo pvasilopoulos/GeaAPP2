@@ -15,6 +15,7 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const appName = pub.data?.app_name?.trim() || DEFAULT_APP_NAME;
 
   const submit = async (e) => {
     e.preventDefault();
@@ -28,7 +29,7 @@ export default function Login() {
     <div className="auth-wrap">
       <div className="auth-card">
         <InstallAppBanner compact />
-        <div className="auth-brand"><span className="logo"><Icon name="layers" size={19} /></span> {DEFAULT_APP_NAME}</div>
+        <div className="auth-brand"><span className="logo"><Icon name="layers" size={19} /></span> {appName}</div>
         <div className="auth-sub">Σύνδεση στο λογαριασμό σας</div>
         {error && <div className="auth-error">{error}</div>}
         <form onSubmit={submit}>

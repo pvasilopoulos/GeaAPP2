@@ -53,6 +53,10 @@ export default function SecurityPanel() {
             {err && <div className="auth-error">{err}</div>}
             {msg && <div className="voice-msg ok" style={{ marginBottom: 10 }}>{msg}</div>}
             <div className="section-title" style={{ marginTop: 0 }}>Πλατφόρμα</div>
+            <div className="field-group"><label>Όνομα εφαρμογής στη σελίδα σύνδεσης</label>
+              <input style={inp} maxLength={60} value={f.app_name || ''} placeholder="SpaceHub"
+                onChange={(e) => setF((s) => ({ ...s, app_name: e.target.value }))} />
+            </div>
             <label style={chk}>
               <input type="checkbox" checked={!!f.allow_self_register} onChange={(e) => setF((s) => ({ ...s, allow_self_register: e.target.checked }))} />
               Επιτρέπεται δημόσια εγγραφή νέου οργανισμού

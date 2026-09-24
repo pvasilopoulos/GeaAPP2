@@ -5,6 +5,7 @@ import { authenticate } from '../middleware/auth.js';
 import { TENANT_PERMISSIONS, expandPermissions } from '../lib/permissions.js';
 import { createTenantWithOwner, getPlatformSetting, getPlatformSettings } from '../lib/tenants.js';
 import { logAudit, clientIp } from '../lib/audit.js';
+import { DEFAULT_PLATFORM_SETTINGS } from '../lib/tenantSettings.js';
 
 export const authRouter = Router();
 
@@ -32,7 +33,11 @@ function publicUser(u) {
 authRouter.get('/public-settings', async (_req, res, next) => {
   try {
     const settings = await getPlatformSettings(query);
-    res.json({ allow_self_register: settings.allow_self_register !== false });
+    const appName = String(settings.app_name || '').trim().slice(0, 60) || DEFAULT_PLATFORM_SETTINGS.app_name;
+    res.json({
+      allow_self_register: settings.allow_self_register !== false,
+      app_name: appName,
+    });
   } catch (err) { next(err); }
 });
 

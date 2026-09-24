@@ -217,6 +217,10 @@ settingsRouter.get('/platform', requirePlatform, async (_req, res, next) => {
 settingsRouter.patch('/platform', requirePlatform, async (req, res, next) => {
   try {
     const b = req.body || {};
+    if (b.app_name !== undefined) {
+      const appName = String(b.app_name || '').trim().slice(0, 60);
+      await setPlatformSetting(query, 'app_name', appName || DEFAULT_PLATFORM_SETTINGS.app_name);
+    }
     if (b.allow_self_register !== undefined) await setPlatformSetting(query, 'allow_self_register', !!b.allow_self_register);
     if (b.min_password_length !== undefined) {
       const n = Math.max(6, Math.min(32, Number(b.min_password_length) || 6));

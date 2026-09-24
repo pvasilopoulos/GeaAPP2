@@ -1,4 +1,4 @@
-import { slugify, mergeTenantSettings, publicAppSettings, clientTenantSettings, applyAppSettingsPatch } from './tenantSettings.js';
+import { slugify, mergeTenantSettings, publicAppSettings, clientTenantSettings, applyAppSettingsPatch, DEFAULT_PLATFORM_SETTINGS } from './tenantSettings.js';
 
 function assert(cond, msg) {
   if (!cond) throw new Error(msg);
@@ -30,6 +30,7 @@ const masked = applyAppSettingsPatch({ google_maps_api_key: 'keep-me' }, { googl
 assert(masked.google_maps_api_key === 'keep-me', 'bullet placeholder does not wipe');
 
 assert(mergeTenantSettings({}).app_name === 'SpaceHub', 'default app_name');
+assert(DEFAULT_PLATFORM_SETTINGS.app_name === 'SpaceHub', 'default platform app_name');
 assert(mergeTenantSettings({}).browser_tab_title === 'SpaceHub — Διαχείριση Πελατών', 'default browser_tab_title');
 assert(mergeTenantSettings({ app_name: 'Acme' }).app_name === 'Acme', 'custom app_name kept');
 assert(mergeTenantSettings({ app_name: '  ' }).app_name === 'SpaceHub', 'blank app_name falls back to default');

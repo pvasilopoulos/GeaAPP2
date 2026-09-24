@@ -2,7 +2,7 @@ import { hashPassword } from './auth.js';
 import { insertTenantRoles } from './roles.js';
 import { insertTenantCustomFields } from './customFields.js';
 import {
-  DEFAULT_TENANT_SETTINGS, TENANT_STATUSES, PLANS, mergeTenantSettings, slugify, parseJson,
+  DEFAULT_TENANT_SETTINGS, DEFAULT_PLATFORM_SETTINGS, TENANT_STATUSES, PLANS, mergeTenantSettings, slugify, parseJson,
 } from './tenantSettings.js';
 
 export async function uniqueSlug(query, base, excludeId) {
@@ -112,7 +112,7 @@ export async function setPlatformSetting(query, key, value) {
 
 export async function getPlatformSettings(query) {
   const { rows } = await query('SELECT skey, svalue FROM platform_settings');
-  const out = { allow_self_register: true, min_password_length: 6 };
+  const out = { ...DEFAULT_PLATFORM_SETTINGS };
   for (const r of rows) {
     try { out[r.skey] = JSON.parse(r.svalue); } catch { out[r.skey] = r.svalue; }
   }
