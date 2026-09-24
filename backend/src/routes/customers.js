@@ -1,12 +1,11 @@
 import { Router } from 'express';
 import { query } from '../db.js';
 import { encodeCursor, decodeCursor, clampLimit } from '../lib/cursor.js';
-import { buildFilters, resolveSort } from '../lib/customerFilters.js';
+import { buildFilters, customerSearchPredicate, resolveSort } from '../lib/customerFilters.js';
 import { authorize } from '../middleware/auth.js';
 import { PERMISSIONS } from '../lib/permissions.js';
 import { normalizeFields } from '../lib/normalize.js';
 import { normalize } from '../lib/normalize.js';
-import { searchClause } from '../lib/search.js';
 import { loadEntityCustomFields, saveEntityCustomFields } from '../lib/customFields.js';
 import { logActivity } from '../lib/activity.js';
 import { parseJson } from '../lib/masterData.js';
@@ -57,7 +56,7 @@ customersRouter.get('/lookup', async (req, res, next) => {
     if (term.length < 3) return res.json({ results: [] });
     const limit = clampLimit(req.query.limit, 10, 25);
     const normalized = normalize(term);
-    const search = searchClause(normalized, 'c.search_norm');
+    const search = customerSearchPredicate(normalized, req.user.tenantId);
     if (!search) return res.json({ results: [] });
     const { rows } = await query(
       `SELECT c.id, c.code, c.full_name, c.company, c.city, c.email, c.phone, c.mobile, c.tax_id

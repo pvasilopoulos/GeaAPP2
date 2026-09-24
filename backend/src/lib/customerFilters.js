@@ -15,6 +15,39 @@ export const SORTS = {
   bookings:   { expr: 'c.bookings_count',   dir: 'DESC', cmp: '<' },
 };
 
+// Returns customer ids matching the term in any searchable customer-related
+// entity. Each source uses its own FULLTEXT index before results are joined
+// back to the customer list.
+export function customerSearchPredicate(qnorm, tenantId) {
+  const customerSearch = searchClause(qnorm, 'c_match.search_norm');
+  const branchSearch = searchClause(qnorm, 'b.search_norm');
+  const spaceSearch = searchClause(qnorm, 's.search_norm');
+  if (!customerSearch || !branchSearch || !spaceSearch) return null;
+
+  return {
+    clause: `c.id IN (
+      SELECT customer_id FROM (
+        SELECT c_match.id AS customer_id
+        FROM customers c_match
+        WHERE c_match.tenant_id = ? AND ${customerSearch.clause}
+        UNION ALL
+        SELECT b.customer_id
+        FROM branches b
+        WHERE b.tenant_id = ? AND ${branchSearch.clause}
+        UNION ALL
+        SELECT s.customer_id
+        FROM spaces s
+        WHERE s.tenant_id = ? AND ${spaceSearch.clause}
+      ) AS search_hits
+    )`,
+    params: [
+      tenantId, ...customerSearch.params,
+      tenantId, ...branchSearch.params,
+      tenantId, ...spaceSearch.params,
+    ],
+  };
+}
+
 // Builds shared WHERE predicates + params from request query filters.
 export function buildFilters(req) {
   const params = [];
@@ -27,33 +60,10 @@ export function buildFilters(req) {
   const q = req.query.q ? String(req.query.q).trim() : '';
   const qnorm = q ? normalize(q) : '';
   if (qnorm) {
-    const customerSearch = searchClause(qnorm, 'c_match.search_norm');
-    const branchSearch = searchClause(qnorm, 'b.search_norm');
-    const spaceSearch = searchClause(qnorm, 's.search_norm');
-    if (customerSearch && branchSearch && spaceSearch) {
-      // Each source starts with its own FULLTEXT index, then yields customer
-      // ids. This avoids running correlated branch/space lookups for every
-      // customer in a large tenant.
-      where.push(`c.id IN (
-        SELECT customer_id FROM (
-          SELECT c_match.id AS customer_id
-          FROM customers c_match
-          WHERE c_match.tenant_id = ? AND ${customerSearch.clause}
-          UNION ALL
-          SELECT b.customer_id
-          FROM branches b
-          WHERE b.tenant_id = ? AND ${branchSearch.clause}
-          UNION ALL
-          SELECT s.customer_id
-          FROM spaces s
-          WHERE s.tenant_id = ? AND ${spaceSearch.clause}
-        ) AS search_hits
-      )`);
-      params.push(
-        req.user.tenantId, ...customerSearch.params,
-        req.user.tenantId, ...branchSearch.params,
-        req.user.tenantId, ...spaceSearch.params,
-      );
+    const search = customerSearchPredicate(qnorm, req.user.tenantId);
+    if (search) {
+      where.push(search.clause);
+      params.push(...search.params);
     }
   }
   const columnFilters = {
