@@ -27,14 +27,33 @@ export function buildFilters(req) {
   const q = req.query.q ? String(req.query.q).trim() : '';
   const qnorm = q ? normalize(q) : '';
   if (qnorm) {
-    const sc = searchClause(qnorm, 'c.search_norm');
-    if (sc) {
-      const rawLike = `%${q}%`;
-      where.push(`(${sc.clause} OR c.email LIKE ${push(rawLike)} OR c.phone LIKE ${push(rawLike)}
-        OR c.mobile LIKE ${push(rawLike)} OR c.tax_id LIKE ${push(rawLike)}
-        OR c.address_line LIKE ${push(rawLike)} OR c.city LIKE ${push(rawLike)})`);
-      const rawParams = params.splice(params.length - 6, 6);
-      params.push(...sc.params, ...rawParams);
+    const customerSearch = searchClause(qnorm, 'c_match.search_norm');
+    const branchSearch = searchClause(qnorm, 'b.search_norm');
+    const spaceSearch = searchClause(qnorm, 's.search_norm');
+    if (customerSearch && branchSearch && spaceSearch) {
+      // Each source starts with its own FULLTEXT index, then yields customer
+      // ids. This avoids running correlated branch/space lookups for every
+      // customer in a large tenant.
+      where.push(`c.id IN (
+        SELECT customer_id FROM (
+          SELECT c_match.id AS customer_id
+          FROM customers c_match
+          WHERE c_match.tenant_id = ? AND ${customerSearch.clause}
+          UNION ALL
+          SELECT b.customer_id
+          FROM branches b
+          WHERE b.tenant_id = ? AND ${branchSearch.clause}
+          UNION ALL
+          SELECT s.customer_id
+          FROM spaces s
+          WHERE s.tenant_id = ? AND ${spaceSearch.clause}
+        ) AS search_hits
+      )`);
+      params.push(
+        req.user.tenantId, ...customerSearch.params,
+        req.user.tenantId, ...branchSearch.params,
+        req.user.tenantId, ...spaceSearch.params,
+      );
     }
   }
   const columnFilters = {
